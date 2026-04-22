@@ -1,4 +1,6 @@
 const DOWNLOAD_TIMEOUT_MS = 45000;
+const SCADA_FETCH_TIMEOUT_MS = 25000;
+const CSRF_CACHE_TTL_MS = 5 * 60 * 1000;
 const SCADA_AUTH_CONFIG_PATH = 'data/scada_auth.json';
 const SCADA_DEFAULTS = {
   baseUrl: 'https://analytics.teias.gov.tr',
@@ -16,6 +18,10 @@ const SCADA_DEFAULTS = {
   username: '',
   password: ''
 };
+
+let cachedCsrfToken = null;
+let cachedCsrfBaseUrl = '';
+let csrfTokenFetchedAt = 0;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'DOWNLOAD_URL_AND_WAIT') {
@@ -63,12 +69,14 @@ async function handleScadaFetch(payload) {
 
   const directLogin = await tryDirectLogin(authConfig);
   if (directLogin.ok) {
+    invalidateSupersetCsrfToken(authConfig.baseUrl);
     const directAttempt = await fetchChartData(transport, 'direct-login', false);
     if (directAttempt.ok || !directAttempt.shouldRetryAuth) return directAttempt;
   }
 
   const hiddenTabLogin = await tryHiddenTabLogin(authConfig);
   if (hiddenTabLogin.ok) {
+    invalidateSupersetCsrfToken(authConfig.baseUrl);
     return fetchChartData(transport, 'hidden-tab', true);
   }
 
@@ -117,6 +125,8 @@ async function fetchChartData(config, authMode, usedFallback) {
     'Content-Type': 'application/json'
   };
   if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SCADA_FETCH_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
@@ -124,10 +134,12 @@ async function fetchChartData(config, authMode, usedFallback) {
       credentials: 'include',
       headers,
       body: JSON.stringify(config.chartPayload || buildChartPayload(config)),
+      signal: controller.signal,
       redirect: 'follow'
     });
 
     if (response.status === 401 || response.status === 403) {
+      invalidateSupersetCsrfToken(config.baseUrl);
       return {
         ok: false,
         error: `SCADA chart auth hatasi (${response.status}).`,
@@ -161,31 +173,65 @@ async function fetchChartData(config, authMode, usedFallback) {
       httpStatus: response.status
     };
   } catch (error) {
+    const isTimeout = error?.name === 'AbortError';
     return {
       ok: false,
-      error: error.message || String(error),
-      errorType: 'NETWORK_ERROR',
+      error: isTimeout
+        ? `SCADA chart fetch zaman asimina ugradi (${Math.round(SCADA_FETCH_TIMEOUT_MS / 1000)} sn).`
+        : (error.message || String(error)),
+      errorType: isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
       httpStatus: null,
       authMode,
       usedFallback,
       shouldRetryAuth: false
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
 async function getSupersetCsrfToken(baseUrl) {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const now = Date.now();
+  if (
+    cachedCsrfToken
+    && cachedCsrfBaseUrl === normalizedBaseUrl
+    && (now - csrfTokenFetchedAt) < CSRF_CACHE_TTL_MS
+  ) {
+    return cachedCsrfToken;
+  }
   try {
-    const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/security/csrf_token/`, {
+    const response = await fetch(`${normalizedBaseUrl}/api/v1/security/csrf_token/`, {
       method: 'GET',
       credentials: 'include',
       headers: { Accept: 'application/json' }
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      invalidateSupersetCsrfToken(normalizedBaseUrl);
+      return null;
+    }
     const json = await response.json();
-    return json?.result || null;
+    const token = json?.result || null;
+    if (!token) {
+      invalidateSupersetCsrfToken(normalizedBaseUrl);
+      return null;
+    }
+    cachedCsrfToken = token;
+    cachedCsrfBaseUrl = normalizedBaseUrl;
+    csrfTokenFetchedAt = now;
+    return token;
   } catch {
+    invalidateSupersetCsrfToken(normalizedBaseUrl);
     return null;
   }
+}
+
+function invalidateSupersetCsrfToken(baseUrl) {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl || cachedCsrfBaseUrl || SCADA_DEFAULTS.baseUrl);
+  if (cachedCsrfBaseUrl && cachedCsrfBaseUrl !== normalizedBaseUrl) return;
+  cachedCsrfToken = null;
+  cachedCsrfBaseUrl = '';
+  csrfTokenFetchedAt = 0;
 }
 
 async function loadScadaAuthConfig() {

@@ -241,6 +241,9 @@
         ? getReactiveRatioColor(record.displayPct)
         : getFlowColor(record.displayPct);
     }
+    if ((record.primaryMetric === 'active' || record.primaryMetric === 'reactive') && Number.isFinite(record.primaryValue)) {
+      return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
+    }
     if (record.primaryMetric === 'voltage' && Number.isFinite(record.primaryValue) && typeof getVoltagePuColor === 'function') {
       const nominal = Number(record.entity?.gerilimKv || record.entity?.kvBucket || 0) || 0;
       const pu = nominal > 0 ? record.primaryValue / nominal : null;
@@ -309,6 +312,14 @@
 
   function getPrimaryMetricType(mode) {
     return getModeConfig(mode).primaryMetric;
+  }
+
+  function pickPositiveCapacity(...values) {
+    for (const value of values) {
+      const numeric = Number(value || 0);
+      if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    }
+    return null;
   }
 
   function getFetchMetricTypes(modeConfig) {
@@ -437,10 +448,12 @@
       const season = state.scada.capacitySeason === 'summer' ? 'summer' : 'winter';
       const winter = Number(entity.winterCapacityMva || 0);
       const summer = Number(entity.summerCapacityMva || 0);
-      return season === 'summer' ? (summer || winter || 1) : (winter || summer || 1);
+      return season === 'summer'
+        ? pickPositiveCapacity(summer, winter)
+        : pickPositiveCapacity(winter, summer);
     }
     if (entityType === 'trafo') {
-      return Number(entity.ofafMva || entity.onafMva || entity.onanMva || entity.bazGucuMva || 1);
+      return pickPositiveCapacity(entity.ofafMva, entity.onafMva, entity.onanMva, entity.bazGucuMva);
     }
     return null;
   }
@@ -1536,17 +1549,18 @@
       if (record.primaryStaleState === 'dead') return;
       if (record.sourceAmbiguous || record.unresolved || record.candidateConflict || record.backupUsed) return;
       const value = record.primaryValue;
-      const displayPct = Number.isFinite(record.displayPct) ? record.displayPct : 0;
+      const displayPct = Number.isFinite(record.displayPct) ? record.displayPct : null;
+      const loadingPct = Number.isFinite(record.loadingPct) ? record.loadingPct : null;
       next.set(record.entityId, {
         mw: Number.isFinite(record.active?.value) ? record.active.value : 0,
         mvar: Number.isFinite(record.reactive?.value) ? record.reactive.value : 0,
         primaryValue: value,
         primaryUnit: getMetricUnit(modeConfig.primaryMetric),
-        loadingPct: Number.isFinite(record.loadingPct) ? record.loadingPct : 0,
+        loadingPct,
         displayPct,
         displayPctMode: record.displayPctMode || 'loading',
         invalidPct: Boolean(record.invalidPct),
-        capacityMva: Number.isFinite(record.capacityMva) ? record.capacityMva : 0,
+        capacityMva: Number.isFinite(record.capacityMva) ? record.capacityMva : null,
         direction: (Number.isFinite(record.directionValue) ? record.directionValue : value) >= 0 ? 'forward' : 'reverse',
         directionMetric: record.directionMetric || modeConfig.primaryMetric,
         directionValue: Number.isFinite(record.directionValue) ? record.directionValue : value,
@@ -1558,7 +1572,7 @@
         orientationRule: record.orientationRule || '',
         staleState: record.primaryStaleState,
         color: getDisplayColor(record),
-        width: getFlowWidth(displayPct),
+        width: getFlowWidth(Number.isFinite(displayPct) ? displayPct : 0),
         timestamp: record.primaryTimestamp,
         hatName: record.entity.name || '',
         hatKv: record.entity.kvBucket || record.entity.kv || '',
@@ -1820,6 +1834,23 @@
       scadaLog('warn', `SCADA ${triggerLabel.toLowerCase()} yenileme istegi atlandi; mevcut sorgu suruyor.`);
       if (triggerType === 'manual') setScadaStatusMessage('SCADA sorgusu zaten suruyor.', 'warn');
       if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+      return;
+    }
+
+    if (triggerType === 'manual' && isDocumentHidden()) {
+      const hiddenMessage = 'SCADA manuel yenileme sekme arka plandayken ertelendi. Sekmeye donup tekrar deneyin.';
+      updateScadaFetchMeta({
+        status: 'idle',
+        stage: 'idle',
+        progressPct: 0,
+        triggerType,
+        triggerLabel,
+        phaseLabel: 'Beklemede',
+        phaseMessage: hiddenMessage
+      });
+      setScadaStatusMessage(hiddenMessage, 'warn');
+      scadaLog('warn', hiddenMessage);
+      if (typeof refreshRankingTable === 'function') refreshRankingTable();
       return;
     }
 
@@ -3625,73 +3656,133 @@
     document.getElementById('btnExportAuditFromModal')?.addEventListener('click', exportScadaAuditCsv);
   };
 
+  function getFlowRenderNodeCache() {
+    if (!(state.scada.flowRenderNodes instanceof Map)) {
+      state.scada.flowRenderNodes = new Map();
+    }
+    return state.scada.flowRenderNodes;
+  }
+
+  function clearRenderedFlowLayer(flowLayer) {
+    if (flowLayer) flowLayer.innerHTML = '';
+    getFlowRenderNodeCache().clear();
+  }
+
+  function buildRenderedFlowPath(row, flow) {
+    if (state.filters.hatDisplayMode === 'sade' || state.filters.hatDisplayMode === 'sade-ayrik') {
+      const startTm = state.network.tmMap.get(row.startTm);
+      const endTm = state.network.tmMap.get(row.endTm);
+      const firstCoord = row.coords[0];
+      const lastCoord = row.coords[row.coords.length - 1];
+      const startPt = startTm ? screenPoint(startTm.lon, startTm.lat) : screenPoint(firstCoord[0], firstCoord[1]);
+      const endPt = endTm ? screenPoint(endTm.lon, endTm.lat) : screenPoint(lastCoord[0], lastCoord[1]);
+      return `M ${round1(startPt.x)} ${round1(startPt.y)} L ${round1(endPt.x)} ${round1(endPt.y)}`;
+    }
+    const coords = flow.direction === 'reverse' ? [...row.coords].reverse() : row.coords;
+    return coords.map((coord, index) => {
+      const point = screenPoint(coord[0], coord[1]);
+      return `${index ? 'L' : 'M'} ${round1(point.x)} ${round1(point.y)}`;
+    }).join(' ');
+  }
+
+  function createRenderedFlowNode(row) {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const motionPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const arrowGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    const anim = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+    const mpath = document.createElementNS('http://www.w3.org/2000/svg', 'mpath');
+
+    group.setAttribute('data-flow-id', String(row.id));
+    motionPath.setAttribute('data-role', 'motion-path');
+    motionPath.setAttribute('fill', 'none');
+    motionPath.setAttribute('stroke', 'none');
+    arrowGroup.setAttribute('data-role', 'arrow-group');
+    arrowGroup.style.pointerEvents = 'auto';
+    arrowGroup.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openScadaHatDetails(row, { forceTiles: false });
+    });
+    attachHoverTooltip(arrowGroup, () => typeof buildHatHoverTooltipHtml === 'function'
+      ? buildHatHoverTooltipHtml(row)
+      : `<strong>${escapeHtml(row.name || '-')}</strong>`, { owner: `hat:${row.id}` });
+
+    arrow.setAttribute('data-role', 'arrow');
+    arrow.setAttribute('points', '0,-4 9,0 0,4');
+    anim.setAttribute('data-role', 'arrow-motion');
+    anim.setAttribute('repeatCount', 'indefinite');
+    anim.setAttribute('rotate', 'auto');
+    mpath.setAttribute('data-role', 'arrow-motion-path');
+
+    anim.appendChild(mpath);
+    arrowGroup.appendChild(arrow);
+    arrowGroup.appendChild(anim);
+    group.appendChild(motionPath);
+    group.appendChild(arrowGroup);
+    return group;
+  }
+
+  function patchRenderedFlowNode(node, row, flow, pathData) {
+    const pathId = `fp-${row.id}`;
+    const arrowColor = document.documentElement.getAttribute('data-theme') === 'light' ? '#111827' : '#f8fafc';
+    const duration = `${getArrowSpeed(Number.isFinite(flow.displayPct) ? flow.displayPct : (Number.isFinite(flow.loadingPct) ? flow.loadingPct : 0))}s`;
+    const motionPath = node.querySelector('[data-role="motion-path"]');
+    const arrow = node.querySelector('[data-role="arrow"]');
+    const anim = node.querySelector('[data-role="arrow-motion"]');
+    const mpath = node.querySelector('[data-role="arrow-motion-path"]');
+    if (!motionPath || !arrow || !anim || !mpath) return;
+
+    motionPath.setAttribute('id', pathId);
+    motionPath.setAttribute('d', pathData);
+    arrow.setAttribute('fill', arrowColor);
+    anim.setAttribute('dur', duration);
+    mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `#${pathId}`);
+    mpath.setAttribute('href', `#${pathId}`);
+    node.dataset.renderKey = `${pathData}|${arrowColor}|${duration}`;
+  }
+
   renderFlowLayer = function () {
     const flowLayer = document.getElementById('flowLayer');
     if (!flowLayer) return;
-    flowLayer.innerHTML = '';
     const modeConfig = getModeConfig();
-    if (!state.scada.enabled || modeConfig.domain !== 'hat' || !state.scada.lineFlowByLineId.size) return;
-    if (normalizeScadaMapDisplayMode(modeConfig, state.filters.scadaMapDisplayMode) !== 'flow') return;
-    if (!state.filters.showHat) return;
+    if (!state.scada.enabled || modeConfig.domain !== 'hat' || !state.scada.lineFlowByLineId.size) {
+      clearRenderedFlowLayer(flowLayer);
+      return;
+    }
+    if (normalizeScadaMapDisplayMode(modeConfig, state.filters.scadaMapDisplayMode) !== 'flow') {
+      clearRenderedFlowLayer(flowLayer);
+      return;
+    }
+    if (!state.filters.showHat) {
+      clearRenderedFlowLayer(flowLayer);
+      return;
+    }
 
     const bounds = currentGeoBounds();
-    const fragment = document.createDocumentFragment();
     const visibleHats = getVisibleHats().filter((row) => intersects(row.bbox, bounds));
+    const activeIds = new Set();
+    const cache = getFlowRenderNodeCache();
 
     visibleHats.forEach((row) => {
       const flow = state.scada.lineFlowByLineId.get(row.id);
       if (!flow) return;
-      let d = '';
-      if (state.filters.hatDisplayMode === 'sade' || state.filters.hatDisplayMode === 'sade-ayrik') {
-        const startTm = state.network.tmMap.get(row.startTm);
-        const endTm = state.network.tmMap.get(row.endTm);
-        const firstCoord = row.coords[0];
-        const lastCoord = row.coords[row.coords.length - 1];
-        const startPt = startTm ? screenPoint(startTm.lon, startTm.lat) : screenPoint(firstCoord[0], firstCoord[1]);
-        const endPt = endTm ? screenPoint(endTm.lon, endTm.lat) : screenPoint(lastCoord[0], lastCoord[1]);
-        d = `M ${round1(startPt.x)} ${round1(startPt.y)} L ${round1(endPt.x)} ${round1(endPt.y)}`;
-      } else {
-        const coords = flow.direction === 'reverse' ? [...row.coords].reverse() : row.coords;
-        d = coords.map((coord, index) => {
-          const point = screenPoint(coord[0], coord[1]);
-          return `${index ? 'L' : 'M'} ${round1(point.x)} ${round1(point.y)}`;
-        }).join(' ');
+      const flowId = String(row.id);
+      const pathData = buildRenderedFlowPath(row, flow);
+      let node = cache.get(flowId);
+      if (!node || !node.isConnected) {
+        node = createRenderedFlowNode(row);
+        cache.set(flowId, node);
       }
-
-      const pathId = `fp-${row.id}`;
-      const motionPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      motionPath.setAttribute('id', pathId);
-      motionPath.setAttribute('d', d);
-      motionPath.setAttribute('fill', 'none');
-      motionPath.setAttribute('stroke', 'none');
-      fragment.appendChild(motionPath);
-
-      const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      arrow.setAttribute('points', '0,-4 9,0 0,4');
-      arrow.setAttribute('fill', document.documentElement.getAttribute('data-theme') === 'light' ? '#111827' : '#f8fafc');
-      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const anim = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
-      anim.setAttribute('dur', `${getArrowSpeed(Number.isFinite(flow.displayPct) ? flow.displayPct : (Number.isFinite(flow.loadingPct) ? flow.loadingPct : 0))}s`);
-      anim.setAttribute('repeatCount', 'indefinite');
-      anim.setAttribute('rotate', 'auto');
-      const mpath = document.createElementNS('http://www.w3.org/2000/svg', 'mpath');
-      mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `#${pathId}`);
-      mpath.setAttribute('href', `#${pathId}`);
-      anim.appendChild(mpath);
-      g.appendChild(arrow);
-      g.appendChild(anim);
-      g.style.pointerEvents = 'auto';
-      g.addEventListener('click', (event) => {
-        event.stopPropagation();
-        openScadaHatDetails(row, { forceTiles: false });
-      });
-      attachHoverTooltip(g, () => typeof buildHatHoverTooltipHtml === 'function'
-        ? buildHatHoverTooltipHtml(row)
-        : `<strong>${escapeHtml(row.name || '-')}</strong>`, { owner: `hat:${row.id}` });
-      fragment.appendChild(g);
+      patchRenderedFlowNode(node, row, flow, pathData);
+      flowLayer.appendChild(node);
+      activeIds.add(flowId);
     });
 
-    flowLayer.appendChild(fragment);
+    cache.forEach((node, flowId) => {
+      if (activeIds.has(flowId)) return;
+      if (node?.remove) node.remove();
+      cache.delete(flowId);
+    });
   };
 
   scadaStartPolling = function () {
@@ -3700,6 +3791,29 @@
 
   scadaStopPolling = function () {
     stopScadaAutoScheduler();
+  };
+
+  const baseSetCapacitySeason = setCapacitySeason;
+  setCapacitySeason = function (season, activeBtn, inactiveBtn) {
+    state.scada.capacitySeason = season;
+    if (activeBtn?.classList) activeBtn.classList.add('active');
+    if (inactiveBtn?.classList) inactiveBtn.classList.remove('active');
+
+    const measurementRowsById = state.scada.measurementRowsById instanceof Map
+      ? state.scada.measurementRowsById
+      : new Map();
+    const scope = state.scada.currentScope;
+    if (measurementRowsById.size && scope?.entities?.length) {
+      applyGenericScadaSnapshot(measurementRowsById, scope);
+      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+      if (typeof refreshRankingTable === 'function') refreshRankingTable();
+      if (typeof requestRender === 'function') requestRender();
+    } else if (typeof baseSetCapacitySeason === 'function') {
+      baseSetCapacitySeason(season, activeBtn, inactiveBtn);
+      return;
+    }
+
+    scadaLog('info', `Kapasite modu: ${season === 'summer' ? 'Yaz' : 'Kis'}`);
   };
 
   if (!window.__TPYS_SCADA_AUTO_RESUME_BOUND__) {

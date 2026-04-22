@@ -897,11 +897,12 @@ def main() -> None:
 
     hat_by_name = {normalize_text(hat["name"]): hat for hat in hat_lines}
     hat_by_id = {hat["id"]: hat for hat in hat_lines}
+    tm_index_by_id = {tm["id"]: tm for tm in tm_points}
     for hat in hat_lines:
         for tm_id in (hat.get("startTmId"), hat.get("endTmId")):
-            if tm_id and tm_id in {tm["id"] for tm in tm_points}:
-                tm_by_id = next(tm for tm in tm_points if tm["id"] == tm_id)
-                tm_by_id["childHatIds"].append(hat["id"])
+            tm_entity = tm_index_by_id.get(tm_id)
+            if tm_entity:
+                tm_entity["childHatIds"].append(hat["id"])
 
     tm_points.sort(key=lambda item: sort_key(item["id"]))
     tm_by_id = {tm["id"]: tm for tm in tm_points}

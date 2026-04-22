@@ -278,7 +278,7 @@ function setCapacitySeason(season, activeBtn, inactiveBtn) {
   scadaLog('info', `Kapasite modu: ${season === 'summer' ? 'Yaz' : 'Kış'}`);
 }
 
-function updateScadaCardUI() {
+function legacyUpdateScadaCardUI_v1() {
   const elSonVeri = document.getElementById('scadaSonVeri');
   const elToplam = document.getElementById('scadaToplam');
   const elEslesen = document.getElementById('scadaEslesen');
@@ -385,7 +385,7 @@ let _rankingActiveHatId = null;
 let _rankingSortCol = 'pct';
 let _rankingSortDir = -1;
 
-function toggleRankingPanel() {
+function legacyToggleRankingPanel_v1() {
   let panel = document.getElementById('rankingPanel');
   if (panel) {
     panel.classList.toggle('hidden');
@@ -466,7 +466,7 @@ function toggleRankingPanel() {
   refreshRankingTable();
 }
 
-function closeRankingPanel() {
+function legacyCloseRankingPanel_v1() {
   const panel = document.getElementById('rankingPanel');
   if (panel) panel.classList.add('hidden');
   _rankingSearch = '';
@@ -475,7 +475,7 @@ function closeRankingPanel() {
   requestRender();
 }
 
-function getFilteredFlows() {
+function legacyGetFilteredFlows_v1() {
   let flows = [];
   state.scada.lineFlowByLineId.forEach(flow => flows.push(flow));
   if (_rankingKvFilter) flows = flows.filter(f => f.hatKv === _rankingKvFilter);
@@ -496,7 +496,7 @@ function getFilteredFlows() {
   return flows;
 }
 
-function refreshRankingTable() {
+function legacyRefreshRankingTable_v1() {
   const tbody = document.getElementById('rankingTbody');
   if (!tbody) return;
 
@@ -525,7 +525,7 @@ function refreshRankingTable() {
   }).join('');
 }
 
-function openScadaHatDetails(hat, options = {}) {
+function legacyOpenScadaHatDetails_v1(hat, options = {}) {
   if (!hat) return;
   state.selection = { kind: 'hat', id: hat.id, measureSourceId: '', measureTargetIds: [] };
   const fields = [
@@ -552,7 +552,7 @@ function openScadaHatDetails(hat, options = {}) {
   requestRender({ forceTiles: Boolean(options.forceTiles) });
 }
 
-function onRankingRowClick(hatId) {
+function legacyOnRankingRowClick_v1(hatId) {
   _rankingActiveHatId = hatId;
   if (!state.network?.hatLines) return;
   const hat = state.network.hatLines.find(h => h.id === hatId);
@@ -601,7 +601,7 @@ function onRankingRowClick(hatId) {
 }
 
 /* ───────── CSV EXPORT ───────── */
-function exportRankingCsv() {
+function legacyExportRankingCsv_v1() {
   const flows = getFilteredFlows();
   if (!flows.length) return;
 
@@ -640,7 +640,7 @@ function exportRankingCsv() {
 }
 
 /* ───────── HISTORY CHART ───────── */
-function buildHistoryChartHtml(hatId, hat) {
+function legacyBuildHistoryChartHtml_v1(hatId, hat) {
   if (!state.scada.history) return '';
   const hist = state.scada.history.get(hatId);
   if (!hist || hist.length < 2) return '';
@@ -692,7 +692,7 @@ function buildHistoryChartHtml(hatId, hat) {
   return svg;
 }
 
-function showScadaChartModal(hatId, hatName) {
+function legacyShowScadaChartModal_v1(hatId, hatName) {
   let modal = document.getElementById('scadaChartModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -870,7 +870,7 @@ function closeScadaChartModal() {
   }
 }
 
-function updateScadaCardUI() {
+function legacyUpdateScadaCardUI_v2() {
   const elSonVeri = document.getElementById('scadaSonVeri');
   const elToplam = document.getElementById('scadaToplam');
   const elEslesen = document.getElementById('scadaEslesen');
@@ -1159,7 +1159,7 @@ function showScadaMismatchReportModal() {
   window.addEventListener('keydown', _scadaAuditEscHandler);
 }
 
-function exportRankingCsv() {
+function legacyExportRankingCsv_v2() {
   const flows = getFilteredFlows();
   if (!flows.length) return;
 
@@ -1188,7 +1188,7 @@ function exportRankingCsv() {
   scadaLog('info', `Ranking CSV indirildi: ${flows.length} satir.`);
 }
 
-function toggleRankingPanel() {
+function legacyToggleRankingPanel_v2() {
   let panel = document.getElementById('rankingPanel');
   if (panel) {
     panel.classList.toggle('hidden');
@@ -1269,7 +1269,7 @@ function toggleRankingPanel() {
   refreshRankingTable();
 }
 
-function closeRankingPanel() {
+function legacyCloseRankingPanel_v2() {
   const panel = document.getElementById('rankingPanel');
   if (panel) panel.classList.add('hidden');
   _rankingSearch = '';
@@ -1279,7 +1279,7 @@ function closeRankingPanel() {
   requestRender();
 }
 
-function getFilteredFlows() {
+function legacyGetFilteredFlows_v2() {
   const flows = getVisibleFlowEntries({ applySearch: true });
   flows.sort((a, b) => {
     let valA;
@@ -1314,7 +1314,7 @@ function getFilteredFlows() {
   return flows;
 }
 
-function refreshRankingTable() {
+function legacyRefreshRankingTable_v2() {
   const tbody = document.getElementById('rankingTbody');
   if (!tbody) return;
 
@@ -1341,7 +1341,7 @@ function refreshRankingTable() {
   }).join('');
 }
 
-function openScadaHatDetails(hat, options = {}) {
+function legacyOpenScadaHatDetails_v2(hat, options = {}) {
   if (!hat) return;
   state.selection = { kind: 'hat', id: hat.id, measureSourceId: '', measureTargetIds: [] };
   const model = buildHatPopupModel(hat);
@@ -1379,7 +1379,7 @@ function openScadaHatDetails(hat, options = {}) {
   requestRender({ forceTiles: Boolean(options.forceTiles) });
 }
 
-function onRankingRowClick(hatId) {
+function legacyOnRankingRowClick_v2(hatId) {
   _rankingActiveHatId = hatId;
   if (!state.network?.hatLines) return;
   const hat = state.network.hatLines.find((entry) => entry.id === hatId);
@@ -1392,7 +1392,7 @@ function onRankingRowClick(hatId) {
   refreshRankingTable();
 }
 
-function buildHistoryChartHtml(hatId, hat, options = {}) {
+function legacyBuildHistoryChartHtml_v2(hatId, hat, options = {}) {
   if (!state.scada.history) return '';
   const hist = state.scada.history.get(hatId);
   if (!hist || hist.length < 2) return '';
@@ -1453,7 +1453,7 @@ function buildHistoryChartHtml(hatId, hat, options = {}) {
   `;
 }
 
-function showScadaChartModal(hatId, hatName) {
+function legacyShowScadaChartModal_v2(hatId, hatName) {
   closeScadaChartModal();
   const hat = state.network?.hatLines?.find((entry) => entry.id === hatId);
   const chartHtml = buildHistoryChartHtml(hatId, hat, { width: 960, height: 360 });
@@ -1498,7 +1498,7 @@ function showScadaChartModal(hatId, hatName) {
   window.addEventListener('keydown', _scadaChartEscHandler);
 }
 
-function updateScadaCardUI() {
+function legacyUpdateScadaCardUI_v3() {
   const elSonVeri = document.getElementById('scadaSonVeri');
   const elToplam = document.getElementById('scadaToplam');
   const elEslesen = document.getElementById('scadaEslesen');

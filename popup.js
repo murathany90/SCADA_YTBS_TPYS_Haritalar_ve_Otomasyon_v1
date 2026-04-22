@@ -451,10 +451,10 @@ function buildMappingIndex(mappingRows) {
   const byTpysId = new Map();
   const byAlias = new Map();
   for (const row of mappingRows) {
-    if (row.tpysBaraId) byTpysId.set(normalizeText(row.tpysBaraId), row);
+    if (row.tpysBaraId) byTpysId.set(MAP_COMMON.normalizeText(row.tpysBaraId), row);
     const aliases = new Set([...(row.aliases || []), row.tpysBaraId, row.tpysBaraAdi, row.yksBaraAdi, row.oysBaraId]);
     aliases.forEach((alias) => {
-      const key = normalizeText(alias);
+      const key = MAP_COMMON.normalizeText(alias);
       if (key) byAlias.set(key, row);
     });
   }
@@ -551,11 +551,11 @@ function resolveMapping(row, mappingIndex) {
   const possibleIdHeaders = ['TPYS Bara ID', 'TPYS Bara Id', 'Bara ID', 'Bara Id', 'TPYS_BARA_ID'];
   for (const key of possibleIdHeaders) {
     if (row[key]) {
-      const hit = mappingIndex.byTpysId.get(normalizeText(row[key]));
+      const hit = mappingIndex.byTpysId.get(MAP_COMMON.normalizeText(row[key]));
       if (hit) return hit;
     }
   }
-  return mappingIndex.byAlias.get(normalizeText(row.Bara));
+  return mappingIndex.byAlias.get(MAP_COMMON.normalizeText(row.Bara));
 }
 
 function buildStatusByHour(row) {
@@ -573,25 +573,26 @@ function buildStatusByHour(row) {
 }
 
 function comparePlanWithPage(plan, pageRows) {
-  const pageMap = new Map(pageRows.map((row) => [normalizeText(row.baraName), row]));
+  const pageMap = new Map(pageRows.map((row) => [MAP_COMMON.normalizeText(row.baraName), row]));
   const matchedRows = [];
   const unmatchedPlanRows = [];
 
   for (const operation of plan.operations) {
     if (operation.unmatched) { unmatchedPlanRows.push(operation); continue; }
-    const hit = pageMap.get(normalizeText(operation.tpysBaraAdi));
+    const hit = pageMap.get(MAP_COMMON.normalizeText(operation.tpysBaraAdi));
     if (hit) matchedRows.push({ operation, pageRow: hit });
     else unmatchedPlanRows.push(operation);
   }
 
-  const planNames = new Set(plan.operations.filter((x) => !x.unmatched).map((x) => normalizeText(x.tpysBaraAdi)));
-  const unmatchedPageRows = pageRows.filter((row) => !planNames.has(normalizeText(row.baraName)));
+  const planNames = new Set(plan.operations.filter((x) => !x.unmatched).map((x) => MAP_COMMON.normalizeText(x.tpysBaraAdi)));
+  const unmatchedPageRows = pageRows.filter((row) => !planNames.has(MAP_COMMON.normalizeText(row.baraName)));
 
   return { pageRowCount: pageRows.length, matchedRows, unmatchedPlanRows, unmatchedPageRows };
 }
 
-function normalizeText(value) {
-  return String(value || '')
+function legacyNormalizeText(value) {
+  return MAP_COMMON.normalizeText(value);
+  /*
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ı/g, 'i').replace(/İ/g, 'i').replace(/ç/g, 'c').replace(/Ç/g, 'c')
@@ -600,6 +601,7 @@ function normalizeText(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+  */
 }
 
 function normalizeDate(value) {

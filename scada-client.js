@@ -69,6 +69,53 @@ const SCADA_ERROR = {
   EXTENSION_UNAVAILABLE: 'EXTENSION_UNAVAILABLE'
 };
 
+function pickPositiveCapacity(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return null;
+}
+
+function createScadaHistoryBuffer(limit) {
+  return {
+    data: new Array(limit),
+    head: 0,
+    size: 0,
+    limit
+  };
+}
+
+function appendScadaHistoryBuffer(historyValue, entry, limit = SCADA_CONFIG.HISTORY_MAX) {
+  const max = Number.isInteger(limit) && limit > 0 ? limit : 1;
+  const sourceLimit = Number.isInteger(Number(historyValue?.limit)) && Number(historyValue.limit) > 0
+    ? Number(historyValue.limit)
+    : max;
+  const seed = Array.isArray(historyValue)
+    ? historyValue.slice(-max)
+    : (historyValue && Array.isArray(historyValue.data))
+      ? Array.from({ length: Math.min(Number(historyValue.size) || 0, max) }, (_, index) => {
+          const sourceIndex = (Number(historyValue.head) + index) % sourceLimit;
+          return historyValue.data[sourceIndex];
+        }).filter(Boolean)
+      : [];
+  const buffer = createScadaHistoryBuffer(max);
+  seed.forEach((item) => {
+    const insertAt = (buffer.head + buffer.size) % buffer.limit;
+    buffer.data[insertAt] = item;
+    buffer.size += 1;
+  });
+  if (buffer.size < buffer.limit) {
+    const insertAt = (buffer.head + buffer.size) % buffer.limit;
+    buffer.data[insertAt] = entry;
+    buffer.size += 1;
+  } else {
+    buffer.data[buffer.head] = entry;
+    buffer.head = (buffer.head + 1) % buffer.limit;
+  }
+  return buffer;
+}
+
 function scadaLog(level, message, detail) {
   const entry = {
     ts: new Date().toISOString(),
@@ -310,6 +357,24 @@ async function scadaDoFetch(options = {}) {
     return;
   }
 
+  if (triggerType === 'manual' && document.visibilityState === 'hidden') {
+    const hiddenMessage = 'SCADA manuel yenileme sekme arka plandayken ertelendi. Sekmeye donup tekrar deneyin.';
+    updateScadaFetchMeta({
+      status: 'idle',
+      stage: 'idle',
+      progressPct: 0,
+      triggerType,
+      triggerLabel,
+      phaseLabel: 'Beklemede',
+      phaseMessage: hiddenMessage
+    });
+    setScadaStatusMessage(hiddenMessage, 'warn');
+    scadaLog('warn', hiddenMessage);
+    if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+    if (typeof refreshRankingTable === 'function') refreshRankingTable();
+    return;
+  }
+
   const startedAt = new Date();
   state.scada.fetchInProgress = true;
   state.scada.error = null;
@@ -540,12 +605,17 @@ function applyScadaSnapshot(rowsBySinsid) {
     }
 
     const absMw = Math.abs(row.activePowerMw);
-    const winterCapacity = Number(hat.winterCapacityMva || 0);
-    const summerCapacity = Number(hat.summerCapacityMva || 0);
+    const winterCapacity = pickPositiveCapacity(hat.winterCapacityMva);
+    const summerCapacity = pickPositiveCapacity(hat.summerCapacityMva);
     const capacityMva = season === 'summer'
-      ? (summerCapacity || winterCapacity || 1)
-      : (winterCapacity || summerCapacity || 1);
-    const loadingPct = capacityMva > 0 ? (absMw / capacityMva) * 100 : 0;
+      ? pickPositiveCapacity(summerCapacity, winterCapacity)
+      : pickPositiveCapacity(winterCapacity, summerCapacity);
+    const loadingPct = Number.isFinite(capacityMva) && capacityMva > 0
+      ? (absMw / capacityMva) * 100
+      : null;
+    const flowColor = staleState === 'live'
+      ? (Number.isFinite(loadingPct) ? getFlowColor(loadingPct) : (SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af'))
+      : SCADA_CONFIG.STALE_COLOR;
 
     nextFlows.set(hat.id, {
       mw: row.activePowerMw,
@@ -556,8 +626,8 @@ function applyScadaSnapshot(rowsBySinsid) {
       summerCapacity,
       direction: row.activePowerMw >= 0 ? 'forward' : 'reverse',
       staleState,
-      color: staleState === 'live' ? getFlowColor(loadingPct) : SCADA_CONFIG.STALE_COLOR,
-      width: getFlowWidth(loadingPct),
+      color: flowColor,
+      width: getFlowWidth(Number.isFinite(loadingPct) ? loadingPct : 0),
       timestamp: row.timestamp,
       sinsid,
       tmName: row.tmName,
@@ -601,9 +671,11 @@ function applyScadaSnapshot(rowsBySinsid) {
 
 function pushFlowHistory(hatId, mw, pct, timestamp) {
   if (!state.scada.history) state.scada.history = new Map();
-  const history = state.scada.history.get(hatId) || [];
-  history.push({ mw, pct, ts: timestamp });
-  while (history.length > SCADA_CONFIG.HISTORY_MAX) history.shift();
+  const history = appendScadaHistoryBuffer(
+    state.scada.history.get(hatId),
+    { mw, pct, ts: timestamp },
+    SCADA_CONFIG.HISTORY_MAX
+  );
   state.scada.history.set(hatId, history);
 }
 
@@ -621,19 +693,13 @@ function getFlowWidth(loadingPct) {
 
 function scadaStartPolling() {
   scadaStopPolling();
-  if (!state.scada.enabled || !state.scada.autoRefresh) return;
-  state.scada.pollTimer = setInterval(() => {
-    if (document.visibilityState === 'hidden') return;
-    scadaDoFetch({ trigger: 'auto' });
-  }, SCADA_CONFIG.POLL_INTERVAL_MS);
-  scadaLog('info', `SCADA polling baslatildi (${SCADA_CONFIG.POLL_INTERVAL_MS / 1000} sn).`);
+  scadaLog('info', 'Legacy SCADA polling devre disi; sahiplik scada-v2-runtime.js tarafinda.');
 }
 
 function scadaStopPolling() {
   if (!state.scada.pollTimer) return;
   clearInterval(state.scada.pollTimer);
   state.scada.pollTimer = null;
-  scadaLog('info', 'SCADA polling durduruldu.');
 }
 
 function scadaBuildIndex() {

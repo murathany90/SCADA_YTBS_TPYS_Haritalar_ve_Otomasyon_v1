@@ -23,7 +23,7 @@ function loadRuntime() {
     Promise,
     __SCADA_V2_TEST_HOOKS__: {},
     state: {
-      scada: { logs: [], history: new Map(), entityMetricsByKey: new Map(), measurementRowsById: new Map() },
+      scada: { logs: [], history: new Map(), entityMetricsByKey: new Map(), measurementRowsById: new Map(), fetchInProgress: false },
       filters: { scadaMetric: 'hat-active', scadaListEntity: 'hat', showHat: true },
       network: { hatLines: [], trafos: [], baraNodes: [] },
       ui: {}
@@ -82,6 +82,7 @@ function loadRuntime() {
     attachHoverTooltip: () => {},
     openScadaHatDetails: () => {},
     escapeHtml: (value) => String(value || ''),
+    setCapacitySeason: () => {},
     document: {
       querySelectorAll: () => [],
       getElementById: () => null,
@@ -694,4 +695,72 @@ test('getReadableTextColor returns dark text for bright chips and white for dark
   assert.equal(getReadableTextColor('#7dd3fc'), 'var(--chip-text-dark)');
   assert.equal(getReadableTextColor('#6b7280'), '#f8fafc');
   assert.equal(getReadableTextColor('#38bdf8'), '#f8fafc');
+});
+
+test('buildEntityMetricRecord keeps loading and display pct null when capacity is unknown', () => {
+  const context = loadRuntime();
+  const { buildEntityMetricRecord, rebuildLineFlowMap } = context.__SCADA_V2_TEST_HOOKS__;
+  const entity = buildTerminalEntity({
+    id: 'hat-no-capacity',
+    winterCapacityMva: null,
+    summerCapacityMva: null,
+    scada: {
+      active: { ids: ['p-1'], rows: [buildTerminalCandidate('p-1', 'start', 1)] },
+      reactive: { ids: [], rows: [] }
+    }
+  });
+  const measurementRows = new Map([
+    ['p-1', { measurementId: 'p-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp: new Date(), value: 95 }]
+  ]);
+
+  const record = buildEntityMetricRecord('hat', entity, {
+    key: 'hat-active',
+    label: 'Hat (MW)',
+    domain: 'hat',
+    primaryMetric: 'active'
+  }, measurementRows);
+  const flowMap = rebuildLineFlowMap({
+    key: 'hat-active',
+    label: 'Hat (MW)',
+    domain: 'hat',
+    primaryMetric: 'active'
+  }, new Map([[record.entityKey, record]]));
+  const flow = flowMap.get('hat-no-capacity');
+
+  assert.equal(record.capacityMva, null);
+  assert.equal(record.loadingPct, null);
+  assert.equal(record.displayPct, null);
+  assert.equal(record.displayColor, '#9ca3af');
+  assert.equal(flow.capacityMva, null);
+  assert.equal(flow.loadingPct, null);
+  assert.equal(flow.displayPct, null);
+  assert.equal(flow.color, '#9ca3af');
+});
+
+test('scadaDoFetch defers manual fetch while document is hidden', async () => {
+  const context = loadRuntime();
+  const metaUpdates = [];
+  const statusMessages = [];
+  let sendCount = 0;
+  let rankingRefreshCount = 0;
+
+  context.document.visibilityState = 'hidden';
+  context.updateScadaFetchMeta = (meta) => metaUpdates.push(meta);
+  context.setScadaStatusMessage = (message, tone) => statusMessages.push({ message, tone });
+  context.refreshRankingTable = () => { rankingRefreshCount += 1; };
+  context.chrome.runtime.sendMessage = async () => {
+    sendCount += 1;
+    return { ok: true, data: {} };
+  };
+
+  await context.scadaDoFetch({ trigger: 'manual' });
+
+  assert.equal(sendCount, 0);
+  assert.equal(metaUpdates.at(-1)?.status, 'idle');
+  assert.equal(metaUpdates.at(-1)?.phaseLabel, 'Beklemede');
+  assert.match(metaUpdates.at(-1)?.phaseMessage || '', /arka plandayken ertelendi/i);
+  assert.equal(statusMessages.at(-1)?.tone, 'warn');
+  assert.match(statusMessages.at(-1)?.message || '', /arka plandayken ertelendi/i);
+  assert.equal(rankingRefreshCount, 1);
+  assert.equal(context.state.scada.fetchInProgress, false);
 });

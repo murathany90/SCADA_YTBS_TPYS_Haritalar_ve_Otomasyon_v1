@@ -3,7 +3,31 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root 'dist'
 $extensionRoot = Join-Path $dist 'chrome-extension'
-$zipPath = Join-Path $dist 'tpys-reaktif-eslestirme-extension.zip'
+$manifestPath = Join-Path $root 'manifest.json'
+$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+
+function Get-SafeArtifactName([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) {
+    $safe = 'chrome-extension'
+  } else {
+    $safe = $value.Trim()
+  }
+  $safe = $safe -replace '[\\/:*?"<>|]+', ' '
+  $safe = $safe -replace '\s+', ' '
+  $safe = $safe.Trim()
+  $safe = $safe -replace ' ', '_'
+  return $safe
+}
+
+$extensionName = Get-SafeArtifactName $manifest.name
+if ([string]::IsNullOrWhiteSpace([string]$manifest.version)) {
+  $extensionVersion = '0.0.0'
+} else {
+  $extensionVersion = [string]$manifest.version
+}
+$buildDate = Get-Date -Format 'yyyyMMdd'
+$zipFileName = '{0}_v{1}_{2}.zip' -f $extensionName, $extensionVersion, $buildDate
+$zipPath = Join-Path $dist $zipFileName
 
 $files = @(
   'manifest.json',
