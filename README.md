@@ -1,405 +1,533 @@
-# SCADA / YTBS / TPYS Haritalar ve Otomasyon V1
+# SCADA / YTBS / TPYS — Haritalar ve Otomasyon v1
 
-Bu doküman, TPYS (Türkiye Elektrik İletim Sistemi) KML tabanlı harita görünümü ile gerçek zamanlı SCADA aktif güç verisini aynı tarayıcı eklentisi (Chrome Extension) içinde birleştiren "Haritalar ve Otomasyon" projesinin detaylı, teknik ve kapsamlı başvuru kılavuzudur. Bu kılavuz, kod mimarisinden arayüz kullanımına, Superset veri çekme algoritmalarından hata ayıklama süreçlerine kadar her detayı ince ince açıklamak üzere tasarlanmıştır.
-
----
-
-## 1. Proje Genel Özeti ve Kapsamı
-
-Proje temelde üç ana sistemin entegrasyonundan oluşmaktadır:
-1. **KML Tabanlı Dinamik Harita:** Yüz binlerce düğümü (node) barındırabilen elektrik iletim şebekesinin, tarayıcıda takılmadan çizdirilmesini sağlayan SVG + Raster Tile (parçalı resim) hibrit harita motoru.
-2. **SCADA ve Superset Otomasyonu:** `analytics.teias.gov.tr` adresi üzerinde barındırılan Apache Superset platformuna otomatik giriş yaparak, kullanıcı müdahalesi olmadan belirlenen dilim (slice) ve pano (dashboard) id'lerinden ham veri çeken mekanizma.
-3. **Gerçek Zamanlı Veri Eşleştirme ve Görselleştirme Sistemi:** Alınan SCADA verilerini, topolojik KML verisindeki baralar ve hatlarla eşleştirerek (mapping); ısı haritası, akış yönleri ve yüklenme oranları gibi formatlarda ekrana yansıtan "State Management" katmanı.
-
-### 1.1. Neden Chrome Eklentisi Kullanılıyor?
-CORS (Cross-Origin Resource Sharing) kısıtlamalarını aşmak, tarayıcının sekme yönetimi API'lerini kullanarak gizli sekmelerde otomatik oturum açmak ve kullanıcıların mevcut çalışma ortamını bozmadan arka planda sessizce işlem yürütebilmek adına Chrome Eklentisi mimarisi tercih edilmiştir.
-
-### 1.2. Intranet Ortamı ve Kısıtlamalar
-Sistem, güvenlik nedeniyle kurum içi (intranet) ağlarda çalışacak şekilde tasarlanmıştır. `analytics.teias.gov.tr` sunucusu dış dünyaya kapalıdır. Bu nedenle, geliştirme ortamında veya internet üzerinde test yapılırken sistemin çökmemesi için **Mock Data** (Sahte Veri) mimarisi kurgulanmıştır.
+> **Chrome Extension Manifest V3** · Vanilla JS · Native SVG · Python 3 (openpyxl)  
+> Superset üzerinden SCADA verilerini çekip KML/Excel tabanlı topolojik harita üzerinde  
+> canlı yük akışı, ısı haritası ve TPYS reaktif eşleştirme otomasyonu sağlayan yüksek ölçekli sistem.
 
 ---
 
-## 2. Sistem Mimarisi ve Temel Teknolojiler
+## İçindekiler
 
-Proje, klasik Web GIS kütüphanelerinin (Leaflet.js, OpenLayers, Mapbox GL vb.) getirdiği hantallıktan kaçınmak ve tam kontrol sağlamak adına Native DOM ve SVG teknolojileri üzerine inşa edilmiştir.
-
-### 2.1. Kullanılan Ana Teknolojiler
-- **Vanilla JavaScript (ES6+):** Hiçbir framework (React, Vue vb.) kullanılmadan, doğrudan DOM manipülasyonu ile performans maksimize edilmiştir.
-- **Native SVG (Scalable Vector Graphics):** Hatlar, yön okları, trafo merkezleri ve baralar doğrudan `id="overlaySvg"` içerisine DOM elementleri olarak basılmaktadır. Bu sayede CSS ile anlık renk, transformasyon ve animasyon (akış simülasyonu) uygulamak mümkün olmaktadır.
-- **Chrome Extensions API V3:** Eklentinin arka plan görevleri `Service Worker` (`background.js`) üzerinden asenkron yürütülür. `chrome.tabs`, `chrome.scripting`, `chrome.downloads` yetkileri kullanılır.
-- **Python 3:** Ham KML verilerini optimize edilmiş hiyerarşik JSON (`kml_layers_v2.json`) dosyalarına dönüştürmek için çevrimdışı derleme senaryolarında kullanılır.
-
-### 2.2. Dizin ve Dosya Yapısı (Çok Ayrıntılı Döküm)
-
-Sistemdeki her bir dosyanın özel bir görevi vardır. Aşağıdaki tabloda proje ağacının ayrıntılı bir listesi sunulmuştur:
-
-| Dosya / Klasör Yolu | Tip | Açıklama ve Görev |
-|---------------------|-----|-------------------|
-| `manifest.json` | Ayar | Chrome eklenti izinleri ve versiyon tanımları. |
-| `background.js` | JS Script | Arka planda çalışan servis (Service Worker). SCADA Superset fetch istekleri ve login otomasyonu. |
-| `content-script.js` | JS Script | Hedef web sayfalarına müdahale etmek için enjekte edilen script. |
-| `map-modern.html` | HTML | Modern UI tasarımına sahip ana harita arayüzü ve kenar çubuğu. |
-| `map-modern.css` | CSS | Modern arayüzün (Dark Mode destekli) tüm stil şablonları. |
-| `map.html` | HTML | Legacy (eski) arayüz yapısı. Geriye dönük uyumluluk için tutulur. |
-| `map.css` | CSS | Eski arayüze ait stiller. |
-| `popup.html` | HTML | Chrome eklenti ikonuna tıklanınca açılan menü. |
-| `popup.css` | CSS | Açılır menü stilleri. |
-| `popup.js` | JS Script | Açılır menünün içindeki buton tetikleyicileri. |
-| `map-modern.js` | JS Script | Harita UI etkileşimlerini yöneten ana event kontrolcüsü. |
-| `map-common.js` | JS Script | Koordinat, zoom, SVG scale, pan (kaydırma) işlemlerini barındıran çekirdek kütüphane. |
-| `map-v2-runtime.js` | JS Script | `kml_layers_v2.json` verisini DOM üzerine renderlayan ana çizim motoru. |
-| `scada-client.js` | JS Script | Background script ile haberleşerek veriyi çeken ve formatlayan katman. |
-| `scada-common.js` | JS Script | SCADA eşleştirme kuralları, metrik hesaplama, isim normalize etme algoritmaları. |
-| `scada-flow.js` | JS Script | SVG üzerine "akış (flow)" ve "ısı haritası (heatmap)" renklerini çizen animasyon motoru. |
-| `scada-v2-runtime.js` | JS Script | V2 veri modeliyle SCADA arasındaki bağlantıyı sağlayan entegrasyon dosyası. |
-| `data/scada_auth.json` | JSON | **GİZLİ!** Superset kullanıcı adı, şifresi ve dashboard bilgilerini tutan özel ayar dosyası. |
-| `data/mock_scada.json` | JSON | Çevrimdışı (Intranet dışı) testler için anonimleştirilmiş sahte SCADA verisi. |
-| `data/kml_layers_v2.json` | JSON | Haritada çizilecek binlerce noktanın derlenmiş hiyerarşik JSON topolojisi (34MB). |
-| `build_kml_layers_v2.py`| Python | Ham KML dosyalarını okuyarak `data/kml_layers_v2.json` üreten dönüştürücü. |
-| `build-extension.ps1` | Script | Projeyi production (canlı) ortama hazır `dist/` klasörüne paketleyen PowerShell komut dizisi. |
-| `tests/` | Klasör | Birim testlerini (Smoke, Mock, Parsing) barındıran test dosyaları koleksiyonu. |
-| `docs/` | Klasör | Geliştirme süreçlerine dair CSV ve MD formatındaki ekstra dokümanlar. |
+1. [Proje Yapısı](#1-proje-yapısı)
+2. [Sistem Mimarisi](#2-sistem-mimarisi)
+3. [Veri Derleme Pipeline (build_kml_layers_v2.py)](#3-veri-derleme-pipeline)
+4. [SCADA Entegrasyon Mimarisi](#4-scada-entegrasyon-mimarisi)
+5. [Harita Motoru](#5-harita-motoru)
+6. [Chrome Extension Bileşenleri](#6-chrome-extension-bileşenleri)
+7. [Kurulum ve Geliştirme](#7-kurulum-ve-geliştirme)
+8. [NPM Betikleri](#8-npm-betikleri)
+9. [Test Altyapısı](#9-test-altyapısı)
+10. [Güvenlik Notları](#10-güvenlik-notları)
 
 ---
 
-## 3. Harita Sekmesi ve Kullanıcı Arayüzü (Ayrıntılı İnceleme)
+## 1. Proje Yapısı
 
-`map-modern.html` üzerinde toplanan harita arayüzü, gelişmiş bir Sidebar (Kenar Çubuğu) ve interaktif bir Map Viewport (Harita Çerçevesi) sunar. 
-
-### 3.1. Araçlar ve Kontroller (Tools Panel)
-- **Arama Motoru (Search Shell):** `Bara, TM veya hat ara` uyarısı veren input alanına metin girildiğinde;
-  - Önce `kml_layers_v2.json` indeksleri taranır.
-  - Eşleşen element bulunursa, harita o elementin koordinatlarına Fractional Zoom matematiği ile anında kayar.
-  - Bulunan elementin üzerine dikkat çekici bir "Ping" (SVG çember) animasyonu eklenir.
-- **Tema Değiştirme Butonu (btnThemeToggle):** CSS değişkenleri (`var(--accent)`, `var(--bg)`) üzerinden açık ve koyu tema arasında (Dark Mode / Light Mode) dinamik geçiş sağlar.
-- **Filtreye Odakla (btnFitFilters):** O an açık olan filtrelerin (örn: Sadece 400kV ve sadece Gölbaşı YTM) bounding box (sınır) koordinatlarını hesaplar ve haritayı tam bu alana sığdıracak şekilde yakınlaştırır.
-- **Haritayı Sıfırla (btnResetView):** Zoom seviyesini Türkiye geneline (genellikle Z: 5 veya 6) döndürür ve merkez koordinatlarını Anadolu'ya odaklar.
-
-### 3.2. İstatistik Paneli (Stats Panel)
-Ekranda (görünür viewport alanında) bulunan öğelerin dinamik sayımı yapılır:
-- **Bara Count (`#baraCount`):** Ekranda görünen bara sayısı.
-- **TM Count (`#tmCount`):** Ekranda görünen Trafo Merkezi sayısı.
-- **Hat Count (`#hatCount`):** Ekranda görünen iletim/dağıtım hattı sayısı.
-*Not: Harita her kaydırıldığında (pan) veya yakınlaştırıldığında (zoom) bu sayılar `Intersection` algoritmalarıyla milisaniyeler içinde tekrar hesaplanır.*
-
-### 3.3. Hat Gösterim Modları
-Binlerce hattın ekranda oluşturduğu karmaşayı önlemek için üç mod sunulur:
-1. **Detaylı (Detailed):** Hatlar KML dosyasındaki tüm kırılım noktalarıyla, virajlarıyla, fiziksel rotalarına tam sadık kalarak haritaya çizilir. Performans maliyeti en yüksektir.
-2. **Sade (Simplified):** Kırılım noktaları tamamen silinir. A noktası (Başlangıç TM) ile B noktası (Bitiş TM) arasına dümdüz bir çizgi (Line) çekilir. Hızlı analiz ve SCADA okuması için idealdir.
-3. **Sade (Ayrık / Spaced):** Paralel giden hatlar (Örn: A-B hattı 1 ve A-B hattı 2) sade modda üst üste biner ve tek hat gibi görünür. "Sade Ayrık" modunda ise matematiksel bir `offset` (kaydırma x, y koordinatlarında) uygulanarak çizgiler birbirine paralel uzanacak şekilde görsel olarak ayrılır.
-
-### 3.4. Katman Filtreleri (Layers)
-Kullanıcı, arayüzdeki "Katmanlar" (Layers) detayı altından işaret kutuları (checkbox) ile şu öğeleri açıp kapatabilir:
-- **Baralar:** Yuvarlak, renkli düğüm noktaları.
-- **Trafo Merkezleri (TM):** Genellikle üçgen veya daha büyük dairesel SVG yapılar.
-- **Hatlar:** İletim çizgileri.
-- **Trafolar (İletim/Dağıtım):** Şebekenin ana enerji dönüştürme birimleri.
-- **Bara Setleri:** Saatlik analizler için özel overlay katmanı.
-
-### 3.5. Gerilim (kV) Filtreleri
-Türkiye iletim standartlarında renk kodlaması:
-- **400 kV (Kırmızı Tonları):** Ana iletim otobanları.
-- **154 kV (Yeşil/Mavi Tonları):** Şehirlerarası alt iletim.
-- **66 kV (Sarı Tonları):** Eski ve yerel sistem hatları.
-Kullanıcılar bu checkboxları kapatarak sadece ilgilendikleri gerilim seviyelerine ait şebekeyi analiz edebilirler.
-
-### 3.6. YTM (Yük Tevzi Müdürlüğü) Filtreleri
-Tüm Türkiye; Adapazarı, Ankara (Gölbaşı), İstanbul, İzmir, Keban gibi bölgesel YTM'lere bölünmüştür. Harita üzerinden belirli bir YTM kapatıldığında, o bölgeye ait elemanların haritadaki `display` stili sıfırlanır, böylece CPU ve RAM rahatlar.
-
-### 3.7. Bara Set Zaman Çizelgesi
-`btnLoadBaraSet` butonu üzerinden kullanıcının yerel bilgisayarından `.xls` veya `.xlsx` yüklemesi istenir. 
-- Yüklenen veri, `xlsx.full.min.js` yardımıyla tarayıcıda parse edilir.
-- Slider (kaydırıcı) objesi kullanılarak 0'dan 23'e (24 saat) geçiş yapılır.
-- Her saat değişiminde, haritadaki baraların üzerine **kV** veya **p.u.** cinsinden değerler kutu (box) olarak basılır. Voltaj düşüklükleri izlenir.
-
----
-
-## 4. Harita Render Motoru: Fractional Zoom ve Native SVG Altyapısı
-
-Bu uygulamanın harita kısmı hiçbir şekilde Leaflet, OpenLayers veya Google Maps bağımlılığı içermez. Çıplak (Native) web teknolojileri kullanılarak yazılmıştır. Neden? Çünkü DOM'a doğrudan müdahale etmek, yüz binlerce hat segmenti olan şebekede saniyede 60 kare (60FPS) akış animasyonları gösterebilmek için tek yoldur.
-
-### 4.1. Tile (Karo) Altyapısı ve Fractional Zoom
-```html
-<div id="tileLayer" class="tile-layer"></div>
 ```
-- Ekranda 256x256 piksellik arka plan resimleri (Tile'lar) sıralanır.
-- Kullanıcı Mouse Scroll ile küsüratlı yakınlaştırma yaptığında (Örn: 5.5 Zoom);
-  - Geleneksel kütüphaneler bu işlemi bulanık bir geçişle veya ağır bir şekilde çözümlerken, bizim sistemimiz Tile'ları tam sayı olan (Z=5) seviyesinde çeker.
-  - Daha sonra `transform: scale(1.41)` gibi bir CSS fonksiyonu ile SVG ile eş zamanlı büyütür. Bu işleme "Fractional Zoom" denir.
-
-### 4.2. SVG Overlay (Arayüz Katmanı)
-```html
-<svg id="overlaySvg" class="overlay-svg">
-  <g id="hatLayer"></g>
-  <g id="flowLayer"></g>
-  <g id="tmLayer"></g>
-  ...
-</svg>
+SCADA_YTBS_TPYS_Haritalar_ve_Otomasyon_v1/
+│
+├── manifest.json                  # Chrome Extension MV3 manifest
+├── background.js                  # Service Worker: Superset auth + fetch
+├── content-script.js              # TPYS ERP sayfa etkileşimi
+├── popup.html / popup.js          # Extension popup UI + CSV eşleştirme
+│
+├── map-modern.html                # Ana harita sayfası
+├── map-modern.css                 # Harita stilleri (dark/light tema)
+├── map-modern.js                  # Harita motoru: pan/zoom/tile/SVG
+├── map-common.js                  # UMD: normalizeText, splitZoom, resolveBaraSetMatch
+├── map-v2-runtime.js              # KML v2 modeli yükleme ve render bootstrap
+│
+├── scada-common.js                # UMD: SCADA_CONFIG, eşleştirme algoritmaları, audit
+├── scada-client.js                # SCADA state yönetimi, polling, snapshot uygulaması
+├── scada-flow.js                  # SVG flow/heatmap render, ranking paneli, grafik modal
+├── scada-v2-runtime.js            # scada-client + scada-flow'u map-v2 ile bağlayan runtime
+│
+├── build_kml_layers_v2.py         # Python: KML+Excel → kml_layers_v2.json (34 MB)
+│
+├── data/
+│   ├── kml_layers_v2.json         # Derlenen topoloji modeli (üretim çıktısı)
+│   ├── mapping.json               # TPYS←→YKS bara eşleştirme tablosu
+│   └── scada_auth.json            # Superset kimlik bilgileri (GİTİGNORE'da olmalı!)
+│
+├── docs/yeni_harita_modeli/       # Kaynak Excel ve KML dosyaları
+│   ├── 01-TRAFO_MERKEZI_LISTESI.xlsx
+│   ├── 02-BARA_LISTESI.xlsx
+│   ├── 09-HAT_LISTESI.xlsx
+│   ├── 11-TRAFO_LISTESI.xlsx
+│   ├── 20-YTBS_Detayli_Harita.kml
+│   ├── SISTEM_ESLEME_LISTESI.xlsx
+│   └── eslesme_tablolari.xlsx     # Gerilim overlay yardımcı tablosu
+│
+├── lib/
+│   └── xlsx.full.min.js           # SheetJS (Bara Set XLS okuma)
+│
+├── tests/
+│   ├── scada-common.test.js
+│   ├── scada-v2-runtime.test.js
+│   ├── kml-layers-v2.test.js
+│   ├── map-common.test.js
+│   ├── map-modern-ui.test.js
+│   ├── scada-audit-fixtures.test.js
+│   ├── smoke-extension.cjs        # Puppeteer ile e2e smoke testi
+│   └── smoke-mcp.cjs              # MCP Chrome DevTools smoke testi
+│
+├── scripts/
+│   └── start-chrome-debug.ps1     # CDP debug modunda Chrome başlatma
+├── build-extension.ps1            # Extension ZIP paketleme
+└── package.json
 ```
-Bütün elektrik ağ topolojisi, `<path>`, `<circle>`, `<rect>` gibi native SVG elemanları olarak `<g>` (grup) etiketleri altına eklenir. `map-v2-runtime.js` içerisindeki render döngüsü, KML verisini DOM'a aktarır.
 
 ---
 
-## 5. SCADA ve Superset Entegrasyonu (Arka Plan Otomasyonu)
+## 2. Sistem Mimarisi
 
-Eklentinin asıl zekası, kullanıcının hiçbir şifre girmesine gerek kalmadan, tamamen arka planda (background.js üzerinden) Apache Superset'e bağlanıp, veriyi çekip haritaya aktarmasıdır.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Chrome Extension MV3                         │
+│                                                                 │
+│  ┌──────────────┐   chrome.runtime   ┌──────────────────────┐  │
+│  │  popup.js    │ ◄────────────────► │   background.js      │  │
+│  │  (UI + CSV)  │                    │  (Service Worker)    │  │
+│  └──────────────┘                    │  Superset Auth+Fetch │  │
+│                                      └──────────┬───────────┘  │
+│  ┌──────────────┐   chrome.tabs      │           │              │
+│  │content-script│ ◄──────────────── │    chrome.tabs.create   │
+│  │(TPYS ERP DOM)│                    └───────────┼─────────────┘
+│  └──────────────┘                               │
+│                                                  │ chrome.runtime.sendMessage
+│  ┌───────────────────────────────────────────────▼─────────────┐
+│  │              map-modern.html (Extension Tab)                 │
+│  │                                                              │
+│  │  map-modern.js     → Pan/Zoom/Tile motor, SVG overlay       │
+│  │  map-v2-runtime.js → kml_layers_v2.json yükleme            │
+│  │  scada-client.js   → SCADA state + polling                  │
+│  │  scada-flow.js     → SVG render (flow/heatmap/ranking)      │
+│  │  scada-v2-runtime.js→ Bağlantı katmanı                     │
+│  └──────────────────────────────────────────────────────────────┘
+```
 
-### 5.1. SCADA_FETCH Akışı (Message Passing)
-Haritadaki "Oto Yenile" (Auto Refresh) checkbox'ı işaretli olduğunda her 1 ila 5 dakikada bir tetiklenir:
-1. `map-modern.js`, `scada-client.js`'e veriyi güncellemesini söyler.
-2. `scada-client.js`, Chrome Extensions API'sini kullanarak arka plana mesaj yollar:
+### Veri Akışı (Canlı mod)
+
+```
+Superset Dashboard
+      │  POST /api/v1/chart/data
+      ▼
+background.js (Service Worker)
+  ├─ scada_auth.json → oturum yönetimi
+  ├─ CSRF token alma → /api/v1/security/csrf_token/
+  ├─ Fallback: SessionReuse → DirectLogin → HiddenTabLogin
+  └─ Ham JSON satırları → chrome.runtime.sendMessage
+
+scada-client.js (applyScadaSnapshot)
+  ├─ Ham satır → rowsBySinsid Map indexleme
+  ├─ Hat eşleştirme (kml_layers_v2.json hatLines ile)
+  ├─ Polarizasyon hesabı (terminalSide + formulaSign)
+  ├─ loadingPct = |MW| / capacityMva × 100
+  ├─ staleState = 'live' | 'warn' | 'dead'
+  └─ lineFlowByLineId Map güncelleme
+
+scada-flow.js (renderFlowLayer)
+  ├─ Her görünür hat için SVG <path> + <animateMotion>
+  ├─ flow mod: yönlü animated akış çizgisi
+  ├─ heatmap mod: kapasite yükleme rengi
+  └─ current mod: mevcut renk (animasyonsuz)
+```
+
+---
+
+## 3. Veri Derleme Pipeline
+
+`build_kml_layers_v2.py` scripti aşağıdaki girdi dosyalarını okuyarak `data/kml_layers_v2.json` üretir:
+
+### Girdiler
+
+| Dosya | İçerik |
+|-------|--------|
+| `20-YTBS_Detayli_Harita.kml` | TM koordinat noktaları + Hat LineString geometrileri |
+| `01-TRAFO_MERKEZI_LISTESI.xlsx` | TM meta (YTM, il, UCTE kodu, PSSE, koordinat onayı) |
+| `02-BARA_LISTESI.xlsx` | Bara tanımları (gerilim kV, voltageGroup) |
+| `09-HAT_LISTESI.xlsx` | Hat meta (uzunluk km, kış/yaz kapasitesi MVA, normal işletme) |
+| `11-TRAFO_LISTESI.xlsx` | Trafo parametreleri (ONAN/ONAF/OFAF MVA, empedans) |
+| `SISTEM_ESLEME_LISTESI.xlsx` | SCADA ölçüm noktası eşleştirme listesi |
+| `eslesme_tablolari.xlsx` | Gerilim overlay yardımcı tablosu (Bara ID bazlı) |
+
+### Derleme Adımları
+
+1. **KML parse** — `xml.etree.ElementTree` ile `Folder/Placemark` ağacı recursive taranır. `Point` → TM, `LineString` → Hat.
+2. **Excel eşleştirme** — `kmlDescriptionId` (KML Placemark description) ↔ Excel ID eşleştirmesi.
+3. **Koordinat normalizasyonu** — `[lon, lat]` çiftleri 6 decimal hassasiyetle saklanır; bbox (min_lon, min_lat, max_lon, max_lat) hesaplanır.
+4. **KV çıkarımı** — `infer_kv()` ile styleUrl ve isimden gerilim seviyesi çıkarılır (400/154/66 kV).
+5. **SCADA eşleştirme** — Her hat için aktif/reaktif güç ölçüm noktası adayları belirlenir.
+6. **Terminal polarizasyonu** — `enrich_hat_candidate()` ile formüldeki istasyon kodunun başlangıç/bitiş terminaline karşılık gelip gelmediği çözümlenir.
+7. **Gerilim overlay** — Üç kademeli bara gerilim eşleştirme: exact-source → ChatGPT overlay → alias fallback.
+8. **Hiyerarşi** — `build_hierarchy()` ile YTM×kV bazlı `hatIds/tmIds/trafoIds/baraIds` listeleri derlenir.
+9. **Validation report** — `kml_layers_v2_validation.md` dosyası eşleşme sayıları, SCADA kapsamı ve polarizasyon uyum istatistikleriyle üretilir.
+
+### Çıktı Şeması (kml_layers_v2.json)
+
+```json
+{
+  "meta": {
+    "schemaVersion": 2,
+    "generatedAt": "ISO-8601",
+    "validation": { ... }
+  },
+  "ytmNames": ["Orta Anadolu YTM", ...],
+  "defaultYtm": "Orta Anadolu YTM",
+  "tmPoints": [
+    {
+      "id": "1234", "name": "ANKARA TM", "lon": 32.85, "lat": 39.92,
+      "kv": "154", "ytm": "Orta Anadolu YTM",
+      "ucteKodu": "ANKR1", "psseAdi": "ANKARA",
+      "childHatIds": [".."], "childTrafoIds": [".."], "childBaraIds": [".."]
+    }
+  ],
+  "hatLines": [
+    {
+      "id": "5678", "name": "ANKARA-KONYA EİH",
+      "coords": [[32.85,39.92], ...],
+      "bbox": [32.1, 37.8, 33.5, 40.1],
+      "kv": "154", "lengthKm": 245.3,
+      "winterCapacityMva": 300, "summerCapacityMva": 250,
+      "startTm": "ANKARA TM", "endTm": "KONYA TM",
+      "scada": {
+        "active": { "ids": ["SINSID_1"], "rows": [...], "ambiguous": false },
+        "reactive": { "ids": [], "rows": [], "ambiguous": false }
+      }
+    }
+  ],
+  "trafos": [ { "renderMode": "details-only", "scada": { "active":..., "reactive":..., "voltage":... } } ],
+  "baraNodes": [ { "voltageGroup": "bara-154-400", "scada": { "voltage": {...} } } ],
+  "hierarchy": { "ytm": { "Orta Anadolu YTM": { "gerilim": { "154": { "hatIds":[..] } } } } }
+}
+```
+
+---
+
+## 4. SCADA Entegrasyon Mimarisi
+
+### 4.1 Yapılandırma (scada-common.js — SCADA_CONFIG)
+
 ```javascript
-chrome.runtime.sendMessage({
-  type: 'SCADA_FETCH',
-  payload: {
-    dashboardId: 89,
-    elementName: 'P' // Aktif Güç
-  }
+const SCADA_CONFIG = {
+  BASE_URL: 'https://superset.example.com',
+  DASHBOARD_ID: 42,
+  CHART_SLICE_ID: 1234,
+  QUERY_TIME_RANGE: 'Last 30 minutes',
+  QUERY_KV_FILTERS: ['154', '400'],
+  QUERY_TEAR_FILTERS: [],
+  QUERY_ELEMENT_NAME: 'EİH',
+  QUERY_ROW_LIMIT: 10000,
+  STALE_THRESHOLD_WARN_MS: 15 * 60 * 1000,   // 15 dk
+  STALE_THRESHOLD_DEAD_MS: 60 * 60 * 1000,   // 60 dk
+  HISTORY_MAX: 20,
+  POLL_INTERVAL_MS: 5 * 60 * 1000,            // 5 dk
+  // Renk eşikleri (loadingPct)
+  COLOR_THRESHOLDS: [
+    { pct: 50, color: '#22c55e' },   // yeşil
+    { pct: 75, color: '#eab308' },   // sarı
+    { pct: 90, color: '#f97316' },   // turuncu
+    { pct: 100, color: '#ef4444' },  // kırmızı
+    { pct: Infinity, color: '#7c3aed' } // mor (aşırı)
+  ]
+};
+```
+
+### 4.2 Oturum Yönetimi (background.js — Üç Kademeli Fallback)
+
+```
+1. Session Reuse (Cookie-based)
+   └─ /api/v1/me → HTTP 200 → Mevcut oturum geçerli → Direkt fetch
+
+2. Direct Login
+   └─ POST /api/v1/security/login (username/password from scada_auth.json)
+   └─ 200 → access_token alındı → Bearer auth ile fetch
+
+3. Hidden Tab Login (Sıfır Hata Yöntemi)
+   └─ chrome.tabs.create({ url: loginUrl, active: false })
+   └─ Sekme yüklendi → chrome.cookies.getAll → oturum çerezleri alındı
+   └─ Tab kapatıldı → fetch
+```
+
+### 4.3 Veri İşleme (scada-client.js — applyScadaSnapshot)
+
+**Adım 1: Ham satır indexleme**
+```javascript
+// rawRows (Superset JSON satırları) → rowsBySinsid Map
+// Key: normalize(ölçüm_noktası_id)
+// Value: { mw, mvar, timestamp }
+```
+
+**Adım 2: Hat eşleştirme**
+```javascript
+// Her hat için hat.scada.active.ids → SCADA satırı lookup
+// Duplicate detection: aynı ID birden fazla hatta bağlıysa → duplicateHatIds Set
+```
+
+**Adım 3: Kapasite ve yükleme hesabı**
+```javascript
+const season = state.scada.capacitySeason; // 'winter' | 'summer'
+const capacityMva = season === 'summer'
+  ? (hat.summerCapacityMva > 0 ? hat.summerCapacityMva : hat.winterCapacityMva)
+  : (hat.winterCapacityMva > 0 ? hat.winterCapacityMva : hat.summerCapacityMva);
+const loadingPct = capacityMva > 0 ? (Math.abs(mw) / capacityMva) * 100 : null;
+```
+
+**Adım 4: Stale state belirleme**
+```javascript
+const age = Date.now() - timestamp.getTime();
+const staleState = age < STALE_WARN ? 'live'
+                 : age < STALE_DEAD ? 'warn'
+                 : 'dead';
+```
+
+**Adım 5: Flow kaydı**
+```javascript
+state.scada.lineFlowByLineId.set(hatId, {
+  mw, loadingPct, direction, capacityMva,
+  staleState, timestamp, sinsid, isMock
 });
 ```
 
-### 5.2. Superset API Kontratı ve Payload (Sorgu İçeriği)
-`background.js` içindeki `buildChartPayload()` fonksiyonu, aşağıdaki JSON'u inşa ederek `https://analytics.teias.gov.tr/api/v1/chart/data` adresine `POST` isteği atar.
+### 4.4 SVG Render (scada-flow.js — renderFlowLayer)
 
-**Örnek Superset Payload (Kısaltılmış):**
+Her görünür hat için:
+- **flow modu:** Renkli animasyonlu `<path>` + `<animateMotion>` ile akış yönü gösterimi
+- **heatmap modu:** Sabit renk çizgi (kapasite yükleme gradyanı)
+- **current modu:** Mevcut renk, animasyonsuz
+
+Renk, `getFlowColor(loadingPct)` ile `SCADA_CONFIG.COLOR_THRESHOLDS` eşiğine göre belirlenir.
+
+### 4.5 Audit ve Denetim
+
+`buildScadaAuditReport()` → görünür hatların eşleşme durumunu, mismatch nedenlerini ve sorgu kontratını raporlar.  
+`exportScadaAuditCsv()` → denetim verilerini UTF-8 BOM'lu `;` sınırlı CSV olarak indirir.
+
+---
+
+## 5. Harita Motoru
+
+### 5.1 Projeksiyon ve Zoom
+
+`map-modern.js` Web Mercator projeksiyonu ile çalışır.  
+`MAP_COMMON.splitZoom(zoom)` — `tileZoom` (integer) + `scale` (2^frac) döndürür:
+```javascript
+// Örnek: zoom=12.7 → { tileZoom:12, scale:1.624 }
+```
+
+SVG overlay, `transform="scale(scale) translate(-ox, -oy)"` ile tile grid üzerine hizalanır.
+
+### 5.2 Katman Sırası (SVG)
+
+```
+<svg id="overlaySvg">
+  <g id="hatLayer">      <!-- Statik hat çizgileri (kV rengi) -->
+  <g id="flowLayer">     <!-- SCADA dinamik akış katmanı -->
+  <g id="measureLayer">  <!-- Ölçüm noktaları (Bara Set) -->
+  <g id="tmLayer">       <!-- Trafo Merkezi ikonları -->
+  <g id="trafoLayer">    <!-- Trafo detayları -->
+  <g id="baraLayer">     <!-- Bara düğümleri -->
+  <g id="baraSetLayer">  <!-- Bara Set yük ısı haritası -->
+</svg>
+```
+
+### 5.3 Tile Sistemi
+
+OpenStreetMap tile URL şablonu:  
+`https://tile.openstreetmap.org/{z}/{x}/{y}.png`  
+Tile cache: `state.map.tileCache` — Map<key, HTMLImageElement>
+
+### 5.4 Gerilim Filtreleri
+
+`SCADA_CONFIG.QUERY_KV_FILTERS` ile aynı filtre set haritada kV checkbox kontrolü üzerinden yönetilir. `scadaGetFilterKey()` o anki KV ve YTM filtre kombinasyonunu canonical string olarak döndürür; bu key `scadaVisibleSummary` cache'ini geçersiz kılar.
+
+### 5.5 Bara Set (XLS İzleme)
+
+- Kullanıcı `.xls/.xlsx` yükler → `SheetJS` parse
+- 0-23 saatlik gerilim/yük verisi
+- Saat slider kontrolü ile anlık ısı haritası
+- `MAP_COMMON.resolveBaraSetMatch()` ile TPYS←→KML bara eşleştirmesi
+
+---
+
+## 6. Chrome Extension Bileşenleri
+
+### 6.1 manifest.json
+
 ```json
 {
-  "datasource": { "id": 3, "type": "table" },
-  "force": true,
-  "form_data": {
-    "slice_id": 454,
-    "viz_type": "table",
-    "granularity_sqla": "__time",
-    "time_range": "DATEADD(DATETIME(\"now\"), -24, hour) : now",
-    "groupby": ["sinsid", "b1Name", "b2Name", "b3Name", "elementName"],
-    "metrics": [
-      { "label": "MAX(__time)", "expressionType": "SQL", "sqlExpression": "MAX(__time)" },
-      { "label": "AVG(maxValue)", "expressionType": "SQL", "sqlExpression": "AVG(maxValue)" }
-    ],
-    "adhoc_filters": [
-      {
-        "clause": "WHERE",
-        "subject": "elementName",
-        "operator": "==",
-        "comparator": "P"
-      }
-    ],
-    "row_limit": 50000
-  }
+  "manifest_version": 3,
+  "permissions": ["storage", "tabs", "scripting", "cookies"],
+  "host_permissions": ["https://superset.example.com/*", "https://tpys.example.com/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" }
 }
 ```
-Bu sayede veritabanına büyük bir yük bindirmeden, sadece son 24 saatin maksimum (en güncel) verisi SQL seviyesinde derlenerek haritaya JSON formatında geri döner.
+
+### 6.2 popup.js — TPYS ERP Otomasyon Akışı
+
+```
+Kullanıcı CSV yükler (aylık özet)
+    ↓
+parseSemicolonCsv() → {headers, rows}
+    ↓
+persistLastCsvSnapshot() → chrome.storage.local
+  (3 MB altı ise full cache, üstü ise metadata-only)
+    ↓
+analyzeCurrentTab() → content-script.js'e GET_PAGE_CONTEXT
+    ↓
+buildPlanForPage() → tarih eşleştirmesi + operasyon listesi
+    ↓
+applyToCurrentTab() → content-script.js'e APPLY_PLAN
+    ↓
+commitCurrentTab() → content-script.js'e CLICK_COMMIT
+```
+
+**Tarih seçim mantığı:**
+1. Sayfa tarihi CSV'de varsa → direkt kullan
+2. CSV'de tek tarih varsa → o tarihi kullan (uyarı ile)
+3. Çoklu tarih varsa → en güncel tarihi kullan (uyarı ile)
+
+### 6.3 content-script.js — ERP DOM Etkileşimi
+
+- `GET_PAGE_CONTEXT` → sayfadaki tarih ve bara satırlarını scrape eder
+- `APPLY_PLAN` → `fastExtMode` aktifse `input.value=` + `dispatchEvent`, değilse click simulation
+- `CLICK_COMMIT` → ERP kaydet butonunu bulup tıklar
+- `GET_DOWNLOAD_CONTEXT` → CSV indirme sayfası analizi
+- `DOWNLOAD_ALL_CSVS` → sayfa sayfa 1800ms aralıklarla CSV indirir
+- `TOGGLE_APPROVAL_SIMPLIFY` → onay sütununu gizle/göster
 
 ---
 
-## 6. Otomatik Giriş (Auto-Login) Sisteminin Kusursuz Mimarisi
+## 7. Kurulum ve Geliştirme
 
-Superset gibi sistemler güvenlik gereği oturumları sık sık düşürür (Session Timeout). Bu durum analizciyi çalışırken bezdirir. Eklentimiz `background.js` içinde çok özel bir "Fallback" (Yedekli) giriş mekanizması barındırır.
+### Ön Koşullar
 
-### 6.1. Birinci Aşama: Session Reuse (Oturumun Yeniden Kullanımı)
-Öncelikle tarayıcının mevcut çerezleri (cookies) denenir. `fetch` isteği `credentials: 'include'` ile yollanır. 200 OK gelirse şifre girmeye gerek kalmaz.
+- **Node.js** ≥ 18 (testler için)
+- **Python** ≥ 3.10 + `openpyxl` (KML derleme için)
+- **Google Chrome** (extension yükleme için)
 
-### 6.2. İkinci Aşama: Direct-Login (Gizli POST İsteği)
-Eğer sunucu 401/403 dönerse, eklenti `data/scada_auth.json` dosyasını okur.
-- Eklenti arka planda Superset'in `GET /login/` sayfasına görünmez bir istek atar.
-- Gelen HTML cevabının içindeki CSRF (Cross-Site Request Forgery) tokenları Regex ile bulunur.
-- Kullanıcı adı ve şifre ile bir x-www-form-urlencoded paketi hazırlanarak `POST /login/` yollanır. Bu işlem saniyeden kısa sürer.
+### Kurulum Adımları
 
-### 6.3. Üçüncü Aşama: Hidden-Tab Fallback (Sıfır Hata Yöntemi)
-Bazı Single Sign-On (SSO) altyapılarında veya yönlendirme (redirect) kurallarında Direct-Login başarısız olabilir. Bu durumda en "ilkel ama kesin" yöntem devreye girer:
-1. Kullanıcı hissetmeden Chrome'un arka planında `active: false` parametresiyle yeni bir gizli sekme açılır.
-2. `chrome.scripting.executeScript` metoduyla o sekmeye JavaScript kodu enjekte edilir.
-3. Formdaki kullanıcı adı ve şifre inputları bulunup sanal klavye vuruşlarıyla doldurulur (`dispatchEvent(new Event('input'))`).
-4. `form.submit()` tetiklenir.
-5. Oturum açıldığında sekme kendini imha eder (kapatılır) ve veri çekme işlemi başarıyla tamamlanır.
+```bash
+# 1. Bağımlılıkları yükle (sadece devDependencies)
+npm install
 
----
+# 2. KML+Excel modelini derle
+npm run build:kml-v2
+# Çıktı: data/kml_layers_v2.json (~34 MB)
 
-## 7. SCADA Verisi ile Haritanın Eşleştirilmesi (Matching)
+# 3. Chrome Extension olarak yükle
+# Chrome → chrome://extensions → "Paketlenmemiş uzantı yükle" → proje klasörü seç
 
-Superset'ten veya Mock veriden çekilen anlık güç verilerinin (MW), statik harita çizgileriyle bütünleşerek "canlı" bir organizmaya dönüşmesi, projenin en büyük otomasyon başarılarından biridir. Bu süreç `scada-common.js`, `scada-client.js` ve `scada-flow.js` dosyalarının koordine çalışmasıyla sağlanır.
+# 4. (İsteğe bağlı) Extension ZIP paketi oluştur
+npm run build:extension
+```
 
-### 7.1. SCADA İndeksleme ve Eşleştirme (Matching) Algoritmaları
-Eşleştirme işlemi, harita üzerindeki her bir cisme (Hat, Trafo) JSON veri kümesinden tek tek arama yapılarak **gerçekleştirilmez**. Tarayıcının ana işlemcisini kilitlememek için şu algoritma izlenir:
+### SCADA Bağlantısı Yapılandırma
 
-1. **Ön-İndeksleme (Build Index):** Harita ilk yüklendiğinde, `scada-client.js` içerisindeki `scadaBuildIndex()` fonksiyonu çalışır. Haritadaki tüm hatların `olcumNoktasiIdAktif` değerleri okunarak bir `Map` (Hash Table) oluşturulur (`hatsBySinsid`). Böylece O(1) hızında eşleşme aranabilir.
-2. **Kopya (Duplicate) Denetimi:** Aynı SCADA ölçüm kimliği (`sinsid`) birden fazla harita çizgisine tanımlanmışsa (Örn. hatalı KML verisi), sistem bu kimliği `duplicateMappings` listesine alır. Kopya hatlar canlı renklendirme (Flow) dışı bırakılır, böylece hatalı yönlendirmelerin önüne geçilir.
-3. **Normalizasyon (`scada-common.js`):** Superset'ten dönen düz (flat) JSON dizisi `normalizeScadaRows()` ile temizlenir. Birden çok tarih kaydı varsa, `MAX(__time)` hücresine bakılarak sadece en güncel tarihli veri belleğe alınır.
-4. **Snapshot Uygulaması (`applyScadaSnapshot`):** SCADA'dan gelen taze veriler, İndeks Haritasındaki (Hash Table) hatlarla eşleştirilir. 
-
-### 7.2. Yüklenme (% Loading) ve Yön (Direction) Matematiği
-Bir SCADA ölçüm satırı (`sinsid`), İndeks Haritasındaki (`hatsBySinsid`) bir hatta başarıyla eşleştiğinde `scada-client.js` içerisindeki `applyScadaSnapshot()` fonksiyonu tetiklenir ve sırasıyla şu matematiksel hesaplamalar yapılır:
-
-1. **Akış Yönü (Direction) ve Polarizasyon Tespiti:**
-   SCADA'dan gelen `activePowerMw` değerinin haritada hangi yöne doğru akacağını hesaplayan modüldür. KML ve Excel topolojisi derlenirken (`build_kml_layers_v2.py` -> `enrich_hat_candidate`), haritadaki A noktası (Başlangıç TM) ve B noktası (Bitiş TM) için bir **Terminal Polarizasyonu (Polarization Sign)** çıkarılır.
-   * Superset formülündeki ölçüm noktası **A noktasındaysa (Start)**, `polarization_sign = 1` atanır.
-   * Formüldeki ölçüm noktası **B noktasındaysa (End)**, `polarization_sign = -1` atanır.
-   * `scada-client.js` tarafına gelen `activePowerMw` değeri eğer sıfırdan büyük veya eşitse `direction = 'forward'`, küçükse `direction = 'reverse'` olarak işaretlenir. 
-   * Eğer nihai yön **ters (reverse)** ise, `scada-flow.js` tarafında çizilen görünmez animasyon vektörü `.reverse()` metoduyla çevrilir ve oktan parçacıklar haritada ters yöne doğru koşturulur.
-
-   **Örnek Senaryolar:**
-   * **Örnek 1 (Pozitif Akış - A'dan B'ye):** Hat Keban TM (A) ile Karakaya TM (B) arasında. SCADA verisi `+150 MW` gelirse, akış Keban'dan Karakaya'ya doğrudur. Yön `forward` olur.
-   * **Örnek 2 (Negatif Akış - B'den A'ya):** Aynı hat için SCADA verisi `-85.5 MW` gelirse, akış Karakaya'dan Keban'a dönmüştür. Yön `reverse` olur ve `scada-flow.js` animasyonu tersine oynatır.
-   * **Örnek 3 (Terminal Karmaşası - Ambiguous):** Eğer Excel formülünde ölçüm noktası tespit edilemezse (`terminalSideUnknown`), sistem varsayılan olarak Excel sırasını (A'dan B'ye) kabul eder ancak loglara `polarizationMismatch` uyarısı düşer.
-
-   **Teknik Terimler Sözlüğü (Bu Bölüm İçin):**
-   * **Terminal Polarizasyonu:** Ölçüm cihazının hattın hangi ucunda (A veya B) bulunduğuna göre akış vektörünün (+1 veya -1) işaretlenmesi işlemidir.
-   * **Forward / Reverse (İleri / Geri):** Vektörel çizimde hattın başlangıcından bitişine (Forward) veya bitişinden başlangıcına (Reverse) giden rotayı belirtir.
-   * **activePowerMw:** Hattan geçen aktif gücün Megawatt (MW) cinsinden sayısal ve işaretli değeridir. İşaret (+ veya -) direkt olarak yönü ifade eder.
-   * **.reverse() Metodu:** JS Array veya SVG path'lerinin uç noktalarının yer değiştirmesi işlemidir. Geriye akan güçlerde animasyon rotasını döndürmek için kullanılır.
-
-2. **Kapasite Seçimi ve Yüzdelik Yüklenme (Loading Pct):**
-   Uygulamanın kenar çubuğundan operatörün seçtiği mevsime ("Yaz" veya "Kış") göre ilgili hattın Excel'den alınan `summerCapacityMva` veya `winterCapacityMva` limit değeri `capacityMva` değişkenine alınır. Eğer seçilen mevsim kapasitesi `0` veya eksikse, sistem otomatik olarak diğer mevsimin kapasitesine Fallback (Geri Dönüş) yapar; o da yoksa güvenli bölme işlemi (Divide by Zero hatasını engellemek) için `1` kabul edilir.
-   Daha sonra yüklenme yüzdesi `loadingPct = (Math.abs(row.activePowerMw) / capacityMva) * 100` formülüyle bulunur.
-   * **Örnek:** Seçili mevsim "Yaz", hattın yaz kapasitesi `1000 MVA`, kış kapasitesi `1200 MVA` olsun. Gelen güç `-450 MW` ise formül şu şekilde çalışır: `Math.abs(-450) / 1000 * 100`. Sonuç olarak hattın `%45` yüklü olduğu tespit edilir ve yeşil renge boyanır. Mevsim "Kış" seçilseydi oran `%37.5` çıkardı.
-
-3. **Bayatlık Testi (Staleness ve Veri Kalitesi):**
-   SCADA'dan gelen paketin zaman damgası (`row.timestamp`), tarayıcının o anki yerel saatiyle (`nowMs = Date.now()`) karşılaştırılarak `ageSec` (Saniye cinsinden veri yaşı) hesaplanır.
-   Sistem yapılandırmasındaki (`SCADA_CONFIG`) eşik değerlerine göre verinin tazeliği derecelendirilir:
-   * `ageSec > 3600` (60 dakika): Veriye `staleState = 'dead'` (Bayat) damgası vurulur.
-   * `ageSec > 600` (10 dakika): Veriye `staleState = 'warn'` (Gecikmeli) damgası vurulur.
-   * `ageSec <= 600`: Veriye `staleState = 'live'` (Canlı) damgası vurulur.
-   Bayat veriler canlı renkler yerine `SCADA_CONFIG.STALE_COLOR` (varsayılan: Turuncu/Sarı) rengine boyanır. Eğer bir SCADA paketi hiç gelmezse (örn. sorguda hata çıkarsa), önceki turdan kalan tüm hatlar iterasyondan geçerek `dead` damgasıyla şeffaflaştırılır ve görünmez animasyonlara dönüştürülür (`unavailable = true`).
-   * **Örnek:** Şu an saat `14:30` olsun. Superset'ten gelen veri paketi `13:15` zaman damgasına sahipse, aradaki fark 75 dakika (`ageSec = 4500`) olur. 60 dakikalık (`3600 sn`) eşik aşıldığı için bu hatta `%80` yüklenme olsa bile kırmızı yanmaz; soluk turuncu bir renkle `dead` state'inde gösterilir. Eğer veri `14:25` tarihli olsaydı aradaki fark 5 dakika olacağından `live` state'inde yani tam performanslı canlı renklendirme ile çizilirdi.
-
-### 7.3. Görselleştirme ve Renklendirme Modları (Display Modes)
-Matematiksel eşleşmesi tamamlanan hatlar, `scada-flow.js` tarafında anında SVG katmanına (Flow Layer) renderlanır. Kenar çubuğundaki (Sidebar) ayarlara göre farklı görselleştirme teknikleri vardır:
-
-1. **Isı Haritası (Heatmap) ve Yüklenme:** Hattın hesaplanan `loadingPct` (Yüklenme Yüzdesi) değerine göre çizgi genişliği (`getFlowWidth`) ve rengi (`getFlowColor`) anlık değişir:
-   - `< %30:` Yeşil (Normal)
-   - `%30 - %55:` Sarı (Dikkat)
-   - `%55 - %65:` Turuncu (Uyarı)
-   - `%65 - %80:` Kırmızı (Kritik)
-   - `> %90:` Mor (Aşırı Yüklenme / Overload)
-2. **Akış Animasyonu (Flow Arrows):** `renderFlowLayer()` fonksiyonu, statik çizginin üzerine görünmez bir animasyon rotası (`<path>`) ekler. Gücün aktığı yöne doğru koşan oklardan (`<animateMotion>`) oluşan bu parçacıklar, `getArrowSpeed` fonksiyonuyla yönetilir. Hat ne kadar yüklenmişse oklar o kadar **hızlı** akar, hat ne kadar uzunsa ekrana o kadar **çok ok** çizilir.
-3. **Sade ve Ayrık Görünüm:** Karmaşık Trafo Merkezlerinde yüzlerce çizgi üst üste binebilir. "Sade-Ayrık" modunda `offsetLine()` geometrisi devreye girer ve paralel hatları (Örn: A-B hattı 1 ve 2) birbirinden 4 piksel ayırarak, iç içe geçmelerini engeller.
-
----
-
-## 8. Veri Kalitesi, Denetim (Audit) ve Hata Raporlaması
-
-Harita üzerindeki güçler izlenirken, hangi verinin güvenilir olduğu, hangi verinin sistem arızasından kaynaklı "donuk" kaldığı hayati önem taşır. Eklenti bu konuda 4 temel kalite filtresi kullanır.
-
-### 8.1. Hata Türleri Sınıflandırması
-1. **Duplicate Mappings (Çift Düşen Kayıtlar):** Aynı SCADA kimliğine sahip verinin haritada iki farklı hatta bağlanmış olması durumudur. Bu hatlar görselleştirmede soluk (muted) bırakılır.
-2. **Ambiguous Rows (Belirsiz Eşleşmeler):** İsim benzerliği çok olan ve hangi hatta ait olduğu saptanamayan veriler.
-3. **Stale Data (Bayat / Eskimiş Veri):** Superset'ten dönen `MAX(__time)` değeri, şu anki saatten 30 dakika veya daha eskiyse, RTU cihazı veya iletişim hattı kopmuş demektir. Veri "Bayat" (Stale) sayılarak görselde farklı bir opasite (%50 şeffaf) ile gösterilir.
-4. **Unmatched (Kaynağı Olmayan):** KML'de hattı olan ancak SCADA'da kaydı bulunamayan ölü hatlar.
-
-### 8.2. Denetim ve CSV Dışa Aktarımı
-Analizcilerin sorunlu hatları bulması için iki özel buton tasarlanmıştır:
-- **Mismatch Raporu (Modal Gösterim):** Ekranda hızlıca hataların özetini çıkarır.
-- **Denetim CSV (Audit CSV Export):** `scada-client.js` üzerindeki `exportAuditCSV()` metodu çalıştırılarak, o anki harita üzerindeki **tüm hatların** eşleşme durumunu (neden eşleşmedi, ID'si neydi, beklenen Bara adı neydi) satır satır Excel uyumlu CSV formatına döker ve Chrome Downloads API ile cihaza kaydeder.
-
----
-
-## 9. Kurulum ve Güvenlik Ayarları (`scada_auth.json`)
-
-### 9.1. Geliştirici Ortamında Kurulum
-1. Projeyi bilgisayarınıza indirin (Git Clone / ZIP).
-2. Chrome veya Chromium tabanlı bir tarayıcıda (Edge, Brave vb.) `chrome://extensions/` adresini açın.
-3. Sağ üstteki "Geliştirici Modu" (Developer Mode) anahtarını aktifleştirin.
-4. "Paketlenmemiş öğe yükle" (Load unpacked) tuşuna basarak projenin bulunduğu kök klasörü (klasörün içinde `manifest.json` olmalıdır) seçin.
-5. Eklenti yüklendikten sonra Chrome çubuğundaki puzzle ikonuna tıklayarak uygulamanın "Açılır Menüsünü" (Popup) görebilir ve haritayı tam ekranda başlatabilirsiniz.
-
-### 9.2. Güvenlik Konfigürasyonu
-Uygulamanın Intranet içindeki Superset'e tự động bağlanabilmesi için `data/scada_auth.json` dosyasını manuel olarak oluşturmalısınız.
-
-**`data/scada_auth.json` Şablonu:**
 ```json
+// data/scada_auth.json — ASLA GIT'E EKLEME
 {
-  "baseUrl": "https://analytics.teias.gov.tr",
-  "username": "sizin_intranet_kullanici_adiniz",
-  "password": "sifreniz_gizli_tutulmalidir",
-  "dashboardId": 89,
-  "chartSliceId": 454,
-  "datasourceId": 3,
-  "enabled": true
+  "baseUrl": "https://your-superset-instance.com",
+  "username": "scada_user",
+  "password": "secret",
+  "dashboardId": 42,
+  "chartSliceId": 1234
 }
 ```
-**ÇOK ÖNEMLİ GÜVENLİK UYARISI:**
-Bu dosyada parolanız düz metin (plain text) olarak yer alacaktır. Bu yüzden `.gitignore` dosyası, `data/scada_auth.json` klasörünü ve içeriğini GitHub'a göndermenizi (commit/push) engelleyecek şekilde ayarlanmıştır. Hiçbir koşulda bu dosyayı başkalarıyla paylaşmayın. Eğer `enabled: false` yaparsanız, otomatik giriş sistemi çalışmaz; şifrenizi girmenize gerek kalmaz ve sadece tarayıcıda önceden açılmış olan açık Superset oturumunuz (varsa) kullanılır.
+
+`scada-common.js` içindeki `SCADA_CONFIG` sabitlerinin de aynı değerleri yansıttığından emin olun.
+
+### Chrome DevTools MCP ile Debug
+
+```bash
+# 1. Chrome'u CDP debug modunda başlat
+npm run chrome:debug
+
+# 2. MCP bağlantısını başlat
+npm run mcp:chrome
+
+# 3. MCP smoke testini çalıştır
+npm run smoke:mcp
+```
 
 ---
 
-## 10. Çevrimdışı Geliştirme, Test ve Mock Veri Kullanımı
+## 8. NPM Betikleri
 
-Proje ofis dışında, standart bir internet bağlantısında `analytics.teias.gov.tr` sunucusunu çözemeyecektir (DNS Hatası). Kod geliştirmeye devam edebilmek için bir simülasyon (Mock) sistemi kurgulanmıştır.
+| Betik | Açıklama |
+|-------|----------|
+| `npm test` | Tüm `*.test.js` birim testlerini çalıştır (Node test runner) |
+| `npm run build:kml-v2` | KML + Excel → `data/kml_layers_v2.json` derle |
+| `npm run build:extension` | `.ps1` ile extension ZIP paketi oluştur |
+| `npm run smoke:extension` | Puppeteer ile e2e smoke testi |
+| `npm run chrome:debug` | Chrome'u `--remote-debugging-port=9222` ile başlat |
+| `npm run mcp:chrome` | Chrome DevTools MCP sunucusunu başlat |
+| `npm run smoke:mcp` | MCP bağlantı smoke testi |
 
-### 10.1. Mock Veri Dosyası (`mock_scada.json`)
-Proje dizininde yer alan `data/mock_scada.json` dosyası, canlı sunucudan daha önce alınmış tamamen yasal ve anonimleştirilmiş dev bir JSON dökümüdür.
+---
 
-### 10.2. "Kaynak" (Mock / Canlı Geçişi) Butonu
-Haritadaki SCADA Veri kartında yer alan **"Kaynak" (btnScadaMock)** düğmesine tıklandığında:
-- Eklenti canlı sunucuya fetch atmayı anında keser.
-- `background.js` içindeki `handleScadaFetch` fonskiyonu, `payload.mockData` üzerinden doğrudan bu yerel dosyayı işlemeye başlar.
-- Arayüzde "MOCK" yazısı sarı renkli belirgin bir şekilde ekrana basılır.
+## 9. Test Altyapısı
 
-Bu sayede geliştiriciler evdeyken, uçaktayken veya internet yokken eşleştirme algoritmaları, SVG boyamaları ve CSS animasyonları üzerinde çalışmaya devam edebilirler.
+| Dosya | Kapsam |
+|-------|--------|
+| `scada-common.test.js` | SCADA eşleştirme algoritmaları, `resolveQueryContract`, audit hesapları |
+| `scada-v2-runtime.test.js` | Snapshot uygulama, stale detection, polarizasyon, duplicate tespiti |
+| `kml-layers-v2.test.js` | KML JSON şema doğrulama, bbox kontrolü |
+| `map-common.test.js` | `normalizeText`, `splitZoom`, `resolveBaraSetMatch` |
+| `map-modern-ui.test.js` | Harita UI eleman testleri |
+| `scada-audit-fixtures.test.js` | Audit rapor fixture testleri |
+| `smoke-extension.cjs` | Puppeteer: Extension yükleme → harita açma → temel etkileşim |
+| `smoke-mcp.cjs` | CDP MCP bağlantı doğrulama |
 
-### 10.3. Birim Testleri (Unit Testing)
-Sistemin algoritmik doğruluğunu kanıtlamak için `tests/` klasöründe test dosyaları yazılmıştır. NodeJS ortamında `npm install` komutu ile kütüphaneler kurulduktan sonra;
 ```bash
 npm test
+# Expected: ✅ tüm testler geçer
 ```
-komutu ile şu senaryolar test edilir:
-- **Eşleştirme Başarısı:** Bara isimlerindeki Türkçe karakterlerin (Ç, Ş, Ğ, Ü, Ö, İ) algoritmalarca yutulmadan doğru parse edilmesi.
-- **Fractional Zoom Hesabı:** Küsuratlı zoom'un tile koordinatlarını taşırmaması.
-- **SCADA Kalite Puanlaması:** Stale (Bayat) ve Duplicate (Çift) test fixtürlerinin doğru ayırt edilmesi.
 
 ---
 
-## 11. KML Veri Derleme: V2 Topolojisi (`build_kml_layers_v2.py`)
+## 10. Güvenlik Notları
 
-Projenin tarayıcı üzerinde akıcı şekilde (60 FPS) çalışabilmesinin anahtarı, XML tabanlı devasa KML dosyalarının harita sekmesinde canlı olarak parse edilmemesidir. Bunun yerine, KML ve Excel topoloji listeleri, Python kullanılarak derlenir (build) ve tarayıcının doğrudan belleğe alabileceği, indexlenmiş bir hiyerarşik JSON yapısına (`data/kml_layers_v2.json`) dönüştürülür.
+> ⚠️ **KRİTİK:** `data/scada_auth.json` dosyası Superset şifresini açık metin içerir.  
+> Bu dosya **kesinlikle** `.gitignore`'a eklenmelidir.
 
-### 11.1. Derleme Sürecinin Girdileri (Inputs)
-Derleme betiği (`build_kml_layers_v2.py`), `docs/yeni_harita_modeli/` dizinindeki 6 temel dosyayı okur:
-- **KML Geometrisi:** `20-YTBS_Detayli_Harita (3).kml` (Hat koordinatları ve TM noktaları).
-- **Excel Listeleri:** `01-TRAFO_MERKEZI_LISTESI.xlsx`, `02-BARA_LISTESI.xlsx`, `09-HAT_LISTESI.xlsx`, `11-TRAFO_LISTESI.xlsx` (Veri zenginleştirme ve isim normalizasyon listeleri).
-- **SCADA Eşleşme Matrisi:** `SISTEM_ESLEME_LISTESI.xlsx` ve `eslesme_tablolari.xlsx` (Hangi hattın, hangi SCADA formülüne sahip olduğunu belirten ölçüm tanımları).
-
-### 11.2. Python Betiğinin Çalışma Mantığı (Algoritmalar)
-1. **Veri Temizleme ve Normalizasyon:** Excel dosyalarından okunan tüm Trafo, Bara ve Hat isimleri `normalize_text()` fonksiyonundan geçer. Türkçe karakterler silinir (Ş->S, Ö->O, vb.), büyük harfe çevrilir ve gereksiz boşluklar atılarak tam eşleşme (Exact Match) aramasına hazır hale getirilir.
-2. **KML BBox (Bounding Box) Çıkarımı:** KML içindeki `LineString` koordinatları diziye alınır ve her hattın Min-Max (Enlem/Boylam) sınırları hesaplanarak `bbox` niteliğine yazılır. Bu, tarayıcıda filtreye odaklanma (`btnFitFilters`) işlevini milisaniyeler içinde çözer.
-3. **SCADA Formül Ayrıştırması:** Excel'deki `ÖLÇÜM NOKTASI FORMÜLASYONU` sütunu (Örn: `(+1) ISTANBUL_TM, 400, KOCAELI_TM, P`) Regex ile parçalanır. Terminalin artı (+1) mı eksi (-1) mi basacağı, hedefin (TargetCode) hangi Trafo Merkezine denk düştüğü saptanır.
-4. **Hat Terminal Polarizasyonu (Polarization):** Çizgilerin (hatların) yönü KML'de rastgele çizilmiş olabilir. Python betiği; "Start TM" ve "End TM" tanımlarını SCADA formülündeki Hedef ve Kaynak TM ile karşılaştırarak "Akış Yönü" matematiğini kurgular. Uyumsuz olan polarizasyonlar raporlanır.
-5. **Hiyerarşik Ağaç (Tree) Oluşturumu:** Veriler düz bir liste olarak değil, `YTM (Yük Tevzi Müdürlüğü) > Gerilim (kV)` dallanmasıyla dev bir `dict` yapısında toplanır. Böylece haritada "154 kV Filtresini Kapat" dendiğinde sadece o dal döngüden çıkarılır.
-
-### 11.3. Validasyon Raporu (`kml_layers_v2_validation.md`)
-Derleme her bittiğinde, betik bir doğrulama ve sağlamlık (health check) raporu oluşturur. Bu raporda:
-- **Eşleşme Sayıları:** Kaç TM (`1583/1583`) ve Kaç Hat (`2341/2341`) KML ile Excel arasında başarılı eşleşti.
-- **SCADA Kapsamı:** Hat Aktif/Reaktif eşleşme oranları (Örn: 2290/2341).
-- **Ambiguous (Belirsiz) Kayıtlar:** İsim benzerliği sebebiyle çatışan SCADA kayıtları.
-- **Gerilim Overlay:** Hangi baraların eşleştiği veya alias fallback ile bulunduğu şeffafça yazdırılır.
-
-### 11.4. Python Derleyicisini Çalıştırma
-Sisteme yeni bir TM veya Hat eklendiğinde KML dosyasını ve Excel'i güncelledikten sonra şu komutu çalıştırmalısınız:
-
-```bash
-pip install openpyxl
-python build_kml_layers_v2.py
+```gitignore
+# .gitignore — bu satırın varlığını doğrulayın
+data/scada_auth.json
+data/kml_layers_v2.json   # 34 MB — gereksiz yere commit etmeyin
 ```
-Bu işlem yaklaşık 1-2 saniye sürer ve 34 MB büyüklüğünde, tamamen optimize edilmiş `data/kml_layers_v2.json` dosyasını kullanıma hazır hale getirir.
+
+**Chrome Storage:** CSV verileri `chrome.storage.local`'da saklanır (3 MB sınırı üstünde metadata-only moda geçer). Şifre bilgisi storage'a yazılmaz; yalnızca `data/scada_auth.json` dosyasından okunur.
+
+**Host Permissions:** `manifest.json` içindeki `host_permissions` yalnızca Superset ve TPYS domain'leri ile sınırlandırılmıştır.
 
 ---
 
-## 12. Sıkça Sorulan Sorular (SSS) ve Geliştirici Notları
+## Mimari Kararlar
 
-**S: Harita bazen bembeyaz görünüyor, neden?**
-C: Tile sunucusuna erişiminiz kurum ağı kaynaklı engellenmiş olabilir. Arayüzden "Tema" tuşuna basarak (Dark Mode) varsayılan haritanın yüklenip yüklenmediğini kontrol edin. Mock Moda almayı deneyin.
+| Karar | Neden |
+|-------|-------|
+| Vanilla JS + Native SVG | Framework bağımlılığı olmadan Chrome extension içinde maksimum kontrol |
+| KML→JSON ön derleme | 34 MB JSON, runtime'da parse kolaylığı; ham KML 5-7 dakika sürer |
+| MV3 Service Worker | Chrome'un zorunlu MV3 gerekliliği; background page artık yok |
+| UMD modül formatı | `map-common.js` ve `scada-common.js` hem tarayıcı hem Node test ortamında çalışır |
+| SheetJS runtime | Python build yerine tarayıcı tarafında XLS parse — Bara Set için anlık yükleme |
+| Üç kademeli auth fallback | Superset oturum güvenilirliği değişken; her yöntem başarısız olduğunda bir sonraki denenir |
 
-**S: Yeni bir SCADA metriği (Örneğin Akım / Amper) eklemek istersem ne yapmalıyım?**
-C: `map-modern.html` içine yeni bir buton `<button data-scada-metric="amper">` ekleyin. Ardından `scada-flow.js` ve `scada-common.js` içindeki Metric Dictionary yapılarına "amper" değişkeninin karşılığını (Superset'teki kolon adı) tanıtın.
+## Kritik Güncel Durum Özeti
 
-**S: Türkçe Karakterlerde sorun yaşıyorum?**
-C: `scada-common.js` içindeki `normalizeBaraAd()` fonksiyonu, Türkçe karakterleri (Ü, Ş, Ğ, Ç, İ, Ö) tamamen İngilizce karakterlere normalize eden özel Regex blokları kullanır (`Ş` -> `S`, `İ` -> `I` vb.). Kodlara müdahale ederken dosya formatınızın her zaman `UTF-8` olduğundan emin olun. Kesinlikle ANSI kodlaması kullanmayın.
+- Uygulamanın ana harita runtime’ı V2 modele taşındı ve temel veri kaynağı `data/kml_layers_v2.json` oldu. Hat, TM, trafo ve bara yapıları artık bu model üzerinden çalışıyor.
+- SCADA tarafında hat yönü, eşleşme kalitesi, audit/mismatch raporları ve görünür özetler V2 akışa bağlandı. Hat renklendirme, popup ve liste aynı çözülmüş metric kaynağını kullanıyor.
+- Hover sistemi iyileştirildi: hat ve TM üzerinde görünmez buffer alanları eklendi, tooltip kapanışı gecikmeli hale getirildi, hover yakalama kolaylaştı.
+- Gerilim ve trafo için SCADA overlay mantığı genişletildi. Seçili SCADA metriği aktifken overlay, statik katman checkbox’larından bağımsız render alabiliyor. Desteklenen modlar: `Kutu`, `Nokta (Ad)`, `Nokta (Adsız)`, `Isı Haritası`.
+- Yoğun TM bölgeleri için ekran-uzayı tabanlı declutter eklendi. Düşük zoom’da yalnız en kritik öğeler gösteriliyor, zoom arttıkça daha fazla öğe açılıyor. Seçili öğe her zaman görünür kalıyor.
+- Otomatik yenileme yeniden kuruldu: eski çoklu timer mantığı yerine tek sahipli `setTimeout` scheduler kullanılıyor. Sekme arka planda kalınca yenileme boşa düşmüyor; görünür olunca overdue kontrolüyle telafi fetch tetikleniyor.
+- Popup/extension adı güncellendi: **`SCADA/YTBS/TPYS/ Haritalar ve Otomasyon`**. Popup kart sırası yeniden düzenlendi; `Haritada Göster` ayrı üst karta taşındı.
+
+
 
 ---
 
-## 13. Sürüm ve Katkı Durumu
-Bu sürüm, **Otomasyon V1** mimarisinin tamamlanmış halidir. Gelecekte eklenecek olan üretim tahmini (Forecast), yapay zeka destekli yük analizi (AI Load Prediction) veya RGDH performans takipleri bu mimarinin üstüne modüler biçimde inşa edilecektir. 
-
-Geliştirici ekibe katkı sağlamak (Pull Request) veya hata (Issue) bildirmek için GitHub reponuzdaki "Issues" sekmesini veya dahili Git sistemlerinizi kullanabilirsiniz.
-
-*Dokümantasyon Kod Cihazı: Antigravity AI tarafından derlenmiş ve düzenlenmiştir.*
+*Son güncelleme: 2026-04-23 · Antigravity AI — kaynak kod doğrulamalı otomatik dokümantasyon*
