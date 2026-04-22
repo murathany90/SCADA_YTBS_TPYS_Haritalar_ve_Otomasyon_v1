@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCADA/YTBS/TPYS/ Haritalar ve Otomasyon</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div>
+        <h1>SCADA/YTBS/TPYS/ Haritalar ve Otomasyon</h1>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>SCADA Haritalar</h2>
+      <div class="grid-actions">
+        <button id="btnOpenMap" class="primary">Haritada Göster</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>RGDH Uzlakştırma Otomasyon</h2>
+      <div class="row between center gap">
+        <button id="btnPickCsv" class="primary">CSV Yükle</button>
+        <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+        <span id="fileName" class="file-pill">Dosya seçilmedi</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Statik kayıt</span><strong id="mappingCount">0</strong></div>
+        <div class="stat"><span>CSV satırı</span><strong id="csvRowCount">0</strong></div>
+        <div class="stat"><span>CSV tarih</span><strong id="csvDateCount">0</strong></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Reaktif eşleştirme RGDH Sonuç Otomasyon</h2>
+      <div class="grid-actions four">
+        <button id="btnAnalyze">Analiz Et</button>
+        <button id="btnApply" class="primary">CSV TPYS Eşleşme</button>
+        <button id="btnCommit">ERP Commit</button>
+        <button id="btnToggleSimplify">Onay sadeleştir</button>
+      </div>
+      <div class="stats compact">
+        <div class="stat"><span>Sayfa tarihi</span><strong id="pageDate">-</strong></div>
+        <div class="stat"><span>Sayfa bara</span><strong id="pageBaraCount">0</strong></div>
+        <div class="stat"><span>Eşleşen</span><strong id="matchedCount">0</strong></div>
+      </div>
+      <p class="hint">Hızlı mod açıkken önce ExtJS store üzerinden toplu yazım denenir; olmazsa hücre bazlı DOM moduna düşülür.</p>
+    </section>
+
+    <section class="card">
+      <h2>TPYS CSV İndirme Otomasyonu</h2>
+      <div class="grid-actions two">
+        <button id="btnAnalyzeDownloadPage">CSV sayfasını analiz et</button>
+        <button id="btnDownloadAllCsvs" class="primary">42 CSV indir</button>
+      </div>
+      <div class="stats compact">
+        <div class="stat"><span>İndirme sayfa tarihi</span><strong id="downloadPageDate">-</strong></div>
+        <div class="stat"><span>Bulunan bara</span><strong id="downloadBaraCount">0</strong></div>
+        <div class="stat"><span>Sayfa durumu</span><strong id="downloadPageStatus">-</strong></div>
+      </div>
+      <p class="hint">TPYS CSV indirme ekranında mevcut "CSV İndir" akışı kullanılır; açılan dosya penceresindeki ilk dl/...csv bağlantısı otomatik indirilir ve indirme tamamlanmadan sonraki baraya geçilmez. Hata olan baralar atlanır, sıra devam eder.</p>
+    </section>
+
+    <details class="card" open>
+      <summary>Durum etiketleri ve seçenekler</summary>
+      <div class="form-grid">
+        <label>DD <input id="labelDD" type="text"></label>
+        <label>OK <input id="labelOK" type="text"></label>
+        <label>YY <input id="labelYY" type="text"></label>
+        <label>X <input id="labelX" type="text"></label>
+        <label>KY <input id="labelKY" type="text"></label>
+      </div>
+      <label class="checkbox-row"><input id="checkApproval" type="checkbox"><span>Durumdan sonra onay hücresini de işaretlemeyi dene</span></label>
+      <label class="checkbox-row"><input id="strictDateCheck" type="checkbox"><span>Tarih uyarısında işlemi durdur (kapalıysa devam onayı iste)</span></label>
+      <label class="checkbox-row"><input id="fastExtMode" type="checkbox"><span>Önce hızlı ExtJS toplu yazım modunu dene</span></label>
+      <label class="checkbox-row"><input id="onlyChangedCells" type="checkbox"><span>Sadece farklı hücreleri değiştir</span></label>
+      <button id="btnSaveSettings">Ayarları Kaydet</button>
+    </details>
+
+    <section class="card">
+      <h2>İşlem günlüğü</h2>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

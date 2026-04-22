@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TPYS Harita</title>
+  <link rel="stylesheet" href="map.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h1>TPYS Harita</h1>
+        <p class="muted">OSM arka plan + zenginleştirilmiş KML hat/TM + bara kayıtları + bara seti</p>
+      </div>
+
+      <details class="panel" open>
+        <summary>Katmanlar</summary>
+        <label><input type="checkbox" id="showBaras" checked> Bara kayıtları</label>
+        <label><input type="checkbox" id="showTm" checked> Trafo merkezleri</label>
+        <label><input type="checkbox" id="showHat" checked> Hatlar</label>
+        <label><input type="checkbox" id="showBaraSet"> Bara Set</label>
+      </details>
+
+      <details class="panel" open>
+        <summary>Gerilim filtreleri</summary>
+        <label><input type="checkbox" class="kv-filter" value="66" checked> 66 kV</label>
+        <label><input type="checkbox" class="kv-filter" value="154" checked> 154 kV</label>
+        <label><input type="checkbox" class="kv-filter" value="400" checked> 400 kV</label>
+      </details>
+
+      <details class="panel" open>
+        <summary>Yük Tevzi Müdürlüğü</summary>
+        <div id="ytmFilters" class="filter-list"></div>
+      </details>
+
+      <section class="panel">
+        <h2>Bara Set</h2>
+        <div class="row gap wrap">
+          <button id="btnLoadBaraSet" class="primary">BARA SET YÜKLE</button>
+          <input id="baraSetFileInput" type="file" accept=".xls,.xlsx" hidden>
+        </div>
+        <div id="baraSetInfo" class="muted small top-gap">Henüz yüklenmedi.</div>
+        <div class="top-gap">
+          <div class="row between center">
+            <strong>Saat</strong>
+            <span id="hourLabel" class="hour-pill">00-01</span>
+          </div>
+          <div class="row gap center top-gap">
+            <button id="btnHourMinus" class="tiny">−</button>
+            <input id="hourSlider" type="range" min="0" max="23" step="1" value="0">
+            <button id="btnHourPlus" class="tiny">+</button>
+          </div>
+        </div>
+        <div class="segmented top-gap" id="valueModeGroup">
+          <button id="btnModeKv" class="segmented-btn active" data-mode="kv">kV</button>
+          <button id="btnModePu" class="segmented-btn" data-mode="pu">p.u. ısı</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Arama</h2>
+        <input id="searchInput" type="text" placeholder="Bara, TM veya hat ara">
+        <div class="row gap">
+          <button id="btnSearch">Bul</button>
+          <button id="btnResetView">Sıfırla</button>
+        </div>
+      </section>
+
+      <section class="panel compact">
+        <h2>Özet</h2>
+        <div class="stats">
+          <div><span>Bara</span><strong id="baraCount">0</strong></div>
+          <div><span>TM</span><strong id="tmCount">0</strong></div>
+          <div><span>Hat</span><strong id="hatCount">0</strong></div>
+        </div>
+        <p class="muted small">YTM filtresinde varsayılan seçim Orta Anadolu YTM'dir. YTM bilgisi olmayan TM ve hatlar çizilmez.</p>
+      </section>
+    </aside>
+
+    <main class="map-shell">
+      <div class="map-toolbar">
+        <div class="legend">
+          <span><i class="legend-line kv400-line"></i>400 kV Hat/TM</span>
+          <span><i class="legend-line kv154-line"></i>154 kV Hat/TM</span>
+          <span><i class="legend-line kv66-line"></i>66 kV Hat/TM</span>
+          <span><i class="legend-box kv400-box"></i>400 kV Bara</span>
+          <span><i class="legend-box kv154-box"></i>154/66 kV Bara</span>
+        </div>
+        <div class="row gap center">
+          <button id="zoomOutBtn" class="tiny">−</button>
+          <button id="zoomInBtn" class="tiny">+</button>
+          <div class="muted small" id="mapStatus">Harita yükleniyor…</div>
+        </div>
+      </div>
+
+      <div id="mapViewport" class="map-viewport">
+        <div id="tileLayer" class="tile-layer"></div>
+        <svg id="overlaySvg" class="overlay-svg">
+          <g id="hatLayer"></g>
+          <g id="measureLayer"></g>
+          <g id="tmLayer"></g>
+          <g id="baraLayer"></g>
+          <g id="baraSetLayer"></g>
+        </svg>
+      </div>
+
+      <div id="infoCard" class="info-card hidden"></div>
+    </main>
+  </div>
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="map.js"></script>
+</body>
+</html>

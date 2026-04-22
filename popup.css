@@ -1,0 +1,95 @@
+:root {
+  font-family: Arial, Helvetica, sans-serif;
+}
+body {
+  margin: 0;
+  width: 450px;
+  background: #f4f6f9;
+  color: #172033;
+}
+.app { padding: 12px; }
+.header { margin-bottom: 8px; }
+h1 { margin: 0; font-size: 18px; }
+h2 { margin: 0 0 8px 0; font-size: 14px; }
+.muted, .hint { color: #536076; font-size: 12px; line-height: 1.45; }
+.card {
+  background: #fff;
+  border: 1px solid #d8e0ea;
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.row { display: flex; }
+.row.center { align-items: center; }
+.row.between { justify-content: space-between; }
+.gap { gap: 8px; }
+.grid-actions { display: grid; gap: 8px; }
+.grid-actions.two { grid-template-columns: 1fr 1fr; }
+.grid-actions.four { grid-template-columns: 1fr 1fr; }
+button {
+  border: 1px solid #cfd8e3;
+  background: #fff;
+  color: #111827;
+  border-radius: 9px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+button:hover { filter: brightness(0.98); }
+.file-pill {
+  font-size: 12px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  padding: 6px 10px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.stat {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+}
+.stat span { display: block; font-size: 11px; color: #6b7280; }
+.stat strong { display: block; font-size: 15px; margin-top: 4px; }
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+.form-grid label, .checkbox-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.checkbox-row { flex-direction: row; align-items: flex-start; margin-top: 10px; }
+input[type="text"] {
+  border: 1px solid #cfd8e3;
+  border-radius: 8px;
+  padding: 8px;
+}
+summary { cursor: pointer; font-weight: 700; }
+.log {
+  margin: 0;
+  white-space: pre-wrap;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+}

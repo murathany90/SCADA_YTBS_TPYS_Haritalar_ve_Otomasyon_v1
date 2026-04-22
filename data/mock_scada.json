@@ -1,0 +1,3217 @@
+{
+  "mockRows": [
+    {
+      "sinsid": "da272915-d3df-4987-ad7c-fce319a2b88e",
+      "b1Name": "BALGAT",
+      "b2Name": "154 kV",
+      "b3Name": "ÇİĞDEM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.406Z",
+      "avgMaxValue": 167.9
+    },
+    {
+      "sinsid": "30728d8e-19d0-4780-b549-c9179796476a",
+      "b1Name": "NİĞDE",
+      "b2Name": "154 kV",
+      "b3Name": "NİĞDE ÇİMSA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 17.3
+    },
+    {
+      "sinsid": "6fb1efd1-3862-425f-9618-1c50db2a6d6a",
+      "b1Name": "POLATLI",
+      "b2Name": "154 kV",
+      "b3Name": "DDY KOCAHACILI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 346.3
+    },
+    {
+      "sinsid": "68111e02-ae43-4b3b-bf01-9dfe3bb206d6",
+      "b1Name": "KAYSERİ3",
+      "b2Name": "154 kV",
+      "b3Name": "KAYSERİ1",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 313.9
+    },
+    {
+      "sinsid": "b8b2be55-ef3e-4d03-81cf-23f1c1c8b5ce",
+      "b1Name": "KAYSERİ2",
+      "b2Name": "154 kV",
+      "b3Name": "KAYSERİ1",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 72.3
+    },
+    {
+      "sinsid": "771b84d0-2a37-49a1-9627-2643eb56eff6",
+      "b1Name": "KIRIKKALE DGKÇ",
+      "b2Name": "400 kV",
+      "b3Name": "KAYABAŞI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -11.4
+    },
+    {
+      "sinsid": "96ed450d-a88a-4e1e-9ad1-fdca024853e4",
+      "b1Name": "TÜMOSAN",
+      "b2Name": "154 kV",
+      "b3Name": "ORTAKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 37.8
+    },
+    {
+      "sinsid": "56a20782-c553-4afe-8448-25c7aa5d2053",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "MACUNKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 140.7
+    },
+    {
+      "sinsid": "3c224e88-6952-4236-8700-5ba238495dd0",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "OVACIK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 69
+    },
+    {
+      "sinsid": "874ebb8c-e3eb-4cd1-b512-c318ef8d1281",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "OVACIK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -16.5
+    },
+    {
+      "sinsid": "129be331-395d-4b83-a2e9-0832fdee5b0a",
+      "b1Name": "ESENBOĞA",
+      "b2Name": "154 kV",
+      "b3Name": "AKYURT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 329.4
+    },
+    {
+      "sinsid": "42c17057-c20a-4a39-ba79-c7e12fb1866f",
+      "b1Name": "KALECİK",
+      "b2Name": "154 kV",
+      "b3Name": "AKYURT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 294.1
+    },
+    {
+      "sinsid": "beba1faa-d52b-48ef-82ce-b394e23b63cb",
+      "b1Name": "KIRŞEHİR",
+      "b2Name": "154 kV",
+      "b3Name": "YERKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 261.2
+    },
+    {
+      "sinsid": "4bdf1924-361d-4626-9611-ca4305d49cce",
+      "b1Name": "YİBİTAŞ",
+      "b2Name": "154 kV",
+      "b3Name": "YERKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 65.1
+    },
+    {
+      "sinsid": "faef8388-46f6-4766-b8e3-f52a72fbb795",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "154 kV",
+      "b3Name": "TALAS",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -45.7
+    },
+    {
+      "sinsid": "e0497c90-a4a4-4a98-9c2c-1702a0e87c3f",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "154 kV",
+      "b3Name": "TALAS",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 333
+    },
+    {
+      "sinsid": "cd3a08e8-6aaa-443d-91fa-aabc9a78fd6c",
+      "b1Name": "KAYSERİ3",
+      "b2Name": "154 kV",
+      "b3Name": "ERKİLET",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 207.3
+    },
+    {
+      "sinsid": "8742a840-5e81-4cde-a96f-909dfc3f0b41",
+      "b1Name": "KAYSERİ2",
+      "b2Name": "154 kV",
+      "b3Name": "ERKİLET",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 151.2
+    },
+    {
+      "sinsid": "ce636122-c576-481d-8e7b-b193a846e1c8",
+      "b1Name": "HACILAR",
+      "b2Name": "154 kV",
+      "b3Name": "KIRIKKALE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 88.5
+    },
+    {
+      "sinsid": "ec3f61c7-6cb2-469c-ad0a-5a34e37dd907",
+      "b1Name": "HACILAR",
+      "b2Name": "154 kV",
+      "b3Name": "KIRDEMİR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 235.9
+    },
+    {
+      "sinsid": "6d272e1f-3b34-49c7-961c-d2a18eff136f",
+      "b1Name": "GÖLBAŞI",
+      "b2Name": "400 kV",
+      "b3Name": "İÇ ANADOLU DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 214.4
+    },
+    {
+      "sinsid": "312b6d76-8e96-44e9-98e9-986a3b495d62",
+      "b1Name": "GÖKÇEKAYA HES",
+      "b2Name": "400 kV",
+      "b3Name": "GÖLBAŞI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 191.8
+    },
+    {
+      "sinsid": "ddcd0f8c-c0df-48cb-b925-7c9366aee45b",
+      "b1Name": "SİNCAN",
+      "b2Name": "400 kV",
+      "b3Name": "TEMELLİ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 272.2
+    },
+    {
+      "sinsid": "e8f68226-3b4a-4ecb-96d2-98d631ace25a",
+      "b1Name": "ÇAYIRHAN TES",
+      "b2Name": "154 kV",
+      "b3Name": "KARGI HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 318.4
+    },
+    {
+      "sinsid": "6f40e0d8-9060-4ca3-bd44-5fefb1f4b90f",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "400 kV",
+      "b3Name": "KOZAN HAVZA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 11.5
+    },
+    {
+      "sinsid": "6cf3554d-b0cd-42d5-86f6-cd05d8373526",
+      "b1Name": "YAZIR",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA ÇİMENTO",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 258.3
+    },
+    {
+      "sinsid": "2010557e-bfd7-4678-91be-b6f43d00b9da",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "ANKARA SANAYİ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 127.8
+    },
+    {
+      "sinsid": "1ef7ac1f-566f-413e-a65f-d3ee8e9e6c54",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "KAZAN DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 158.2
+    },
+    {
+      "sinsid": "d6561edc-4303-4929-b0c3-c2ec8632112e",
+      "b1Name": "ANKARA SANAYİ",
+      "b2Name": "154 kV",
+      "b3Name": "KAZAN DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 65.8
+    },
+    {
+      "sinsid": "7626a510-3d75-49d7-82cc-d3acef11199c",
+      "b1Name": "BOR",
+      "b2Name": "154 kV",
+      "b3Name": "BOR OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 86
+    },
+    {
+      "sinsid": "ba422e9e-b552-4bb0-b874-5ced8f8c4030",
+      "b1Name": "TÜMOSAN",
+      "b2Name": "154 kV",
+      "b3Name": "BOR OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 47
+    },
+    {
+      "sinsid": "febc2bc3-6156-444b-a47a-7743788a6249",
+      "b1Name": "YAHYALI BAK RES",
+      "b2Name": "154 kV",
+      "b3Name": "AKSU RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 23.5
+    },
+    {
+      "sinsid": "ff675594-1fcb-4c83-a0e8-7889ac039586",
+      "b1Name": "YAHYALI BAK RES",
+      "b2Name": "154 kV",
+      "b3Name": "KURTKAYASI RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 348.8
+    },
+    {
+      "sinsid": "ca383e05-1f22-4bde-ab1a-6887cc98d3c0",
+      "b1Name": "PINARBAŞI",
+      "b2Name": "154 kV",
+      "b3Name": "ELBİSTAN TES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -14.8
+    },
+    {
+      "sinsid": "992b337a-fe4d-4886-9fd9-b23f07d7dfdb",
+      "b1Name": "ŞARKIŞLA",
+      "b2Name": "154 kV",
+      "b3Name": "PINARBAŞI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 244.4
+    },
+    {
+      "sinsid": "b9adedf9-cdc5-4289-ab71-bbc0b9d72aab",
+      "b1Name": "BAĞLUM",
+      "b2Name": "400 kV",
+      "b3Name": "KURŞUNLU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 95.7
+    },
+    {
+      "sinsid": "4df527b9-7a36-4c56-b03c-97009670b795",
+      "b1Name": "BAĞLUM",
+      "b2Name": "400 kV",
+      "b3Name": "KURŞUNLU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 130.1
+    },
+    {
+      "sinsid": "0c7ac670-b3db-4a41-aea2-b5cbab38f81a",
+      "b1Name": "SİNCAN",
+      "b2Name": "400 kV",
+      "b3Name": "KIRIKKALE DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 277.1
+    },
+    {
+      "sinsid": "c9de1f4e-13bc-4dca-90d5-a6cb5891419e",
+      "b1Name": "KIRIKKALE DGKÇ",
+      "b2Name": "400 kV",
+      "b3Name": "İÇ ANADOLU DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 58.8
+    },
+    {
+      "sinsid": "89958ea6-dd7a-4c28-bf0c-dbbf9a6baec8",
+      "b1Name": "GÖLBAŞI",
+      "b2Name": "400 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 201.2
+    },
+    {
+      "sinsid": "1df77157-6f24-4ab4-8cfc-a9a6a2efdec4",
+      "b1Name": "BAŞTAŞ",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 229.5
+    },
+    {
+      "sinsid": "809a2c78-fcb7-4044-a0a3-fa8b664222c3",
+      "b1Name": "ÇİMPOR",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 19.3
+    },
+    {
+      "sinsid": "7b5f9c93-71dd-4f59-a859-b1977221740e",
+      "b1Name": "MAMAK",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 258.2
+    },
+    {
+      "sinsid": "6f8cded7-5c7f-42f6-a067-0a0c4f220a26",
+      "b1Name": "İMRAHOR",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 223.9
+    },
+    {
+      "sinsid": "e654cf77-35bb-4023-9f83-db65e354ba69",
+      "b1Name": "İMRAHOR",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 164.2
+    },
+    {
+      "sinsid": "32f0ead6-3ffc-423e-8b8a-7d2774429f38",
+      "b1Name": "KIRIKKALE DGKÇ",
+      "b2Name": "400 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 316.6
+    },
+    {
+      "sinsid": "809e5f03-d036-4c57-8743-af8e3fb4bcf5",
+      "b1Name": "KIRIKKALE DGKÇ",
+      "b2Name": "400 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 120.3
+    },
+    {
+      "sinsid": "2ce004bc-298b-4d77-a278-6679a0ea802d",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "POLATLI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 70.6
+    },
+    {
+      "sinsid": "f5908a54-7ee8-426f-bbd2-e249bb0e1dd0",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "POLATLI ÇİMENTO",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 54.2
+    },
+    {
+      "sinsid": "9ade1822-a6d8-49ef-a25c-c723bc9231fd",
+      "b1Name": "POLATLI",
+      "b2Name": "154 kV",
+      "b3Name": "POLATLI ÇİMENTO",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 191.4
+    },
+    {
+      "sinsid": "c00d01a1-2630-48f5-a318-4500a8befc6c",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "400 kV",
+      "b3Name": "KOZAN HAVZA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 101.9
+    },
+    {
+      "sinsid": "ad33e263-6009-47ae-b850-20ae108be5e7",
+      "b1Name": "BÜSAN",
+      "b2Name": "154 kV",
+      "b3Name": "KARATAY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 90.8
+    },
+    {
+      "sinsid": "2a74ec7d-c294-48e8-8bb2-34454e557d95",
+      "b1Name": "CİHANBEYLİ",
+      "b2Name": "154 kV",
+      "b3Name": "ALTINEKİN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 161.7
+    },
+    {
+      "sinsid": "6d5221de-194f-4b76-aaa2-644743ada0e1",
+      "b1Name": "BÜSAN",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 313.4
+    },
+    {
+      "sinsid": "7c48d582-ba36-45df-9ad6-0402551153a5",
+      "b1Name": "BÜSAN",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 238.6
+    },
+    {
+      "sinsid": "fb827e66-f30e-4ef6-90b6-a28891a8e5a4",
+      "b1Name": "KAYACIK",
+      "b2Name": "154 kV",
+      "b3Name": "BAĞLAR RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -11.6
+    },
+    {
+      "sinsid": "d98c5c93-dc6c-499f-80ce-0ea0da341db6",
+      "b1Name": "BAĞLAR RES",
+      "b2Name": "154 kV",
+      "b3Name": "ARDIÇLI RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 289.4
+    },
+    {
+      "sinsid": "9785c3ad-899e-4ffc-9226-968fc41d14ad",
+      "b1Name": "NEVŞEHİR",
+      "b2Name": "154 kV",
+      "b3Name": "AVANOS2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 341.8
+    },
+    {
+      "sinsid": "688ec87b-611a-48af-944e-fcecc71d21ce",
+      "b1Name": "KAZAN",
+      "b2Name": "154 kV",
+      "b3Name": "KAZAN DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 254.4
+    },
+    {
+      "sinsid": "793992b6-a182-4b67-9b44-6bf8d8e1d119",
+      "b1Name": "YAYSUN GES",
+      "b2Name": "154 kV",
+      "b3Name": "EREĞLİ KONYA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 139.1
+    },
+    {
+      "sinsid": "1da9aa8d-a26c-482e-ad99-1ee9019c3fc3",
+      "b1Name": "KARATAY",
+      "b2Name": "154 kV",
+      "b3Name": "KARAPINAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -21.1
+    },
+    {
+      "sinsid": "c948f4c5-c81f-47fc-bbc3-0f64f9862833",
+      "b1Name": "EŞMEKAYA",
+      "b2Name": "154 kV",
+      "b3Name": "TÜMOSAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 235.7
+    },
+    {
+      "sinsid": "188b89bc-fbf4-410f-a4e5-ce99f2b21392",
+      "b1Name": "EŞMEKAYA",
+      "b2Name": "154 kV",
+      "b3Name": "KIZÖREN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 340.3
+    },
+    {
+      "sinsid": "95963c3b-0f13-48c2-a368-0d045d37d93a",
+      "b1Name": "GÖLBAŞI",
+      "b2Name": "400 kV",
+      "b3Name": "SİNCAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 302.4
+    },
+    {
+      "sinsid": "63932786-6733-47b8-8985-9ab9cdbad837",
+      "b1Name": "HOTAMIŞ",
+      "b2Name": "154 kV",
+      "b3Name": "KARAPINAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 283.3
+    },
+    {
+      "sinsid": "32000831-f18d-4fac-934d-b83d58e3a9f7",
+      "b1Name": "KARATAY",
+      "b2Name": "400 kV",
+      "b3Name": "KONYA KUZEY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 189
+    },
+    {
+      "sinsid": "11b30b78-2094-4b92-8508-bbd1967d44c6",
+      "b1Name": "LADİK",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA KUZEY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 119.3
+    },
+    {
+      "sinsid": "f632da58-aebb-4121-835a-ff8e68a161a2",
+      "b1Name": "ALTINEKİN",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA KUZEY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 298.7
+    },
+    {
+      "sinsid": "50600a5c-72f0-4784-8007-328e7a5a2602",
+      "b1Name": "LADİK",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA KUZEY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 162.3
+    },
+    {
+      "sinsid": "e0373d07-fe5b-46fc-b038-4a38fc1fab4c",
+      "b1Name": "KONYA KUZEY",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 72.3
+    },
+    {
+      "sinsid": "0a12cbd9-b16d-4974-a486-6bae07996382",
+      "b1Name": "KONYA KUZEY",
+      "b2Name": "154 kV",
+      "b3Name": "SELÇUKLU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 87.5
+    },
+    {
+      "sinsid": "f452b8c1-ad90-406b-823a-f2e88be9e70a",
+      "b1Name": "KONYA KUZEY",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -2.2
+    },
+    {
+      "sinsid": "11e03afc-3d75-4029-ac2c-bac2ab1782b7",
+      "b1Name": "KAYACIK",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA KUZEY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 134.2
+    },
+    {
+      "sinsid": "6d0dd116-bcab-4573-a260-0c620ee468ba",
+      "b1Name": "SENDİREMEKE",
+      "b2Name": "154 kV",
+      "b3Name": "ÖKSÜT MADENCİLİK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -22.5
+    },
+    {
+      "sinsid": "7ed90811-ca99-498d-a02d-630ca4d984fd",
+      "b1Name": "YAZIR",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA KUZEY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 318.1
+    },
+    {
+      "sinsid": "4d1c3d6a-5836-47b7-a3f5-57f399a0835d",
+      "b1Name": "ERENKÖY",
+      "b2Name": "154 kV",
+      "b3Name": "SELÇUKLU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 232.6
+    },
+    {
+      "sinsid": "0dac5cfb-d6e8-42f8-8654-3afddaa87b82",
+      "b1Name": "DDY ÇAYIRBAŞI",
+      "b2Name": "154 kV",
+      "b3Name": "ADATOPRAKPINAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 176.9
+    },
+    {
+      "sinsid": "7465d1c7-caf7-4d5c-9332-a026638738ca",
+      "b1Name": "DDY KOCAHACILI",
+      "b2Name": "154 kV",
+      "b3Name": "ADATOPRAKPINAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 197.5
+    },
+    {
+      "sinsid": "f05e58a1-1177-4f64-ac8a-30929934d4b2",
+      "b1Name": "YAHYALI BAK RES",
+      "b2Name": "154 kV",
+      "b3Name": "YAHYALI RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 250.4
+    },
+    {
+      "sinsid": "30c63a39-0580-4197-9d53-1c826d5d71ac",
+      "b1Name": "YAHYALI BAK RES",
+      "b2Name": "154 kV",
+      "b3Name": "ÖKSÜT MADENCİLİK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 153.1
+    },
+    {
+      "sinsid": "98255ef8-64a2-400f-a712-7b1159a9fc95",
+      "b1Name": "KIZILIRMAK",
+      "b2Name": "154 kV",
+      "b3Name": "KESİKKÖPRÜ SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 139.5
+    },
+    {
+      "sinsid": "024ef306-29eb-4430-b10f-55a019b21fe9",
+      "b1Name": "KIZILIRMAK",
+      "b2Name": "154 kV",
+      "b3Name": "ŞEREFLİKOÇHİSAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 259.3
+    },
+    {
+      "sinsid": "a161af43-7e4a-430a-9a08-b994cb0e058d",
+      "b1Name": "KIZILIRMAK",
+      "b2Name": "154 kV",
+      "b3Name": "KULU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 80.3
+    },
+    {
+      "sinsid": "cc4fc0a5-ca94-46d9-b10f-0de97255783e",
+      "b1Name": "HİRFANLI HES",
+      "b2Name": "154 kV",
+      "b3Name": "KIZILIRMAK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 25.2
+    },
+    {
+      "sinsid": "df2a8209-e58d-449c-a665-e7fc323b191e",
+      "b1Name": "HİRFANLI HES",
+      "b2Name": "154 kV",
+      "b3Name": "KIZILIRMAK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 348.9
+    },
+    {
+      "sinsid": "c9d382d1-f8f3-4233-a1d6-76f72e1cdb6d",
+      "b1Name": "KIZILIRMAK",
+      "b2Name": "154 kV",
+      "b3Name": "KIRŞEHİR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 210.2
+    },
+    {
+      "sinsid": "1584cc8c-8360-4cde-8eeb-ebe775f492f3",
+      "b1Name": "DDY A.PINARBAŞI",
+      "b2Name": "154 kV",
+      "b3Name": "MUTLU5 RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 10.1
+    },
+    {
+      "sinsid": "affaac70-d139-465f-a7db-dca288d04560",
+      "b1Name": "DDY GÖZLÜ",
+      "b2Name": "154 kV",
+      "b3Name": "MUTLU5 RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 112.9
+    },
+    {
+      "sinsid": "1e466f0d-2d3b-4772-b583-6d9bf6b304c5",
+      "b1Name": "KARAPINAR",
+      "b2Name": "154 kV",
+      "b3Name": "KARAPINAR ACIGÖL GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 233.2
+    },
+    {
+      "sinsid": "ede75dde-197d-4837-9eba-67ce832e4d72",
+      "b1Name": "KARAPINAR",
+      "b2Name": "154 kV",
+      "b3Name": "KARAPINAR ACIGÖL GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 18.1
+    },
+    {
+      "sinsid": "feb2268a-b3f1-4a2d-ae7a-671f238a62b5",
+      "b1Name": "KARAMAN OSB",
+      "b2Name": "154 kV",
+      "b3Name": "TEKSİN GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 134.2
+    },
+    {
+      "sinsid": "74665387-d1c4-48aa-8324-df15ed35ff9d",
+      "b1Name": "AKYEL 1 RES",
+      "b2Name": "154 kV",
+      "b3Name": "TEKSİN GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 297.9
+    },
+    {
+      "sinsid": "e89de3e6-9772-4608-94d8-c83002e195eb",
+      "b1Name": "KUYULUKOYAK RES",
+      "b2Name": "154 kV",
+      "b3Name": "LADİK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 105.2
+    },
+    {
+      "sinsid": "d780a641-32ce-4d89-8a24-31034c917510",
+      "b1Name": "ÇAMINBAŞI RES",
+      "b2Name": "154 kV",
+      "b3Name": "KUYULUKOYAK RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 284.7
+    },
+    {
+      "sinsid": "eda59a30-7091-4d64-8888-5322eb219d0b",
+      "b1Name": "KARGI HES",
+      "b2Name": "154 kV",
+      "b3Name": "GÜRSÖĞÜT HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -31
+    },
+    {
+      "sinsid": "e1de9eec-c369-49e0-8783-708f802fb767",
+      "b1Name": "HACILAR",
+      "b2Name": "154 kV",
+      "b3Name": "ATAKALE RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 215.7
+    },
+    {
+      "sinsid": "937ad0fd-dd9f-4330-ab93-aeed1bb1668a",
+      "b1Name": "DDY ÇAYIRBAŞI",
+      "b2Name": "154 kV",
+      "b3Name": "ALTINOVA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 301.7
+    },
+    {
+      "sinsid": "99688e3e-b3aa-4853-8884-957fd79eaabc",
+      "b1Name": "ALTINOVA",
+      "b2Name": "154 kV",
+      "b3Name": "YUNAK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 100.6
+    },
+    {
+      "sinsid": "c4b98ef2-d744-425f-93b2-1dcb04fb104c",
+      "b1Name": "KIZILIRMAK",
+      "b2Name": "154 kV",
+      "b3Name": "KESİKKÖPRÜ SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -30.1
+    },
+    {
+      "sinsid": "f6b5fe96-51d6-43be-946d-b03b1cf1c1d5",
+      "b1Name": "ATAKALE RES",
+      "b2Name": "154 kV",
+      "b3Name": "KESİKKÖPRÜ SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -16.6
+    },
+    {
+      "sinsid": "ea9c8341-6ef8-4c25-9b7b-ad0b411a4279",
+      "b1Name": "GÜNEYSINIR",
+      "b2Name": "154 kV",
+      "b3Name": "MAVİ HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 227.5
+    },
+    {
+      "sinsid": "d861c028-13c2-4c33-8c79-1d1fb2b061f3",
+      "b1Name": "EMİRLER",
+      "b2Name": "154 kV",
+      "b3Name": "KULU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 23.6
+    },
+    {
+      "sinsid": "012b7e6d-2c68-42d2-933b-15f512d0f202",
+      "b1Name": "EŞMEKAYA",
+      "b2Name": "154 kV",
+      "b3Name": "TUZGÖLÜ GEÇİCİ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -19
+    },
+    {
+      "sinsid": "8334cacb-afa6-4028-b6ee-c54906dfc437",
+      "b1Name": "KALECİK",
+      "b2Name": "154 kV",
+      "b3Name": "DDY İZZETTİN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 335
+    },
+    {
+      "sinsid": "921de96a-fa4d-48f4-9bc9-9e518680ae55",
+      "b1Name": "KARAPINAR MEKE GÖLÜ GES",
+      "b2Name": "400 kV",
+      "b3Name": "KARATAY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 132.5
+    },
+    {
+      "sinsid": "d2813ebf-f6b0-424d-98d2-50c926aff5be",
+      "b1Name": "KARAPINAR MEKE GÖLÜ GES",
+      "b2Name": "400 kV",
+      "b3Name": "YEŞİLHİSAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 314.5
+    },
+    {
+      "sinsid": "a4214ab4-f563-4ca0-a641-f2aa0f543456",
+      "b1Name": "AKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "HASKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 150.2
+    },
+    {
+      "sinsid": "bc46f783-3edb-4fbb-8713-03d71fda7e58",
+      "b1Name": "AKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "MACUNKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 278.4
+    },
+    {
+      "sinsid": "2ca5aae5-0d37-4088-b10e-a14eed4ed639",
+      "b1Name": "ÜMİTKÖY",
+      "b2Name": "154 kV",
+      "b3Name": "ÇİĞDEM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 232.5
+    },
+    {
+      "sinsid": "eb21484c-8c8a-473a-84ea-30541a788801",
+      "b1Name": "ÜMİTKÖY",
+      "b2Name": "154 kV",
+      "b3Name": "BİLKENT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 291.4
+    },
+    {
+      "sinsid": "02f95310-1def-47f0-81a6-3ba7dd318979",
+      "b1Name": "ÇİĞDEM",
+      "b2Name": "154 kV",
+      "b3Name": "BİLKENT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 61.5
+    },
+    {
+      "sinsid": "48d87d71-7ed7-4ae5-88a0-e324067272f8",
+      "b1Name": "İÇ ANADOLU DGKÇ",
+      "b2Name": "400 kV",
+      "b3Name": "BOZOK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 302
+    },
+    {
+      "sinsid": "848f8cbc-806a-47be-b071-ba5af9cc7af3",
+      "b1Name": "AKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "MALTEPE ANKARA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 54.6
+    },
+    {
+      "sinsid": "cc42e7a8-b53b-4aec-9f06-30d594677381",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "AKKÖPRÜ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 81
+    },
+    {
+      "sinsid": "8343ab0d-cd5b-4a30-bb8e-9767fa108c1d",
+      "b1Name": "BOZOK",
+      "b2Name": "154 kV",
+      "b3Name": "YOZGAT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 4.8
+    },
+    {
+      "sinsid": "79766c45-b38a-4397-a2bf-6261c5ab5623",
+      "b1Name": "BOZOK",
+      "b2Name": "154 kV",
+      "b3Name": "SORGUN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 282.9
+    },
+    {
+      "sinsid": "dbbcbec0-2d26-4c32-9ed3-2bb6a2f2cec2",
+      "b1Name": "BOZOK",
+      "b2Name": "154 kV",
+      "b3Name": "YOZGAT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 24.8
+    },
+    {
+      "sinsid": "8f167ea1-ceb2-464a-8084-e7b898cc9cfc",
+      "b1Name": "BOZOK",
+      "b2Name": "154 kV",
+      "b3Name": "ALACA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 318.5
+    },
+    {
+      "sinsid": "f5795324-3d9a-4d05-bd5e-1abd8ee2d807",
+      "b1Name": "ÜRGÜP",
+      "b2Name": "400 kV",
+      "b3Name": "ÇOBANBEYLİ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -36.6
+    },
+    {
+      "sinsid": "575d5d0b-59cf-4994-bbd6-c3a56714d4e7",
+      "b1Name": "SİNCAN",
+      "b2Name": "400 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -16.6
+    },
+    {
+      "sinsid": "748067ec-f937-47a9-b6d6-b5d64af41dca",
+      "b1Name": "DERİNKUYU",
+      "b2Name": "154 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -7.2
+    },
+    {
+      "sinsid": "f0ade9cd-ac49-457f-a998-298f803bb769",
+      "b1Name": "DERİNKUYU",
+      "b2Name": "154 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 44.8
+    },
+    {
+      "sinsid": "9a8d3df8-54c8-42f9-9b49-7d34a18af544",
+      "b1Name": "ÇİNKUR",
+      "b2Name": "154 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -40.7
+    },
+    {
+      "sinsid": "989f2013-b21f-4fea-85ec-45d1cbb23cab",
+      "b1Name": "ÇİNKUR",
+      "b2Name": "154 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 166.4
+    },
+    {
+      "sinsid": "768ad1f9-5890-4e95-9900-8c156f62821e",
+      "b1Name": "KAYSERİ4",
+      "b2Name": "154 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 174.2
+    },
+    {
+      "sinsid": "8e01efb1-3a41-4842-bddd-c1cbede5a301",
+      "b1Name": "SİNCAN",
+      "b2Name": "400 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -38.6
+    },
+    {
+      "sinsid": "75921b46-b829-4df8-86e4-7d5eae9f0034",
+      "b1Name": "BAYRAMHACILI HES",
+      "b2Name": "154 kV",
+      "b3Name": "AVANOS2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 227.2
+    },
+    {
+      "sinsid": "ff4e9e9b-5fcb-4676-9b53-6a91b9104276",
+      "b1Name": "KALABA",
+      "b2Name": "154 kV",
+      "b3Name": "ÜRGÜP",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 278.8
+    },
+    {
+      "sinsid": "1e7d7775-11fb-42ef-ab93-20e1bce153da",
+      "b1Name": "DDY PAŞALI",
+      "b2Name": "154 kV",
+      "b3Name": "KALABA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 224.6
+    },
+    {
+      "sinsid": "c6d8aa5c-53c2-4b20-9d41-99f525f452ae",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "154 kV",
+      "b3Name": "AVANOS2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 83
+    },
+    {
+      "sinsid": "7b87a925-54a8-4212-ac46-a6a3b4a8205e",
+      "b1Name": "DERİNKUYU",
+      "b2Name": "154 kV",
+      "b3Name": "NEVŞEHİR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 337.7
+    },
+    {
+      "sinsid": "d238d0a8-1183-4170-904d-fd0da5b1b4e7",
+      "b1Name": "KARAMAN OSB",
+      "b2Name": "154 kV",
+      "b3Name": "KARAMAN BES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 158.8
+    },
+    {
+      "sinsid": "3f6e7439-477d-4421-aee1-bc3472239c9e",
+      "b1Name": "HADİM",
+      "b2Name": "154 kV",
+      "b3Name": "GÜNEYSINIR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 348.6
+    },
+    {
+      "sinsid": "f49e376b-05e6-4370-8fae-9acac97dffa0",
+      "b1Name": "HADİM",
+      "b2Name": "154 kV",
+      "b3Name": "KEPEZKAYA HAVZA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 211.4
+    },
+    {
+      "sinsid": "f03cd452-d53d-4d3c-bbe7-3f2dc2446920",
+      "b1Name": "AKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "MACUNKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 159.3
+    },
+    {
+      "sinsid": "51e36798-b1d9-47c2-9fad-852b7158534b",
+      "b1Name": "KARAMAN",
+      "b2Name": "154 kV",
+      "b3Name": "KARAMAN OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 40.5
+    },
+    {
+      "sinsid": "fb82c106-3d46-4314-a393-c60cd3687e75",
+      "b1Name": "BOZOK",
+      "b2Name": "400 kV",
+      "b3Name": "REŞADİYE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 172.9
+    },
+    {
+      "sinsid": "a4cab8a8-384a-45f2-bd73-cabd0499e8a0",
+      "b1Name": "BAĞLAR RES",
+      "b2Name": "154 kV",
+      "b3Name": "KONYA KUZEY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 19
+    },
+    {
+      "sinsid": "cefa976a-add5-4442-84ff-01c27b9b043b",
+      "b1Name": "DDY ÇAYDOĞAN",
+      "b2Name": "154 kV",
+      "b3Name": "YERKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 313.5
+    },
+    {
+      "sinsid": "0c5f0c91-d279-48b4-9fce-16babd4b30ae",
+      "b1Name": "ÜRGÜP",
+      "b2Name": "400 kV",
+      "b3Name": "ELBİSTAN TES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 282.5
+    },
+    {
+      "sinsid": "27190e4e-79a2-4526-9121-88a9b40c424b",
+      "b1Name": "GÖLBAŞI",
+      "b2Name": "400 kV",
+      "b3Name": "KAYSERİ KAPASİTÖR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 349.1
+    },
+    {
+      "sinsid": "a9fe2bbb-d341-4f5a-9915-c081f4a95735",
+      "b1Name": "GÖLBAŞI",
+      "b2Name": "400 kV",
+      "b3Name": "KAYSERİ KAPASİTÖR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 286.2
+    },
+    {
+      "sinsid": "76eca8a5-2dc0-46a9-9bcb-61a2fb383b0d",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "400 kV",
+      "b3Name": "KEBAN ŞALT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 323.3
+    },
+    {
+      "sinsid": "e9ba9a06-d349-4d68-bc8f-bbe61b3b72fc",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "400 kV",
+      "b3Name": "KEBAN ŞALT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 195.9
+    },
+    {
+      "sinsid": "98739da5-5f69-41f0-bb89-99cd5cfda82d",
+      "b1Name": "ERCİYES RES",
+      "b2Name": "154 kV",
+      "b3Name": "YEŞİLHİSAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 6.9
+    },
+    {
+      "sinsid": "7f6fe720-6e2e-47b1-8f55-205c176462ad",
+      "b1Name": "ERCİYES RES",
+      "b2Name": "154 kV",
+      "b3Name": "ÇAMLICA1 HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 249.7
+    },
+    {
+      "sinsid": "2ad457c3-1f54-418b-b11a-25431c8ba5f5",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "UZAY OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 234.5
+    },
+    {
+      "sinsid": "1bad3be4-45c4-4555-90ad-8f542a4d9112",
+      "b1Name": "KAZAN",
+      "b2Name": "154 kV",
+      "b3Name": "UZAY OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 50
+    },
+    {
+      "sinsid": "fd3f27cd-7cb7-4f4f-8423-2e8766c2f9be",
+      "b1Name": "KAZAN",
+      "b2Name": "154 kV",
+      "b3Name": "DAĞYAKA ÇİMENTO",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 226.8
+    },
+    {
+      "sinsid": "59d6d7e0-49c8-4893-a0d5-2d82ce985a00",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "DAĞYAKA ÇİMENTO",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 155.9
+    },
+    {
+      "sinsid": "a63c9630-d012-481c-a6ae-827c41b8e51e",
+      "b1Name": "ŞARKIŞLA",
+      "b2Name": "154 kV",
+      "b3Name": "VOTORANTİM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 324.4
+    },
+    {
+      "sinsid": "1b77e196-18fa-46b1-be1d-d1ff3b0514a5",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "MACUNKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 290.8
+    },
+    {
+      "sinsid": "ebda28a7-9e78-4fd1-b8bd-24eab6bb8fb5",
+      "b1Name": "MACUNKÖY",
+      "b2Name": "154 kV",
+      "b3Name": "OSTİM OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 148.7
+    },
+    {
+      "sinsid": "3a8b70c0-ecdb-47b5-941d-b28d9d11c3b3",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "BAĞLICA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 262.2
+    },
+    {
+      "sinsid": "3b99f063-0071-455e-b035-1fa31c41e431",
+      "b1Name": "ÜMİTKÖY",
+      "b2Name": "154 kV",
+      "b3Name": "BAĞLICA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 249.3
+    },
+    {
+      "sinsid": "ef50e09c-9ed5-4707-a267-3cd77ba60bed",
+      "b1Name": "BOR OSB",
+      "b2Name": "154 kV",
+      "b3Name": "UĞURLU GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 171.3
+    },
+    {
+      "sinsid": "f304753a-96de-4b56-b1ee-6f91d0f907a2",
+      "b1Name": "UĞURLU GES",
+      "b2Name": "154 kV",
+      "b3Name": "SÖNMEZ GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -32.1
+    },
+    {
+      "sinsid": "3483efaa-5e69-4077-b8d7-1102e15fec1e",
+      "b1Name": "BOR",
+      "b2Name": "154 kV",
+      "b3Name": "SÖNMEZ GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 70.5
+    },
+    {
+      "sinsid": "11136c38-18c0-4615-9cc1-28e2f422656e",
+      "b1Name": "KOLUKISA",
+      "b2Name": "154 kV",
+      "b3Name": "ALTINOVA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 257.3
+    },
+    {
+      "sinsid": "0d8385a8-bda0-46d0-95d2-c2e01c6aeec8",
+      "b1Name": "DDY GÖZLÜ",
+      "b2Name": "154 kV",
+      "b3Name": "KOLUKISA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 219.6
+    },
+    {
+      "sinsid": "ea12c2cb-71f7-4f37-a693-e2c7bb8d02ca",
+      "b1Name": "KARAMAN RES",
+      "b2Name": "154 kV",
+      "b3Name": "AKYEL 1 RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 167
+    },
+    {
+      "sinsid": "a58d7431-1213-4b23-8b70-d42e30643fc2",
+      "b1Name": "AYRANCI GEÇİCİ",
+      "b2Name": "154 kV",
+      "b3Name": "AYRANCI SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -27.2
+    },
+    {
+      "sinsid": "151f9a67-9196-4488-b063-eba4ea41bbc4",
+      "b1Name": "EREĞLİ KONYA",
+      "b2Name": "154 kV",
+      "b3Name": "AYRANCI SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 60.1
+    },
+    {
+      "sinsid": "03bf0499-0261-4a1e-b9db-15315cc1233f",
+      "b1Name": "KARAMAN BES",
+      "b2Name": "154 kV",
+      "b3Name": "AYRANCI SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 221.3
+    },
+    {
+      "sinsid": "8a7f5dbf-ae05-4ed3-8c40-fe8526dc472e",
+      "b1Name": "KONYA KUZEY",
+      "b2Name": "400 kV",
+      "b3Name": "AFYON2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 134.8
+    },
+    {
+      "sinsid": "225a0248-b26a-4128-86e8-096d2a955fd5",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "BALGAT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 228.2
+    },
+    {
+      "sinsid": "cd22d782-04c2-4cc0-b93f-dba5892553b1",
+      "b1Name": "İMRAHOR",
+      "b2Name": "154 kV",
+      "b3Name": "ÇİĞDEM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 142.2
+    },
+    {
+      "sinsid": "d8cee981-b906-4963-a92c-d5c173e32889",
+      "b1Name": "YILDIZ",
+      "b2Name": "154 kV",
+      "b3Name": "İNCEK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 286.1
+    },
+    {
+      "sinsid": "e79dde70-a633-4524-8873-548e8ed0b154",
+      "b1Name": "KIZILCAHAMAM",
+      "b2Name": "154 kV",
+      "b3Name": "KAZAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 69.6
+    },
+    {
+      "sinsid": "55129094-c7ce-4584-ad8b-815f33b33a23",
+      "b1Name": "ERENKÖY",
+      "b2Name": "154 kV",
+      "b3Name": "MERAM GİS",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 327
+    },
+    {
+      "sinsid": "074ffd10-363e-45f8-98ae-20e6dc2c17f4",
+      "b1Name": "YAZIR",
+      "b2Name": "154 kV",
+      "b3Name": "MERAM GİS",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 320
+    },
+    {
+      "sinsid": "6cb65809-c585-4fb4-bcf5-0f5a90f82297",
+      "b1Name": "ÇEKEREK HAVZA",
+      "b2Name": "154 kV",
+      "b3Name": "BEYYURDU RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 291.4
+    },
+    {
+      "sinsid": "86f18091-dbca-4b45-86b8-061cdc1c7a3c",
+      "b1Name": "BEYYURDU RES",
+      "b2Name": "154 kV",
+      "b3Name": "SORGUN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 208.6
+    },
+    {
+      "sinsid": "a58ac8fc-5b4e-45af-8aac-1840ce2efa0a",
+      "b1Name": "ADA1 DGKÇS",
+      "b2Name": "400 kV",
+      "b3Name": "TEMELLİ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -41.2
+    },
+    {
+      "sinsid": "ff50afeb-aed7-4688-b07f-1d0414087907",
+      "b1Name": "ADAPAZARI",
+      "b2Name": "400 kV",
+      "b3Name": "ÇAYIRHAN TES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -34.1
+    },
+    {
+      "sinsid": "9101b59d-bfa0-4fcd-8f0f-a1069d4d7ce4",
+      "b1Name": "KÜTÜKLÜ SANAL",
+      "b2Name": "154 kV",
+      "b3Name": "ORTAKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -35.7
+    },
+    {
+      "sinsid": "a2c8c9a2-7ce0-43dc-a0a0-caebca817caa",
+      "b1Name": "KÜTÜKLÜ SANAL",
+      "b2Name": "154 kV",
+      "b3Name": "KÜTÜKLÜ GEÇİCİ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 296.1
+    },
+    {
+      "sinsid": "4d2a7dfc-89d0-4627-ba3e-52284a18281b",
+      "b1Name": "KÜTÜKLÜ SANAL",
+      "b2Name": "154 kV",
+      "b3Name": "ATA RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 295.1
+    },
+    {
+      "sinsid": "fe5d6b03-8fa1-4068-9979-0825b8a05e1c",
+      "b1Name": "ŞEREFLİKOÇHİSAR",
+      "b2Name": "154 kV",
+      "b3Name": "ATA RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 246.1
+    },
+    {
+      "sinsid": "4ed9bbb3-fe69-42f0-b235-e40bdda415c0",
+      "b1Name": "ÇAYIRHAN TES",
+      "b2Name": "154 kV",
+      "b3Name": "BEYPAZARI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 4.6
+    },
+    {
+      "sinsid": "752192d9-54d6-44f1-bf12-6c86c23200a6",
+      "b1Name": "MENEKŞE RES",
+      "b2Name": "154 kV",
+      "b3Name": "BEYYURDU RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 178.3
+    },
+    {
+      "sinsid": "1353d19a-b0b5-45a1-8741-7d03cc8bc984",
+      "b1Name": "SİNCAN",
+      "b2Name": "400 kV",
+      "b3Name": "BAĞLUM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 102.2
+    },
+    {
+      "sinsid": "902e267d-5137-4b33-bb3f-387f2cb17971",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "BALGAT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 285.8
+    },
+    {
+      "sinsid": "8aa60543-031e-4279-b7a6-dd2110d2620e",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "ÜMİTKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -20.9
+    },
+    {
+      "sinsid": "874796a7-2e8f-456b-8613-70141a30abba",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "BAYMİNA DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 297.8
+    },
+    {
+      "sinsid": "012cb66d-f2ae-417a-8ce3-de73ac25c252",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "BAYMİNA DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 49.7
+    },
+    {
+      "sinsid": "5a643cab-236e-4e34-8bf4-aae7948d1166",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "ÜMİTKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 19.5
+    },
+    {
+      "sinsid": "f866e230-93ae-41fa-87da-3a79d088fb32",
+      "b1Name": "ÇUMRA",
+      "b2Name": "154 kV",
+      "b3Name": "DİANA OTEL GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 328.9
+    },
+    {
+      "sinsid": "b6a23955-c263-4245-80e4-5f4b1637439c",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "BAYMİNA DGKÇ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 188.4
+    },
+    {
+      "sinsid": "e7eebe87-d7b9-4b2e-9a22-3b93c5fe3b29",
+      "b1Name": "KARAMAN",
+      "b2Name": "154 kV",
+      "b3Name": "DİANA OTEL GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 222.2
+    },
+    {
+      "sinsid": "071d0d66-3fb1-468f-8390-7573636745a5",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "HASKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 94
+    },
+    {
+      "sinsid": "bad5a267-7788-4854-b828-603bc8607cf8",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "ESENBOĞA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -29.4
+    },
+    {
+      "sinsid": "b7709e26-2dae-49b4-8856-279795e60d35",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "ESENBOĞA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 324.6
+    },
+    {
+      "sinsid": "3da760d5-2bad-4040-97bc-6258194f62ee",
+      "b1Name": "BAĞLUM",
+      "b2Name": "154 kV",
+      "b3Name": "HASKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 133.7
+    },
+    {
+      "sinsid": "a29cab1d-5038-494f-afb9-a0da8b2a11b5",
+      "b1Name": "ANKARA SANAYİ",
+      "b2Name": "154 kV",
+      "b3Name": "MACUNKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -16.3
+    },
+    {
+      "sinsid": "47bc10da-0571-4128-a374-a85e7819ec86",
+      "b1Name": "ANKARA SANAYİ",
+      "b2Name": "154 kV",
+      "b3Name": "OSTİM OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 335.7
+    },
+    {
+      "sinsid": "88862231-80ea-44d6-8680-5b29f44e40d0",
+      "b1Name": "BALGAT",
+      "b2Name": "154 kV",
+      "b3Name": "MALTEPE ANKARA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 332.7
+    },
+    {
+      "sinsid": "77b188e8-e917-437e-afe3-2d9c9ce0ab09",
+      "b1Name": "BAŞTAŞ",
+      "b2Name": "154 kV",
+      "b3Name": "KIRIKKALE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 265
+    },
+    {
+      "sinsid": "0fe20931-9c9f-4471-88be-cc99f43113bc",
+      "b1Name": "BEYLİKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "POLATLI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 44.5
+    },
+    {
+      "sinsid": "e161309a-e3a4-4d76-bb71-394082c792cb",
+      "b1Name": "BEYPAZARI",
+      "b2Name": "154 kV",
+      "b3Name": "ETİ SODA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 14.2
+    },
+    {
+      "sinsid": "f8a64114-bd8a-4927-8b71-d02af4b786fe",
+      "b1Name": "HACILAR",
+      "b2Name": "154 kV",
+      "b3Name": "KAPULUKAYA HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 12.2
+    },
+    {
+      "sinsid": "5c629b1a-c36d-450d-b2be-df4420cce1f6",
+      "b1Name": "KALECİK",
+      "b2Name": "154 kV",
+      "b3Name": "KIRIKKALE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 10.7
+    },
+    {
+      "sinsid": "22b85ff6-9006-411b-898d-ff3683fd0eee",
+      "b1Name": "KIRIKKALE",
+      "b2Name": "154 kV",
+      "b3Name": "ÇİMPOR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 78.2
+    },
+    {
+      "sinsid": "66361ce5-cdff-4208-9028-e0ed2a7e5fc0",
+      "b1Name": "YAYSUN GES",
+      "b2Name": "154 kV",
+      "b3Name": "ATAHAN GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 151.8
+    },
+    {
+      "sinsid": "2d9e22f7-cc64-4faf-9e4a-e8b48b936301",
+      "b1Name": "ATAHAN GES",
+      "b2Name": "154 kV",
+      "b3Name": "UĞURLU GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 297.3
+    },
+    {
+      "sinsid": "5c6d486d-df37-4b97-acb6-9668ef7fdec2",
+      "b1Name": "MAMAK",
+      "b2Name": "154 kV",
+      "b3Name": "HASKÖY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 272.9
+    },
+    {
+      "sinsid": "95720a48-dde5-432c-8173-b8542accb10a",
+      "b1Name": "KIRIKKALE",
+      "b2Name": "154 kV",
+      "b3Name": "KESİKKÖPRÜ SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 2.9
+    },
+    {
+      "sinsid": "d76a8341-a4ee-460c-8012-7289e954a749",
+      "b1Name": "ALAKOVA",
+      "b2Name": "154 kV",
+      "b3Name": "MERAM GİS",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 220
+    },
+    {
+      "sinsid": "2e362cff-5fa5-437a-ab88-b6b87dc3e1a1",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "154 kV",
+      "b3Name": "KAYSERİ2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 300.5
+    },
+    {
+      "sinsid": "c1ca444c-6610-4b7c-9a82-d8977580c408",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "154 kV",
+      "b3Name": "KAYSERİ2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 216
+    },
+    {
+      "sinsid": "8ad1f19b-1a79-422e-87ee-1dbcf0f56d64",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "154 kV",
+      "b3Name": "KAYSERİ2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -40
+    },
+    {
+      "sinsid": "dbd700a7-3ea7-4b44-a0ea-19cd94bea97f",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "154 kV",
+      "b3Name": "SIZIR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 245
+    },
+    {
+      "sinsid": "1b1ce649-2a80-4ae3-ab45-b50a8216a40d",
+      "b1Name": "KAYSERİ2",
+      "b2Name": "154 kV",
+      "b3Name": "KAYSERİ3",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 36.7
+    },
+    {
+      "sinsid": "88a679a5-faa1-467b-babd-0e0dd3ecf949",
+      "b1Name": "KAYSERİ2",
+      "b2Name": "154 kV",
+      "b3Name": "ÇİNKUR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 264.8
+    },
+    {
+      "sinsid": "0108b0d5-c97a-4163-b8da-c57716f06a83",
+      "b1Name": "KAYSERİ3",
+      "b2Name": "154 kV",
+      "b3Name": "ÇİNKUR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -25.1
+    },
+    {
+      "sinsid": "afadf5a2-364a-459e-8f9e-94bc2d1ae274",
+      "b1Name": "ÇAYIRHAN TES",
+      "b2Name": "154 kV",
+      "b3Name": "NALLIHAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 165.4
+    },
+    {
+      "sinsid": "a5298c09-a570-44d2-877b-f5d2865b7f8b",
+      "b1Name": "SARIYAR HES",
+      "b2Name": "154 kV",
+      "b3Name": "NALLIHAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -46.1
+    },
+    {
+      "sinsid": "29abcd2d-f1f7-492e-ae51-909fcf3eba98",
+      "b1Name": "KARATAY",
+      "b2Name": "154 kV",
+      "b3Name": "ÇUMRA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 271.4
+    },
+    {
+      "sinsid": "bc9938b7-9dec-4477-84de-57848357784a",
+      "b1Name": "BOLU1",
+      "b2Name": "154 kV",
+      "b3Name": "NALLIHAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 243.3
+    },
+    {
+      "sinsid": "a76b4a98-8f79-4298-9350-35f0a491cb56",
+      "b1Name": "SARIYAR HES",
+      "b2Name": "154 kV",
+      "b3Name": "NALLIHAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 270.2
+    },
+    {
+      "sinsid": "f6d0b17a-d385-4da1-a256-27a7c623d07e",
+      "b1Name": "MUDURNU",
+      "b2Name": "154 kV",
+      "b3Name": "NALLIHAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 315.2
+    },
+    {
+      "sinsid": "1509ee9a-550c-4461-b18d-f4bd91482503",
+      "b1Name": "KARATAY",
+      "b2Name": "154 kV",
+      "b3Name": "KAYACIK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 182.6
+    },
+    {
+      "sinsid": "6d78ef3c-58bb-4cca-8c6a-ba05e7c628bb",
+      "b1Name": "MAV BİYOKÜTLE",
+      "b2Name": "154 kV",
+      "b3Name": "NALLIHAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 10.9
+    },
+    {
+      "sinsid": "5db01c3c-01c2-4749-910b-1ecb9096411a",
+      "b1Name": "KARATAY",
+      "b2Name": "154 kV",
+      "b3Name": "KAYACIK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 253.3
+    },
+    {
+      "sinsid": "83e234d3-bb38-4da5-9954-e2e77abd1ceb",
+      "b1Name": "KARATAY",
+      "b2Name": "154 kV",
+      "b3Name": "KIZÖREN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -21.5
+    },
+    {
+      "sinsid": "35e45bbd-8da0-4d76-91c9-ac92987c1049",
+      "b1Name": "EREĞLİ KONYA",
+      "b2Name": "154 kV",
+      "b3Name": "KARAPINAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 281.4
+    },
+    {
+      "sinsid": "fd212a25-759b-4219-83ed-2a2b322ee9d9",
+      "b1Name": "ALİBEY HÖYÜĞÜ",
+      "b2Name": "154 kV",
+      "b3Name": "ÇUMRA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 23.6
+    },
+    {
+      "sinsid": "d51a6a2e-e5bb-41f1-8ad9-45c86fd9dae6",
+      "b1Name": "ÇUMRA",
+      "b2Name": "154 kV",
+      "b3Name": "GÜNEYSINIR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 192.3
+    },
+    {
+      "sinsid": "2ee7de58-a1a4-4c21-8e5b-6046ebe89bcc",
+      "b1Name": "TEMELLİ",
+      "b2Name": "400 kV",
+      "b3Name": "İGA GES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 253.3
+    },
+    {
+      "sinsid": "147d5ba7-5e37-4b26-bb7b-58e2cc05fc94",
+      "b1Name": "İGA GES",
+      "b2Name": "400 kV",
+      "b3Name": "AFYON2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 17.3
+    },
+    {
+      "sinsid": "6b02021c-73ab-42ab-b282-7837eeaf5e6a",
+      "b1Name": "MAMAK",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 127.9
+    },
+    {
+      "sinsid": "c977bea4-20e5-4a41-9a75-5e61cae11209",
+      "b1Name": "MAMAK",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 65.2
+    },
+    {
+      "sinsid": "8eb54664-7d2d-4ede-a7e4-515e8ed3b231",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "400 kV",
+      "b3Name": "AĞAÇÖREN SKM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 151.5
+    },
+    {
+      "sinsid": "f74f5067-e2eb-4de6-85df-61723d02980f",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "400 kV",
+      "b3Name": "AĞAÇÖREN SKM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 86.8
+    },
+    {
+      "sinsid": "d92cd58d-fc73-4c20-8382-72c5ab718cce",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "154 kV",
+      "b3Name": "ÇAMLICA1 HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 335.1
+    },
+    {
+      "sinsid": "fa01bb1a-2f9b-4d35-8ca8-136319988959",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "154 kV",
+      "b3Name": "DERİNKUYU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 179.3
+    },
+    {
+      "sinsid": "4c9c2e4a-fca1-43a2-a715-cb0052d3a1b3",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "154 kV",
+      "b3Name": "NİĞDE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 226.7
+    },
+    {
+      "sinsid": "c4afe802-a494-475a-9c86-42f1e10c1fb4",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "154 kV",
+      "b3Name": "SENDİREMEKE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 276.5
+    },
+    {
+      "sinsid": "97f196aa-d504-4055-89d4-d536606bdbe7",
+      "b1Name": "AKDAĞ MADENİ",
+      "b2Name": "154 kV",
+      "b3Name": "SIZIR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 167.5
+    },
+    {
+      "sinsid": "cbc80bf5-6c3f-4df2-95eb-e921798fdc31",
+      "b1Name": "BOĞAZLIYAN",
+      "b2Name": "154 kV",
+      "b3Name": "KALABA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 82.4
+    },
+    {
+      "sinsid": "49477405-e7f0-421e-a3f9-aa8f730ed65a",
+      "b1Name": "BOR",
+      "b2Name": "154 kV",
+      "b3Name": "NİĞDE OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 198.3
+    },
+    {
+      "sinsid": "173ae7f4-e4e2-4c9f-8126-d47906a014c2",
+      "b1Name": "ÇEKEREK HAVZA",
+      "b2Name": "154 kV",
+      "b3Name": "KARALIK RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 349.8
+    },
+    {
+      "sinsid": "d9bd8154-7dfa-4f1c-87d3-92f9ad22ce8d",
+      "b1Name": "CİHANBEYLİ",
+      "b2Name": "154 kV",
+      "b3Name": "KULU",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 83.4
+    },
+    {
+      "sinsid": "aca9ccbc-b1dc-4ba4-9eb0-b9704e9a0320",
+      "b1Name": "AKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "KAYAŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 259.1
+    },
+    {
+      "sinsid": "95329efd-d60c-424b-8dd1-d9fc024cb3b0",
+      "b1Name": "ÇİNKUR",
+      "b2Name": "154 kV",
+      "b3Name": "YAMULA HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 196.5
+    },
+    {
+      "sinsid": "2f19c0ed-535a-4815-9166-e080f2e7b6aa",
+      "b1Name": "DERİNKUYU",
+      "b2Name": "154 kV",
+      "b3Name": "MİSLİOVA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 246.3
+    },
+    {
+      "sinsid": "d275aa0f-4c7b-44de-a411-4acd269777a3",
+      "b1Name": "KIRŞEHİR",
+      "b2Name": "154 kV",
+      "b3Name": "PETLAS",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 98.9
+    },
+    {
+      "sinsid": "2d3ebbe3-5707-4b5a-9258-40e2108398da",
+      "b1Name": "MİSLİOVA",
+      "b2Name": "154 kV",
+      "b3Name": "NİĞDE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 329.3
+    },
+    {
+      "sinsid": "2f228cc1-8bdd-424a-9025-4cdb95179bc5",
+      "b1Name": "NİĞDE",
+      "b2Name": "154 kV",
+      "b3Name": "NİĞDE OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 91.5
+    },
+    {
+      "sinsid": "103ecac0-8e13-4874-b642-509f2538bc4a",
+      "b1Name": "ŞARKIŞLA",
+      "b2Name": "154 kV",
+      "b3Name": "SIZIR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -38.9
+    },
+    {
+      "sinsid": "b3a56953-07cb-485a-8df4-390926ff8837",
+      "b1Name": "AYBASTI RES",
+      "b2Name": "154 kV",
+      "b3Name": "KEPEZKAYA HAVZA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 322.3
+    },
+    {
+      "sinsid": "6864f3b3-6ebb-4ad9-a270-d41cdb3da430",
+      "b1Name": "YİBİTAŞ",
+      "b2Name": "154 kV",
+      "b3Name": "YOZGAT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 231.8
+    },
+    {
+      "sinsid": "1485ad5f-369f-4400-80ae-349d102a2322",
+      "b1Name": "ASELSAN MOBİL",
+      "b2Name": "154 kV",
+      "b3Name": "EMİRLER",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 214.7
+    },
+    {
+      "sinsid": "2d2ce2a5-a1eb-4008-8daf-828c7aa8bd66",
+      "b1Name": "DDY A.PINARBAŞI",
+      "b2Name": "154 kV",
+      "b3Name": "KARATAY",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -37.1
+    },
+    {
+      "sinsid": "dc4d2880-0b41-406d-b4ba-e137efb87451",
+      "b1Name": "BÜSAN",
+      "b2Name": "154 kV",
+      "b3Name": "HOTAMIŞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 292.5
+    },
+    {
+      "sinsid": "a103120e-1ba9-4c05-9e78-a32a21d8a1b6",
+      "b1Name": "BOĞAZLIYAN",
+      "b2Name": "154 kV",
+      "b3Name": "SORGUN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 106.7
+    },
+    {
+      "sinsid": "eb6bd1d4-9067-495e-b222-1f315dadd852",
+      "b1Name": "TAKSAN SANAL",
+      "b2Name": "154 kV",
+      "b3Name": "SENDİREMEKE",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 20.7
+    },
+    {
+      "sinsid": "91b5313f-fbba-4dfd-8c2a-10436595c3a9",
+      "b1Name": "TAKSAN SANAL",
+      "b2Name": "154 kV",
+      "b3Name": "ÇİNKUR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 33.8
+    },
+    {
+      "sinsid": "49de0a3b-d055-4ede-8c1f-a58c7d311bc5",
+      "b1Name": "TAKSAN SANAL",
+      "b2Name": "154 kV",
+      "b3Name": "TAKSAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 144.7
+    },
+    {
+      "sinsid": "76392279-6b71-473e-a730-3fd497983239",
+      "b1Name": "KARATAY",
+      "b2Name": "400 kV",
+      "b3Name": "SEYDİŞEHİR (YENİ)",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 111
+    },
+    {
+      "sinsid": "7ecb6381-0a0c-4f87-8c83-eafa686386ed",
+      "b1Name": "ÇAMLICA1 HES",
+      "b2Name": "154 kV",
+      "b3Name": "AKSU RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 302.5
+    },
+    {
+      "sinsid": "22b212df-2ad8-4044-8478-d5258e21e151",
+      "b1Name": "ÇAMLICA1 HES",
+      "b2Name": "154 kV",
+      "b3Name": "ÇAMLICA3 HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 244.7
+    },
+    {
+      "sinsid": "ed4081b7-128b-49d5-b693-10329488a1ca",
+      "b1Name": "ALİBEY HÖYÜĞÜ",
+      "b2Name": "154 kV",
+      "b3Name": "SEYDİŞEHİR (YENİ)",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 286.8
+    },
+    {
+      "sinsid": "32cc9deb-e940-4d8f-a7ca-3450f815ed4f",
+      "b1Name": "KEPEZKAYA HAVZA",
+      "b2Name": "154 kV",
+      "b3Name": "KEPEZKAYA HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 169.9
+    },
+    {
+      "sinsid": "8163b8cd-3de3-4de7-8b62-40cfb413bc99",
+      "b1Name": "BEYLİKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "DDY SAZAK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 212.6
+    },
+    {
+      "sinsid": "a4933ca3-22b4-4185-b7d5-c6120a937bb0",
+      "b1Name": "MERAM GİS",
+      "b2Name": "154 kV",
+      "b3Name": "SEYDİŞEHİR (YENİ)",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 78.1
+    },
+    {
+      "sinsid": "da87d148-8c7b-4259-a3e6-0a043acebbf5",
+      "b1Name": "BEYLİKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "DDY BEYLİKKÖPRÜ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -6
+    },
+    {
+      "sinsid": "fd027666-1f39-4780-bc1f-486aad687a27",
+      "b1Name": "ESKİŞEHİR3",
+      "b2Name": "400 kV",
+      "b3Name": "GÖKÇEKAYA HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 216.5
+    },
+    {
+      "sinsid": "64a14f61-8090-4eee-b371-8a7e89c7fa16",
+      "b1Name": "OSMANCA",
+      "b2Name": "400 kV",
+      "b3Name": "SİNCAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 313
+    },
+    {
+      "sinsid": "f9570166-51e2-4ca6-b100-b08e77fd0fb3",
+      "b1Name": "AKDAĞ MADENİ",
+      "b2Name": "154 kV",
+      "b3Name": "ARTOVA ÇİMENTO",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 310.8
+    },
+    {
+      "sinsid": "40a46a78-d796-4360-98c8-f58cfa60bd36",
+      "b1Name": "OYÇİM GES",
+      "b2Name": "154 kV",
+      "b3Name": "SİNCAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 220.8
+    },
+    {
+      "sinsid": "39eeadf3-8671-4e13-99af-04870e571527",
+      "b1Name": "OYÇİM GES",
+      "b2Name": "154 kV",
+      "b3Name": "BEYPAZARI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 347.5
+    },
+    {
+      "sinsid": "5bb55357-f374-4937-b402-b48c001a34fb",
+      "b1Name": "ALCI OSB MOBİL",
+      "b2Name": "154 kV",
+      "b3Name": "ALCI OSB SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 269.3
+    },
+    {
+      "sinsid": "c8aef884-9d4b-46d1-8b93-e43676b4ffc6",
+      "b1Name": "SİVRİHİSAR",
+      "b2Name": "154 kV",
+      "b3Name": "EMİRDAĞ",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 312.7
+    },
+    {
+      "sinsid": "1665f084-81de-418c-ad22-29708aac5433",
+      "b1Name": "BAĞLUM",
+      "b2Name": "400 kV",
+      "b3Name": "KAYABAŞI",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 290.4
+    },
+    {
+      "sinsid": "a9df9911-8328-4af7-9e55-9e8f46c6ff36",
+      "b1Name": "BEYLİKKÖPRÜ",
+      "b2Name": "154 kV",
+      "b3Name": "SİVRİHİSAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 88.2
+    },
+    {
+      "sinsid": "7ee64927-e03f-42a8-9b27-e2e543a9531b",
+      "b1Name": "KAYSERİ KAPASİTÖR",
+      "b2Name": "400 kV",
+      "b3Name": "ELBİSTAN TES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -3.1
+    },
+    {
+      "sinsid": "c6475b3f-2e91-4a8d-a3ae-3b8df98a79a1",
+      "b1Name": "ESKİŞEHİR2",
+      "b2Name": "154 kV",
+      "b3Name": "YENİCE HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 76.9
+    },
+    {
+      "sinsid": "6f98c2f9-6bbf-40ab-8510-40167a68e99c",
+      "b1Name": "KARAMAN",
+      "b2Name": "154 kV",
+      "b3Name": "GEZENDE HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -46.3
+    },
+    {
+      "sinsid": "401cff12-55bb-4ecf-9c19-ddf0fd7bc5ce",
+      "b1Name": "KESİKKÖPRÜ HES",
+      "b2Name": "154 kV",
+      "b3Name": "KESİKKÖPRÜ SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 178.3
+    },
+    {
+      "sinsid": "e406c8a9-007e-4e5a-8b92-66393968836c",
+      "b1Name": "KESİKKÖPRÜ HES",
+      "b2Name": "154 kV",
+      "b3Name": "KESİKKÖPRÜ SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 327.5
+    },
+    {
+      "sinsid": "b50407e1-bc2d-4fb8-8535-f297415bbd7e",
+      "b1Name": "ÇAYIRHAN TES",
+      "b2Name": "400 kV",
+      "b3Name": "SİNCAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 319.7
+    },
+    {
+      "sinsid": "617042b4-6d61-41ae-953d-a11f3300884a",
+      "b1Name": "TEMELLİ",
+      "b2Name": "154 kV",
+      "b3Name": "İNCEK",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 113.6
+    },
+    {
+      "sinsid": "97acd3cf-bf35-457a-b812-95044200809a",
+      "b1Name": "ÇAYIRHAN TES",
+      "b2Name": "154 kV",
+      "b3Name": "ETİ SODA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 215.2
+    },
+    {
+      "sinsid": "eed09e0b-4cc9-4f8f-88df-37331c436282",
+      "b1Name": "TEMELLİ",
+      "b2Name": "400 kV",
+      "b3Name": "AĞAÇÖREN SKM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 239.8
+    },
+    {
+      "sinsid": "6a3bb442-e105-48ff-812e-3137afbc41c4",
+      "b1Name": "TEMELLİ",
+      "b2Name": "400 kV",
+      "b3Name": "AĞAÇÖREN SKM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 348.9
+    },
+    {
+      "sinsid": "a95265e7-80a2-43c1-b730-136b67d3aa6f",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "400 kV",
+      "b3Name": "GÖKSUN SKM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 20
+    },
+    {
+      "sinsid": "a95265e7-80a2-43c1-b730-136b67d3aa6f",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "400 kV",
+      "b3Name": "GÖKSUN SKM",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 25.9
+    },
+    {
+      "sinsid": "a6aed9fc-6229-442d-a889-d54fd4dd54d9",
+      "b1Name": "YEŞİLHİSAR",
+      "b2Name": "400 kV",
+      "b3Name": "TUFANBEYLİ TES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 6.8
+    },
+    {
+      "sinsid": "3ffbe598-8d3e-4fed-a316-325ce5b76aac",
+      "b1Name": "EREĞLİ KONYA",
+      "b2Name": "400 kV",
+      "b3Name": "EREĞLİ SANAL",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 245.1
+    },
+    {
+      "sinsid": "648e94d0-0439-4493-92b4-c52b7c5f8146",
+      "b1Name": "TÜMOSAN",
+      "b2Name": "154 kV",
+      "b3Name": "AKSARAY OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 300.3
+    },
+    {
+      "sinsid": "33d877d5-ce4e-4176-a3e0-f4e1b8d7b5f0",
+      "b1Name": "PETLAS",
+      "b2Name": "154 kV",
+      "b3Name": "AVANOS2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 110.2
+    },
+    {
+      "sinsid": "668d2547-88d8-4283-a4eb-c34cad4109ca",
+      "b1Name": "GEYCEK RES",
+      "b2Name": "154 kV",
+      "b3Name": "AVANOS2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 160.5
+    },
+    {
+      "sinsid": "8d3661d5-0749-4d88-94d9-efa84fa24178",
+      "b1Name": "GEYCEK RES",
+      "b2Name": "154 kV",
+      "b3Name": "AVANOS2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": -33
+    },
+    {
+      "sinsid": "ee95eda4-a026-4646-aa87-f05ef33d1dfd",
+      "b1Name": "AKSA GÖYNÜK TES",
+      "b2Name": "400 kV",
+      "b3Name": "GÖKÇEKAYA HES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 310.6
+    },
+    {
+      "sinsid": "a8a53706-4eb2-4dff-a22d-11a5a2ca21d1",
+      "b1Name": "KAYSERİ3",
+      "b2Name": "154 kV",
+      "b3Name": "KAYSERİ4",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 302.7
+    },
+    {
+      "sinsid": "16b76a2c-5ba4-463c-8eb6-649374757232",
+      "b1Name": "YILDIZ",
+      "b2Name": "154 kV",
+      "b3Name": "İMRAHOR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 315.4
+    },
+    {
+      "sinsid": "7166be3f-059c-4162-b684-339d9d121809",
+      "b1Name": "DERİNKUYU",
+      "b2Name": "154 kV",
+      "b3Name": "AKSARAY OSB",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 12.6
+    },
+    {
+      "sinsid": "88d98ab0-c7c6-482a-85bf-f51801ac9d8b",
+      "b1Name": "ADAPAZARI",
+      "b2Name": "400 kV",
+      "b3Name": "YUNUS EMRE TES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 65
+    },
+    {
+      "sinsid": "a8c26e66-c04f-48b6-8b10-5f032b1ac190",
+      "b1Name": "TEMELLİ",
+      "b2Name": "400 kV",
+      "b3Name": "YUNUS EMRE TES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 145.2
+    },
+    {
+      "sinsid": "afa5f45e-3a56-4b8d-9a1f-dafac1305e7c",
+      "b1Name": "KARAMAN",
+      "b2Name": "154 kV",
+      "b3Name": "KEPEZKAYA HAVZA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 158.1
+    },
+    {
+      "sinsid": "97adb5ba-13ad-4c3c-97cb-d02dd34d25cb",
+      "b1Name": "BOR",
+      "b2Name": "154 kV",
+      "b3Name": "TOROSLAR",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 280.6
+    },
+    {
+      "sinsid": "f177430b-cd7b-4880-9614-d775a267cb01",
+      "b1Name": "KARAMAN",
+      "b2Name": "154 kV",
+      "b3Name": "MUT RES",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 238.4
+    },
+    {
+      "sinsid": "4fb4bea3-a74f-4b04-99b5-ff2e37718e44",
+      "b1Name": "KARATAY",
+      "b2Name": "154 kV",
+      "b3Name": "ALAKOVA",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 134.8
+    },
+    {
+      "sinsid": "409fd207-50ca-4456-9eb7-1b4db285c2b5",
+      "b1Name": "KALECİK",
+      "b2Name": "154 kV",
+      "b3Name": "YAKINKENT",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 210.8
+    },
+    {
+      "sinsid": "ff2e4fa3-7c67-44e0-92df-a1892fae6718",
+      "b1Name": "SİNCAN",
+      "b2Name": "154 kV",
+      "b3Name": "ERYAMAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 196.2
+    },
+    {
+      "sinsid": "a56b9352-37de-4e52-a471-30d008665b72",
+      "b1Name": "ANKARA SANAYİ",
+      "b2Name": "154 kV",
+      "b3Name": "ERYAMAN",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 92.9
+    },
+    {
+      "sinsid": "dummy-000",
+      "b1Name": "DUMMY_TM_0",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_0",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 49.3
+    },
+    {
+      "sinsid": "dummy-001",
+      "b1Name": "DUMMY_TM_1",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_1",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 15
+    },
+    {
+      "sinsid": "dummy-002",
+      "b1Name": "DUMMY_TM_2",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_2",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 99.1
+    },
+    {
+      "sinsid": "dummy-003",
+      "b1Name": "DUMMY_TM_3",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_3",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 27.7
+    },
+    {
+      "sinsid": "dummy-004",
+      "b1Name": "DUMMY_TM_4",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_4",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 6
+    },
+    {
+      "sinsid": "dummy-005",
+      "b1Name": "DUMMY_TM_5",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_5",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 131.8
+    },
+    {
+      "sinsid": "dummy-006",
+      "b1Name": "DUMMY_TM_6",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_6",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 61.1
+    },
+    {
+      "sinsid": "dummy-007",
+      "b1Name": "DUMMY_TM_7",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_7",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 147.8
+    },
+    {
+      "sinsid": "dummy-008",
+      "b1Name": "DUMMY_TM_8",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_8",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 198.3
+    },
+    {
+      "sinsid": "dummy-009",
+      "b1Name": "DUMMY_TM_9",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_9",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 79.6
+    },
+    {
+      "sinsid": "dummy-010",
+      "b1Name": "DUMMY_TM_10",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_10",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 109.1
+    },
+    {
+      "sinsid": "dummy-011",
+      "b1Name": "DUMMY_TM_11",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_11",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 51.4
+    },
+    {
+      "sinsid": "dummy-012",
+      "b1Name": "DUMMY_TM_12",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_12",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 174.6
+    },
+    {
+      "sinsid": "dummy-013",
+      "b1Name": "DUMMY_TM_13",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_13",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 16.8
+    },
+    {
+      "sinsid": "dummy-014",
+      "b1Name": "DUMMY_TM_14",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_14",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 69.9
+    },
+    {
+      "sinsid": "dummy-015",
+      "b1Name": "DUMMY_TM_15",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_15",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 120.7
+    },
+    {
+      "sinsid": "dummy-016",
+      "b1Name": "DUMMY_TM_16",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_16",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.407Z",
+      "avgMaxValue": 99.8
+    },
+    {
+      "sinsid": "dummy-017",
+      "b1Name": "DUMMY_TM_17",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_17",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 100.5
+    },
+    {
+      "sinsid": "dummy-018",
+      "b1Name": "DUMMY_TM_18",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_18",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 74.9
+    },
+    {
+      "sinsid": "dummy-019",
+      "b1Name": "DUMMY_TM_19",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_19",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 17.5
+    },
+    {
+      "sinsid": "dummy-020",
+      "b1Name": "DUMMY_TM_20",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_20",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 49
+    },
+    {
+      "sinsid": "dummy-021",
+      "b1Name": "DUMMY_TM_21",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_21",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 65.9
+    },
+    {
+      "sinsid": "dummy-022",
+      "b1Name": "DUMMY_TM_22",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_22",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 6.7
+    },
+    {
+      "sinsid": "dummy-023",
+      "b1Name": "DUMMY_TM_23",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_23",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 36.5
+    },
+    {
+      "sinsid": "dummy-024",
+      "b1Name": "DUMMY_TM_24",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_24",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 79.2
+    },
+    {
+      "sinsid": "dummy-025",
+      "b1Name": "DUMMY_TM_25",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_25",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 118.9
+    },
+    {
+      "sinsid": "dummy-026",
+      "b1Name": "DUMMY_TM_26",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_26",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 159.7
+    },
+    {
+      "sinsid": "dummy-027",
+      "b1Name": "DUMMY_TM_27",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_27",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 167.7
+    },
+    {
+      "sinsid": "dummy-028",
+      "b1Name": "DUMMY_TM_28",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_28",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 193.4
+    },
+    {
+      "sinsid": "dummy-029",
+      "b1Name": "DUMMY_TM_29",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_29",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 142.5
+    },
+    {
+      "sinsid": "dummy-030",
+      "b1Name": "DUMMY_TM_30",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_30",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 131.9
+    },
+    {
+      "sinsid": "dummy-031",
+      "b1Name": "DUMMY_TM_31",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_31",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 68.8
+    },
+    {
+      "sinsid": "dummy-032",
+      "b1Name": "DUMMY_TM_32",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_32",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 157.6
+    },
+    {
+      "sinsid": "dummy-033",
+      "b1Name": "DUMMY_TM_33",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_33",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 98.2
+    },
+    {
+      "sinsid": "dummy-034",
+      "b1Name": "DUMMY_TM_34",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_34",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 142.3
+    },
+    {
+      "sinsid": "dummy-035",
+      "b1Name": "DUMMY_TM_35",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_35",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 167.6
+    },
+    {
+      "sinsid": "dummy-036",
+      "b1Name": "DUMMY_TM_36",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_36",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 146.3
+    },
+    {
+      "sinsid": "dummy-037",
+      "b1Name": "DUMMY_TM_37",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_37",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 25.8
+    },
+    {
+      "sinsid": "dummy-038",
+      "b1Name": "DUMMY_TM_38",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_38",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 178.4
+    },
+    {
+      "sinsid": "dummy-039",
+      "b1Name": "DUMMY_TM_39",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_39",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 149.5
+    },
+    {
+      "sinsid": "dummy-040",
+      "b1Name": "DUMMY_TM_40",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_40",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 115.7
+    },
+    {
+      "sinsid": "dummy-041",
+      "b1Name": "DUMMY_TM_41",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_41",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 147.6
+    },
+    {
+      "sinsid": "dummy-042",
+      "b1Name": "DUMMY_TM_42",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_42",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 18.3
+    },
+    {
+      "sinsid": "dummy-043",
+      "b1Name": "DUMMY_TM_43",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_43",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 94.4
+    },
+    {
+      "sinsid": "dummy-044",
+      "b1Name": "DUMMY_TM_44",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_44",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 78
+    },
+    {
+      "sinsid": "dummy-045",
+      "b1Name": "DUMMY_TM_45",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_45",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 83.1
+    },
+    {
+      "sinsid": "dummy-046",
+      "b1Name": "DUMMY_TM_46",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_46",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 140.8
+    },
+    {
+      "sinsid": "dummy-047",
+      "b1Name": "DUMMY_TM_47",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_47",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 35.6
+    },
+    {
+      "sinsid": "dummy-048",
+      "b1Name": "DUMMY_TM_48",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_48",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 160.3
+    },
+    {
+      "sinsid": "dummy-049",
+      "b1Name": "DUMMY_TM_49",
+      "b2Name": "154 kV",
+      "b3Name": "DUMMY_END_49",
+      "elementName": "P",
+      "maxTime": "2026-04-19T10:34:10.408Z",
+      "avgMaxValue": 140.7
+    }
+  ]
+}

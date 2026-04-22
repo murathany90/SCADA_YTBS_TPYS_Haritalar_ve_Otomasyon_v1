@@ -1,0 +1,66 @@
+$ErrorActionPreference = 'Stop'
+
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$dist = Join-Path $root 'dist'
+$extensionRoot = Join-Path $dist 'chrome-extension'
+$zipPath = Join-Path $dist 'tpys-reaktif-eslestirme-extension.zip'
+
+$files = @(
+  'manifest.json',
+  'background.js',
+  'content-script.js',
+  'popup.html',
+  'popup.css',
+  'popup.js',
+  'map.html',
+  'map.css',
+  'map.js',
+  'map-common.js',
+  'map-modern.html',
+  'map-modern.css',
+  'map-modern.js',
+  'map-v2-runtime.js',
+  'scada-common.js',
+  'scada-client.js',
+  'scada-flow.js',
+  'scada-v2-runtime.js'
+)
+
+$directories = @(
+  'data',
+  'lib'
+)
+
+if (Test-Path -LiteralPath $extensionRoot) {
+  Remove-Item -LiteralPath $extensionRoot -Recurse -Force
+}
+
+New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
+
+foreach ($relativePath in $files) {
+  $sourcePath = Join-Path $root $relativePath
+  $targetPath = Join-Path $extensionRoot $relativePath
+  Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
+}
+
+foreach ($relativePath in $directories) {
+  $sourcePath = Join-Path $root $relativePath
+  Copy-Item -LiteralPath $sourcePath -Destination $extensionRoot -Recurse -Force
+}
+
+$reservedPaths = Get-ChildItem -LiteralPath $extensionRoot -Recurse -Force |
+  Where-Object { $_.Name -like '_*' } |
+  Select-Object -ExpandProperty FullName
+
+if ($reservedPaths) {
+  throw "Chrome reserved path bulundu:`n$($reservedPaths -join "`n")"
+}
+
+if (Test-Path -LiteralPath $zipPath) {
+  Remove-Item -LiteralPath $zipPath -Force
+}
+
+Compress-Archive -Path (Join-Path $extensionRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
+
+Write-Output "[OK] Unpacked: $extensionRoot"
+Write-Output "[OK] Zip: $zipPath"
