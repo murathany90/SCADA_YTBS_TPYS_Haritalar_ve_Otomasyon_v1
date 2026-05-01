@@ -110,6 +110,15 @@ test('rgdh monitor caps auxiliary RES/GES polling budget at five minutes', () =>
   assert.doesNotMatch(js, /Math\.min\(180000/);
 });
 
+test('rgdh monitor waits for hybrid continuation before reporting no normalized rows', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  assert.match(js, /waitForContinuationFetchJob/);
+  assert.match(js, /NO_NORMALIZED_ROWS_AFTER_CONTINUATION/);
+  assert.match(js, /continuationJobId/);
+  assert.match(js, /RGDH_HYBRID_CONTINUATION_TIMEOUT_MS/);
+});
+
 test('extension build includes YKS diagnostic bridge file', () => {
   const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
 

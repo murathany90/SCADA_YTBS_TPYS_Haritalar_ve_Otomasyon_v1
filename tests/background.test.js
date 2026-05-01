@@ -8,6 +8,8 @@ const backgroundPath = path.join(__dirname, '..', 'background.js');
 const backgroundCode = fs.readFileSync(backgroundPath, 'utf8');
 const rgdhApiClientPath = path.join(__dirname, '..', 'rgdh-api-client.js');
 const rgdhApiClientCode = fs.readFileSync(rgdhApiClientPath, 'utf8');
+const rgdhCsvPath = path.join(__dirname, '..', 'rgdh-csv.js');
+const rgdhCsvCode = fs.readFileSync(rgdhCsvPath, 'utf8');
 const diagnosticsPath = path.join(__dirname, '..', 'rgdh-diagnostics.js');
 const diagnosticsCode = fs.existsSync(diagnosticsPath) ? fs.readFileSync(diagnosticsPath, 'utf8') : '';
 
@@ -53,6 +55,7 @@ function loadBackground(options = {}) {
   context.globalThis = context;
   vm.createContext(context);
   vm.runInContext(rgdhApiClientCode, context);
+  vm.runInContext(rgdhCsvCode, context);
   if (diagnosticsCode) vm.runInContext(diagnosticsCode, context);
   vm.runInContext(backgroundCode, context);
   return context;
@@ -217,6 +220,39 @@ test('rgdhPageFetchMainWorld allows slow YKS responses up to 60 seconds', async 
 
   assert.equal(result.ok, true);
   assert.equal(timeoutMs, 60000);
+});
+
+test('rgdhPageFetchMainWorld allows hybrid CSV fallback responses up to fifteen minutes', async () => {
+  let timeoutMs = 0;
+  const context = loadBackground({
+    setTimeout: (_fn, ms) => {
+      timeoutMs = ms;
+      return 78;
+    },
+    clearTimeout: () => {},
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json;charset=UTF-8' },
+      json: async () => []
+    })
+  });
+  context.localStorage = makeStorage({ authenticationToken: 'slow-hybrid-csv-token' });
+  context.sessionStorage = makeStorage({});
+
+  const result = await context.rgdhPageFetchMainWorld({
+    endpoint: '/api/rgdh-wind-busbar-data-csv',
+    params: {
+      'measurementDate.greaterOrEqualThan': '2026-03-31T21:00:00Z',
+      'measurementDate.lessThan': '2026-04-01T21:00:00Z',
+      'busbarId.equals': '10933818954',
+      sort: 'measurementDate,asc'
+    },
+    timeoutMs: 900000
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(timeoutMs, 900000);
 });
 
 test('rgdhPageFetchMainWorld omits page query when caller does not provide page', async () => {
@@ -571,7 +607,7 @@ test('handleRgdhFetch reports one RES/GES hourly timeout summary when all hours 
   assert.match(result.partialErrors[0].message, /24 RES\/GES saatlik YKS istegi zaman asimina ugradi/i);
 });
 
-test('handleRgdhFetch retries auxiliary RES/GES with display busbar id when resolved internal id times out', async () => {
+test('handleRgdhFetch starts CSV-first continuation instead of display id retry when hybrid internal probes time out', async () => {
   const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => [] }) });
   const calls = [];
   context.runRgdhPageFetchInYksTab = async (payload) => {
@@ -603,17 +639,15 @@ test('handleRgdhFetch retries auxiliary RES/GES with display busbar id when reso
   const internalCalls = windCalls.filter((call) => String(call.params['busbarId.equals']) === '10933818957');
   const displayCalls = windCalls.filter((call) => String(call.params['busbarId.equals']) === '5052');
 
-  assert.equal(displayCalls.length, 24);
+  assert.equal(displayCalls.length, 0);
   assert.equal(internalCalls[0].params.page, undefined);
   assert.equal(internalCalls[0].params.size, 60);
-  assert.equal(displayCalls[0].params.page, undefined);
-  assert.equal(displayCalls[0].params.size, 60);
-  assert.equal(internalCalls.some((call) => call.params.page === undefined && call.params['measurementDate.greaterOrEqualThan'] === '2026-03-31T21:00:00Z'), true);
-  assert.equal(result.logs.some((log) => log.detail?.fallbackPhase === 'hybrid-yks-ui-window'), true);
-  assert.equal(result.windRows.length, 24);
-  assert.deepEqual(Array.from(result.busbarInternalIds), ['5052']);
+  assert.equal(internalCalls.length <= 3, true);
+  assert.equal(result.windRows.length, 0);
+  assert.equal(result.continuationPayload?.busbarId, '10933818957');
+  assert.equal(result.continuationPayload?.preferCsvFallback, true);
   assert.equal(result.partialErrors.some((error) => error.candidateBusbarId === '10933818957'), true);
-  assert.equal(result.logs.some((log) => log.detail?.candidateBusbarId === '5052' && log.detail?.hybridAuxiliary === true), true);
+  assert.equal(result.logs.some((log) => log.detail?.fallbackPhase === 'hybrid-yks-fast-probe'), true);
 });
 
 test('handleRgdhFetch uses hybrid defaults and tries page-less windows before hourly/probe fallbacks', async () => {
@@ -656,15 +690,13 @@ test('handleRgdhFetch uses hybrid defaults and tries page-less windows before ho
   assert.equal(internalWindowCalls.length >= 1, true);
   assert.equal(internalCalls[0].params.page, undefined);
   assert.equal(internalCalls[0].params.size, 60);
-  assert.equal(internalCalls[0].timeoutMs, 45000);
-  assert.equal(result.logs.some((log) => log.detail?.candidateBusbarId === '10933818957' && log.detail?.fallbackPhase === 'hybrid-yks-ui-window'), true);
-  assert.equal(displayCalls[0].params.page, undefined);
-  assert.equal(displayCalls[0].params.size, 60);
-  assert.equal(displayCalls[0].params['measurementDate.greaterOrEqualThan'], '2026-04-30T21:00:00Z');
-  assert.equal(displayCalls[0].timeoutMs, 45000);
+  assert.equal(internalCalls[0].timeoutMs, 15000);
+  assert.equal(result.logs.some((log) => log.detail?.candidateBusbarId === '10933818957' && log.detail?.fallbackPhase === 'hybrid-yks-fast-probe'), true);
+  assert.equal(displayCalls.length, 0);
+  assert.equal(result.continuationPayload?.preferCsvFallback, true);
 });
 
-test('handleRgdhFetch tries full-day fallback for an auxiliary RES/GES internal id before display id fallback', async () => {
+test('handleRgdhFetch skips slow full-day fallback when hybrid fast probes produce no rows', async () => {
   const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => [] }) });
   const calls = [];
   context.runRgdhPageFetchInYksTab = async (payload) => {
@@ -693,12 +725,16 @@ test('handleRgdhFetch tries full-day fallback for an auxiliary RES/GES internal 
     }
   });
 
-  assert.equal(result.windRows.length, 1);
+  assert.equal(result.windRows.length, 0);
   assert.equal(calls.some((call) => String(call.params['busbarId.equals']) === '5052'), false);
-  assert.equal(result.logs.some((log) => /tam gun sayfali fallback/i.test(log.message)), true);
+  assert.equal(calls.some((call) => {
+    return call.params['measurementDate.greaterOrEqualThan'] === '2026-04-30T21:00:00Z'
+      && call.params['measurementDate.lessThan'] === '2026-05-01T21:00:00Z';
+  }), false);
+  assert.equal(result.continuationPayload?.preferCsvFallback, true);
 });
 
-test('handleRgdhFetch summarizes failed candidate ids for auxiliary RES/GES when all candidates time out', async () => {
+test('handleRgdhFetch summarizes hybrid fast-probe failure and creates continuation when all probes time out', async () => {
   const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => [] }) });
   const calls = [];
   context.runRgdhPageFetchInYksTab = async (payload) => {
@@ -719,13 +755,12 @@ test('handleRgdhFetch summarizes failed candidate ids for auxiliary RES/GES when
   });
 
   assert.equal(result.windRows.length, 0);
-  assert.equal(calls.filter((call) => call.endpoint === '/api/rgdh-wind-busbar-data').length > 31, true);
-  assert.equal(result.partialErrors.length, 1);
-  assert.equal(result.partialErrors[0].errorType, 'YKS_HOURLY_TIMEOUT');
-  assert.deepEqual(Array.from(result.partialErrors[0].candidateBusbarIds), ['10933818957', '5052']);
-  assert.match(result.partialErrors[0].message, /tum aday RES\/GES busbar id degerleri basarisiz/i);
+  assert.equal(calls.filter((call) => call.endpoint === '/api/rgdh-wind-busbar-data').length <= 3, true);
+  assert.equal(result.partialErrors.some((error) => error.errorType === 'INCOMPLETE_HYBRID_FETCH'), true);
+  assert.equal(result.continuationPayload?.preferCsvFallback, true);
+  assert.deepEqual(Array.from(result.continuationPayload?.baseRows || []), []);
   assert.equal(result.logs.some((log) => log.detail?.displayBusbarId === '5052' && log.detail?.hybridAuxiliary === true), true);
-  assert.equal(result.logs.some((log) => log.detail?.fallbackPhase === 'hybrid-yks-ui-window'), true);
+  assert.equal(result.logs.some((log) => log.detail?.fallbackPhase === 'hybrid-yks-fast-probe'), true);
 });
 
 test('handleRgdhFetch treats string hasAuxiliarySource as hybrid auxiliary', async () => {
@@ -749,7 +784,8 @@ test('handleRgdhFetch treats string hasAuxiliarySource as hybrid auxiliary', asy
   });
 
   const windCalls = calls.filter((call) => call.endpoint === '/api/rgdh-wind-busbar-data');
-  assert.equal(windCalls.some((call) => String(call.params['busbarId.equals']) === '6002'), true);
+  assert.equal(windCalls.some((call) => String(call.params['busbarId.equals']) === '9490732369'), true);
+  assert.equal(windCalls.some((call) => call.params.page === undefined), true);
 });
 
 test('handleRgdhFetch uses page-less hourly windows for auxiliary RES/GES before hourly timeout fails the job', async () => {
@@ -786,7 +822,9 @@ test('handleRgdhFetch uses page-less hourly windows for auxiliary RES/GES before
   assert.equal(calls[0].endpoint, '/api/rgdh-wind-busbar-data');
   assert.equal(calls[0].params.page, undefined);
   assert.equal(calls[0].params.size, 60);
-  const rangeCall = calls.find((call) => call.endpoint === '/api/rgdh-wind-busbar-data' && call.params.page === undefined);
+  const rangeCall = calls.find((call) => call.endpoint === '/api/rgdh-wind-busbar-data'
+    && call.params.page === undefined
+    && call.params['measurementDate.greaterOrEqualThan'] === '2026-04-30T21:00:00Z');
   assert.ok(rangeCall);
   assert.equal(rangeCall.params['measurementDate.greaterOrEqualThan'], '2026-04-30T21:00:00Z');
   assert.equal(rangeCall.params['measurementDate.lessThan'], '2026-04-30T22:00:00Z');
@@ -1174,6 +1212,82 @@ test('handleRgdhFetchStart creates a continuation job for partial hybrid results
   assert.equal(continuation.result.rowCounts.windRows, 2);
 });
 
+test('handleRgdhFetchStart creates CSV-first continuation when hybrid fast probes return zero rows', async () => {
+  const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  const calls = [];
+  let continuationPayload = null;
+  context.runRgdhPageFetchInYksTab = async (payload) => {
+    calls.push(payload);
+    return { ok: false, error: 'signal is aborted without reason', errorType: 'PAGE_FETCH_TIMEOUT' };
+  };
+  context.runRgdhHybridContinuationJob = async (payload) => {
+    continuationPayload = payload;
+    return { ok: true, conventionalRows: [], windRows: [], domRows: [], partialErrors: [], logs: [] };
+  };
+
+  const started = await context.handleRgdhFetchStart({
+    localDate: '2026-05-01',
+    sourceType: 'WIND',
+    busbarInternalIds: ['9490732369'],
+    selectedBusbar: { busbarId: '6002', busbarName: 'AKYEL-1 RES', sourceType: 'WIND', hasAuxiliarySource: true },
+    windRangeEndUtc: '2026-05-01T06:00:00Z',
+    jobTimeoutMs: 300000
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const completed = await context.handleRgdhFetchStatus({ jobId: started.jobId });
+
+  assert.match(completed.result.continuationJobId, /^rgdh-cont-/);
+  assert.equal(continuationPayload.busbarId, '9490732369');
+  assert.equal(continuationPayload.preferCsvFallback, true);
+  assert.equal(Array.isArray(continuationPayload.baseRows), true);
+  assert.equal(continuationPayload.baseRows.length, 0);
+  assert.equal(continuationPayload.missingWindows.length, 9);
+  assert.equal(continuationPayload.missingWindows[0].startUtc, '2026-04-30T21:00:00Z');
+  assert.equal(continuationPayload.missingWindows.at(-1).endUtc, '2026-05-01T06:00:00Z');
+
+  const windApiCalls = calls.filter((call) => call.endpoint === '/api/rgdh-wind-busbar-data');
+  assert.equal(windApiCalls.length <= 3, true);
+  assert.equal(windApiCalls.every((call) => call.params.page === undefined), true);
+  assert.equal(windApiCalls.every((call) => call.timeoutMs <= 15000), true);
+});
+
+test('handleRgdhFetchStart exposes continuation progress logs while CSV fallback is still running', async () => {
+  const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  context.handleRgdhFetch = async () => ({
+    ok: true,
+    conventionalRows: [],
+    windRows: [],
+    domRows: [],
+    partialErrors: [{ errorType: 'INCOMPLETE_HYBRID_FETCH', message: '24 hibrit pencere eksik.' }],
+    logs: [],
+    continuationPayload: {
+      sourceType: 'WIND',
+      localDate: '2026-04-01',
+      endpoint: '/api/rgdh-wind-busbar-data',
+      busbarId: '10933818954',
+      baseRows: [],
+      preferCsvFallback: true,
+      missingWindows: [{ startUtc: '2026-03-31T21:00:00Z', endUtc: '2026-04-01T21:00:00Z' }]
+    }
+  });
+  context.runRgdhHybridContinuationJob = async () => new Promise(() => {});
+
+  const started = await context.handleRgdhFetchStart({
+    localDate: '2026-04-01',
+    sourceType: 'WIND',
+    busbarInternalIds: ['10933818954'],
+    selectedBusbar: { busbarId: '5902', busbarName: 'BAĞLAR RES', sourceType: 'WIND', hasAuxiliarySource: true }
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const completed = await context.handleRgdhFetchStatus({ jobId: started.jobId });
+  const continuationId = completed.result.continuationJobId;
+  const continuation = await context.handleRgdhFetchStatus({ jobId: continuationId });
+
+  assert.equal(continuation.status, 'running');
+  assert.equal(continuation.logs.some((log) => log.detail?.fallbackPhase === 'hybrid-yks-csv-fallback'), true);
+  assert.equal(continuation.logs.some((log) => log.detail?.preferCsvFallback === true), true);
+});
+
 test('hybrid continuation job merges missing rows without duplicates', async () => {
   const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
   context.runRgdhPageFetchInYksTab = async () => ({
@@ -1197,6 +1311,82 @@ test('hybrid continuation job merges missing rows without duplicates', async () 
 
   assert.deepEqual(Array.from(result.windRows.map((row) => row.id)), [1, 2]);
   assert.equal(result.partialErrors.length, 0);
+});
+
+test('hybrid continuation job with empty base rows prefers CSV fallback without page or size', async () => {
+  const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  const calls = [];
+  context.runRgdhPageFetchInYksTab = async (payload) => {
+    calls.push(payload);
+    if (payload.endpoint !== '/api/rgdh-wind-busbar-data-csv') {
+      return { ok: false, error: 'hourly continuation should not run before CSV', errorType: 'PAGE_FETCH_TIMEOUT' };
+    }
+    return {
+      ok: true,
+      rows: [{
+        id: 15233560268,
+        measurementDate: '2026-05-01T05:00:00Z',
+        busbar: { id: 9490732369, busbarId: 6002, busbarName: 'AKYEL-1 RES', busbarType: 'WIND' },
+        sumPgenActive: 38.51,
+        sumPgenReactive: 0.99
+      }],
+      totalCount: 1
+    };
+  };
+
+  const result = await context.runRgdhHybridContinuationJob({
+    sourceType: 'WIND',
+    endpoint: '/api/rgdh-wind-busbar-data',
+    localDate: '2026-05-01',
+    busbarId: '9490732369',
+    baseRows: [],
+    missingWindows: [
+      { startUtc: '2026-04-30T21:00:00Z', endUtc: '2026-04-30T22:00:00Z' },
+      { startUtc: '2026-04-30T22:00:00Z', endUtc: '2026-04-30T23:00:00Z' }
+    ],
+    preferCsvFallback: true,
+    allowCsvFallback: true,
+    jobTimeoutMs: 420000
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].endpoint, '/api/rgdh-wind-busbar-data-csv');
+  assert.equal(calls[0].params['busbarId.equals'], '9490732369');
+  assert.equal(calls[0].params.page, undefined);
+  assert.equal(calls[0].params.size, undefined);
+  assert.equal(result.windRows.length, 1);
+  assert.equal(result.partialErrors.length, 0);
+  assert.equal(result.logs.some((log) => log.detail?.fallbackPhase === 'hybrid-yks-csv-fallback'), true);
+});
+
+test('wind CSV fallback parses text/csv responses into wind rows', async () => {
+  const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  context.runRgdhPageFetchInYksTab = async () => ({
+    ok: true,
+    rows: [],
+    responseContentType: 'text/csv;charset=UTF-8',
+    responseText: [
+        'Olcum Zamani;Bara Adi;Bara ID;YKS Ic Bara ID;TPYS Bara Gerilim Set;TPYS Bara Gerilim Dusumu;Toplam Unite Pgen Aktif (MW);Toplam Unite Qgen Reaktif (MVAr);DI MVAR Onay Durumu;AI MVAR Onay Durumu',
+        '"1 May 2026 08:00:00";"AKYEL-1 RES";6002;9490732369;"158,00";"4,00";"12,50";"1,25";"0";"1"'
+      ].join('\n')
+  });
+
+  const fetched = await context.fetchRgdhWindBusbarCsvRange({
+    api: context.getRgdhApiClient(),
+    source: 'WIND',
+    localDate: '2026-05-01',
+    busbarId: '9490732369',
+    startUtc: '2026-04-30T21:00:00Z',
+    endUtc: '2026-05-01T06:00:00Z',
+    timeoutMs: 420000,
+    deadlineAt: Date.now() + 420000
+  });
+
+  assert.equal(fetched.rows.length, 1);
+  assert.equal(fetched.rows[0].measurementDate, '2026-05-01T05:00:00Z');
+  assert.equal(fetched.rows[0].busbar.id, 9490732369);
+  assert.equal(fetched.rows[0].sumPgenActive, 12.5);
+  assert.equal(fetched.partialErrors.length, 0);
 });
 
 test('RGDH fetch jobs expose status snapshots and keep logs without blocking the popup', async () => {

@@ -20,6 +20,8 @@
   const el = {};
   const RGDH_STANDARD_JOB_TIMEOUT_MS = 60000;
   const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;
+  const RGDH_HYBRID_CONTINUATION_TIMEOUT_MS = 900000;
+  const RGDH_HYBRID_CONTINUATION_POLL_GRACE_MS = 60000;
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -272,7 +274,8 @@
       appendFetchLogs(status?.logs || []);
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       if (status?.status === 'completed') {
-        const result = await hydrateFetchResultRows(started.jobId, status.result || {});
+        let result = await hydrateFetchResultRows(started.jobId, status.result || {});
+        result = await waitForContinuationFetchJob(result);
         const hasWarnings = (result.partialErrors || []).length || !((result.rowCounts?.apiRows ?? ((result.conventionalRows?.length || 0) + (result.windRows?.length || 0))));
         pushFetchLog(hasWarnings ? 'warn' : 'success', 'Job', `YKS cekim isi tamamlandi (${elapsed} sn).`, { transport: 'background-job', rowCounts: result.rowCounts || {} });
         return result;
@@ -282,6 +285,77 @@
       setStatus(`YKS verisi cekiliyor... (${elapsed} sn)`);
     }
     throw new Error('YKS veri cekme isi zaman asimina ugradi.');
+  }
+
+  async function waitForContinuationFetchJob(parentResult) {
+    const continuationJobId = parentResult?.continuationJobId || '';
+    if (!continuationJobId || !RGDH_DOM_BRIDGE.getRgdhFetchJobStatus) return parentResult || {};
+
+    const parentApiRows = Number(parentResult?.rowCounts?.apiRows ?? ((parentResult?.conventionalRows?.length || 0) + (parentResult?.windRows?.length || 0)));
+    const previousActiveJobId = state.activeFetchJobId;
+    state.activeFetchJobId = continuationJobId;
+    const waitBudgetMs = RGDH_HYBRID_CONTINUATION_TIMEOUT_MS + RGDH_HYBRID_CONTINUATION_POLL_GRACE_MS;
+    pushFetchLog('info', 'Job', `Hibrit YKS tamamlama isi bekleniyor: ${continuationJobId}`, {
+      continuationJobId,
+      parentJobId: previousActiveJobId,
+      transport: 'background-job',
+      jobTimeoutMs: RGDH_HYBRID_CONTINUATION_TIMEOUT_MS,
+      waitBudgetMs
+    });
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < waitBudgetMs) {
+      await delay(1000);
+      const status = await RGDH_DOM_BRIDGE.getRgdhFetchJobStatus(continuationJobId);
+      appendFetchLogs(status?.logs || []);
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      if (status?.status === 'completed') {
+        const continuationResult = await hydrateFetchResultRows(continuationJobId, status.result || {});
+        pushFetchLog('success', 'Job', `Hibrit YKS tamamlama isi tamamlandi (${elapsed} sn).`, {
+          continuationJobId,
+          rowCounts: continuationResult.rowCounts || {},
+          transport: 'background-job'
+        });
+        state.activeFetchJobId = previousActiveJobId;
+        return {
+          ...continuationResult,
+          parentJobId: previousActiveJobId,
+          continuationJobId,
+          continuationCompleted: true
+        };
+      }
+      if (status?.status === 'failed') {
+        state.activeFetchJobId = previousActiveJobId;
+        return buildContinuationNoRowsResult(parentResult, status.error || status, parentApiRows);
+      }
+      if (status?.status === 'cancelled') {
+        state.activeFetchJobId = previousActiveJobId;
+        return buildContinuationNoRowsResult(parentResult, { message: 'Hibrit YKS tamamlama isi iptal edildi.', errorType: 'JOB_CANCELLED' }, parentApiRows);
+      }
+      setStatus(`Hibrit YKS tamamlaniyor... (${elapsed} sn)`);
+    }
+
+    state.activeFetchJobId = previousActiveJobId;
+    return buildContinuationNoRowsResult(parentResult, {
+      message: 'Hibrit YKS tamamlama isi zaman asimina ugradi.',
+      errorType: 'NO_NORMALIZED_ROWS_AFTER_CONTINUATION'
+    }, parentApiRows);
+  }
+
+  function buildContinuationNoRowsResult(parentResult, error, parentApiRows) {
+    if (parentApiRows > 0) return parentResult || {};
+    const detail = {
+      errorType: 'NO_NORMALIZED_ROWS_AFTER_CONTINUATION',
+      errorClass: 'NO_NORMALIZED_ROWS_AFTER_CONTINUATION',
+      message: error?.message || error?.error || 'Hibrit YKS tamamlama isi kayit uretmedi.',
+      continuationJobId: parentResult?.continuationJobId || '',
+      rowCounts: parentResult?.rowCounts || {}
+    };
+    return {
+      ...(parentResult || {}),
+      partialErrors: [...(parentResult?.partialErrors || []), detail],
+      continuationCompleted: true
+    };
   }
 
   async function hydrateFetchResultRows(jobId, result) {
@@ -368,9 +442,13 @@
   function setFetchCompletionStatus(response) {
     const partialCount = response?.partialErrors?.length || 0;
     if (!state.apiRows.length) {
-      const message = 'YKS cekimi tamamlandi ancak normalize API kaydi olusmadi.';
-      pushError('YKS', message, { errorType: 'NO_NORMALIZED_ROWS', rowCounts: response?.rowCounts || {} });
-      pushFetchLog('error', 'Normalize', message, { errorType: 'NO_NORMALIZED_ROWS', rowCounts: response?.rowCounts || {} });
+      const afterContinuation = (response?.partialErrors || []).some((item) => String(item?.errorType || item?.errorClass || '') === 'NO_NORMALIZED_ROWS_AFTER_CONTINUATION');
+      const errorType = afterContinuation ? 'NO_NORMALIZED_ROWS_AFTER_CONTINUATION' : 'NO_NORMALIZED_ROWS';
+      const message = afterContinuation
+        ? 'YKS cekimi ve hibrit tamamlama tamamlandi ancak normalize API kaydi olusmadi.'
+        : 'YKS cekimi tamamlandi ancak normalize API kaydi olusmadi.';
+      pushError('YKS', message, { errorType, rowCounts: response?.rowCounts || {}, continuationJobId: response?.continuationJobId || '' });
+      pushFetchLog('error', 'Normalize', message, { errorType, rowCounts: response?.rowCounts || {}, continuationJobId: response?.continuationJobId || '' });
       setStatus('YKS cekimi basarisiz: kayit yok');
       return;
     }
@@ -1071,7 +1149,10 @@
       'resolverMethod', 'resolverPageCount', 'transport', 'apiRows', 'domRows', 'partialErrors',
       'metricSummary', 'rawFieldKeys', 'metricEmptyRows', 'failedHours', 'attemptedHours',
       'failedChunks', 'attemptedChunks', 'requestUrl', 'pageTimeoutMs', 'concurrency',
-      'jobId', 'jobTimeoutMs'
+      'waitBudgetMs',
+      'jobId', 'jobTimeoutMs', 'continuationJobId', 'parentJobId', 'isHybridContinuation',
+      'missingWindows', 'responseTotalCount', 'responseLink', 'fallbackPhase',
+      'preferCsvFallback', 'csvFallbackRows', 'responseContentType', 'probedWindows'
     ].forEach((key) => {
       if (detail[key] !== undefined) allowed[key] = detail[key];
     });

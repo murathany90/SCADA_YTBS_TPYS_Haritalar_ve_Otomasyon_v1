@@ -8,3 +8,8 @@ __pycache__/
 .mcp.json
 data/scada_auth.json
 *.log
+
+# Data files
+*.pdf
+*.xlsx
+*.xls

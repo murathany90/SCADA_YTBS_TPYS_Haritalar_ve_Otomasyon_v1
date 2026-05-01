@@ -55,3 +55,35 @@
 - Tam veri önceliği arka plan continuation job’a taşınacak.
 - AKYEL için 20 saatlik beklenti yaklaşık `1200` satır, tam gün için `1440` satırdır.
 - Hibrit olmayan RES/GES ve konvansiyonel çekim davranışı korunacak.
+
+
+
+**Hibrit Çekim Kapasite Raporu**
+
+Kısa cevap: **Akyel tipi hibrit santralde güvenli kapasite şu an tek çalıştırmada 1 gün**. Bir ayı normal santral gibi tek job içinde beklemek doğru değil.
+
+Ölçülen canlı Akyel sonucu:
+- Tarih: `2026-05-01`
+- İç ID: `9490732369`
+- CSV fallback süresi: `384 sn`
+- Toplam kullanıcı bekleme süresi: yaklaşık `400 sn`
+- Normalize edilen satır: `1260`
+- Bu, yaklaşık `21 saat` dakikalık veri demek. Tam gün olsaydı beklenen üst sınır `1440` satır.
+
+**Kapasite hesabı**
+
+| Senaryo | Güvenli veri aralığı | Tahmini süre |
+|---|---:|---:|
+| Normal santral | 30 gün | ~60 sn |
+| Akyel tipi hibrit, mevcut akış | 1 gün | ~6.5-7 dk |
+| Akyel tipi hibrit, 7 gün ardışık | 7 gün | ~45-50 dk |
+| Akyel tipi hibrit, 30 gün ardışık | 30 gün | ~3 saat 15 dk - 3 saat 30 dk |
+
+Önemli sınırlama: mevcut kodda çok günlük seçim yapılsa bile parent job birden fazla `continuationPayload` üretebilir, fakat otomatik continuation tarafında pratikte **ilk continuation job takip ediliyor**. Bu yüzden Akyel gibi CSV fallback isteyen hibritlerde “1 aylık aralığı seçip hepsini tek seferde alayım” güvenilir değil.
+
+**Sonuç**
+
+- Erciyes tipi, page-less API penceresinden hızlı satır döndüren hibritlerde kapasite daha yüksek olabilir.
+- Akyel tipi, CSV fallback’e düşen hibritlerde güvenli operasyon: **1 gün / 1 çekim**.
+- Bir aylık hibrit veri için bugünkü akışla en doğru yöntem: gün gün çekmek.
+- Bir aylık hibrit çekimi normal santral hızına yaklaşsın istenirse ayrıca batch continuation queue gerekir: her gün için ayrı CSV continuation, sırayla çalışma, resume/progress ve hata sonrası kaldığı günden devam etme.

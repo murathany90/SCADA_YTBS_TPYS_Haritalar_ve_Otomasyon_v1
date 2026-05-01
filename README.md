@@ -520,6 +520,8 @@ YKS sayfası ile köprü kuran kısım `rgdh-dom-bridge.js` dosyasında toplanı
 Ekranın dört ana sekmesi vardır: **Ham Data**, **Günlük RGDH İzleme**, **RGDH Grafik Rapor**, **RGDH Testleri**.
 Bu dört sekme aynı veri havuzunu okur.
 Veri havuzunda API satırları, CSV satırları ve DOM fallback satırları ayrı tutulur.
+Hibrit RES/GES baralarda YKS API'nin saatlik veya page'li isteklerde takılabildiği durumlar için özel hızlı prob, continuation job ve CSV fallback akışı bulunur.
+Bu hibrit akış, AKYEL-1 RES gibi page-less API pencerelerinde satır dönmeyen ama YKS CSV endpointinden veri alınabilen santraller için tasarlanmıştır.
 Sekmelerde gösterilen tablolar, üst filtrelerin sonucuna göre yeniden hesaplanır.
 Üst filtreler tarih, bitiş tarihi, veri tipi ve bara seçimi alanlarından oluşur.
 Veri tipi `Tümü`, `Konvansiyonel` veya `RES/GES` olabilir.
@@ -541,8 +543,13 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - `Görünen bara ID`: YKS ekranında veya katalogda kullanıcıya görünen bara numarasıdır.
 - `Hibrit yardımcı kaynak`: RES/GES barasında ana kaynak yanında yardımcı GES veya yardımcı ünite bulunmasıdır.
 - `Job`: Uzun YKS çekimini background service worker içinde yürüten izleme işidir.
+- `Continuation job`: Parent YKS job'un hızlı veya kısmi sonuçtan sonra başlattığı, özellikle hibrit eksik pencereleri tamamlayan ikinci background işidir.
 - `Row chunk`: Büyük cevaplarda satırların status yanıtı yerine parça parça taşınmasıdır.
 - `Partial error`: Bazı saatler veya aday ID'ler başarısız olsa bile işin tamamen düşmemesi için saklanan uyarıdır.
+- `Fast probe`: Hibrit RES/GES için tam gün taramaya başlamadan önce en fazla üç page'siz, kısa timeout'lu API penceresinin denenmesidir.
+- `CSV fallback`: Hibrit continuation içinde `/api/rgdh-wind-busbar-data-csv` endpointinin önce denenmesidir.
+- `preferCsvFallback`: Continuation payload'ında CSV yolunun saatlik API denemelerinden önce kullanılacağını gösteren flag'dir.
+- `missingWindows`: Hibrit job'un parent aşamasında tamamlayamadığı UTC pencere listesidir.
 - `Diagnostic event`: Background, content script veya YKS sayfasından toplanan debug kaydıdır.
 - `Fetch log`: Kullanıcının panelde gördüğü, her aşamayı okunabilir şekilde anlatan iş günlüğüdür.
 
@@ -568,6 +575,8 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - `Hata Detayları` butonu hata panelini açar.
 - Hata panelinde hem yerel hata listesi hem de network/console diagnostikleri bulunur.
 - `YKS Çekim Detayları` paneli her job sırasında otomatik açılır.
+- Hibrit continuation başlarsa aynı panel parent job ve continuation job loglarını tek kullanıcı işlemi gibi göstermeye devam eder.
+- Continuation beklenirken kullanıcıya erken `kayıt yok` final hatası gösterilmez.
 
 ### Sekme 1: Ham Data
 
@@ -723,7 +732,7 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Fetch log paneli açılır.
 - Butonlar job süresince kilitlenir.
 - Payload içine `localDate`, `endDate`, `sourceType`, `busbarInternalIds`, `selectedBusbar` ve `jobTimeoutMs` yazılır.
-- Hibrit yardımcı RES/GES için job timeout değeri 180 saniyeye çıkarılır.
+- Hibrit yardımcı RES/GES için parent job timeout değeri 300 saniyeye çıkarılır.
 - Normal işler için job timeout değeri 60 saniye civarında tutulur.
 - Payload `RGDH_DOM_BRIDGE.startRgdhFetchJob()` üzerinden background'a gönderilir.
 - Eski köprü yoksa doğrudan request yolu kullanılabilir.
@@ -733,12 +742,16 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Status tamamlandığında satırlar doğrudan status içinde taşınmaz.
 - Büyük satırlar için `getRgdhFetchRows(jobId, kind, offset, limit)` çağrıları yapılır.
 - UI `conventionalRows`, `windRows` ve `domRows` parçalarını hydrate eder.
+- Parent job `continuationJobId` döndürürse UI continuation job'u otomatik poll eder.
+- Continuation job tamamlanınca onun `windRows`, `conventionalRows` ve `domRows` parçaları hydrate edilir.
+- Continuation satırları parent job'un sonucu gibi aynı normalize akışına verilir.
 - Gelen API satırları normalizer'dan geçirilir.
 - Normalize edilen satırlar katalog bilgisiyle zenginleştirilir.
 - Ekran istatistikleri ve sekmeler yeniden render edilir.
 - Partial error varsa iş tamamen başarısız sayılmayabilir.
 - Partial error kullanıcıya hata panelinde ve fetch log panelinde gösterilir.
-- API satırı gelmediyse durum `YKS çekimi başarısız: kayıt yok` mesajına dönebilir.
+- API satırı gelmediyse ve continuation yoksa durum `YKS çekimi başarısız: kayıt yok` mesajına dönebilir.
+- Continuation varsa bu hata ancak continuation da satır getiremezse final hale gelir.
 
 ### YKS'den Çek Akışı: Background Job Katmanı
 
@@ -758,6 +771,12 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Satırların parça parça taşınması Chrome mesaj boyutu sorunlarını azaltır.
 - Her job sonunda diagnostik event üretilir.
 - Diagnostik event içinde job ID, kaynak tipi, seçili bara, iç ID, satır sayıları ve hata sınıfı bulunur.
+- Hibrit parent job satır getirmese bile continuation payload üretebilir.
+- Continuation job ID formatı `rgdh-cont-{timestamp}-{seq}` şeklindedir.
+- Continuation job satırları da `rowStore` içinde parça parça saklanır.
+- Continuation job parent işin `parentJobId` bilgisini loglarda taşır.
+- Hibrit continuation için background çalışma bütçesi 900 saniyedir.
+- UI, background continuation sonucunu kaçırmamak için bu bütçenin üstüne 60 saniye poll toleransı ekler.
 - Job hataya düşerse hata `sanitizeRgdhBackgroundError()` ile güvenli hale getirilir.
 - Hata loglarında Authorization, cookie ve token benzeri alanlar redakte edilir.
 
@@ -775,11 +794,14 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Bitiş tarihi hariç tutulur.
 - Bugünün hibrit range fallback'inde bitiş zamanı gün sonunu aşmaz.
 - Bugünün range fallback'inde bitiş zamanı mevcut zamana kadar kısaltılabilir.
+- Bugünün hibrit fast-probe ve CSV fallback aralığında bitiş zamanı mevcut YKS bitiş zamanına kadar kısaltılabilir.
+- AKYEL-1 RES örneğinde `2026-05-01` yerel günü için tam aralık başlangıcı `2026-04-30T21:00:00Z` olur.
 
 ### Endpoint ve Parametre Üretimi
 
 - Konvansiyonel veri endpointi `/api/rgdh-conventional-busbar-data` yoludur.
 - RES/GES veri endpointi `/api/rgdh-wind-busbar-data` yoludur.
+- RES/GES CSV fallback endpointi `/api/rgdh-wind-busbar-data-csv` yoludur.
 - Genel parametre endpointi `/api/general-parameter-by-name` yoludur.
 - Bara katalog endpointi `/api/busbars` yoludur.
 - `buildRgdhUrl()` yalnız izin verilen path değerlerini kabul eder.
@@ -794,6 +816,11 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Standart RES/GES saatlik sorguda `page=0` kullanılır.
 - Hibrit özel range sorguda `page` parametresi özellikle silinir.
 - Page'siz hibrit sorgu YKS ekranındaki çalışan request biçimini taklit eder.
+- Hibrit fast-probe isteklerinde `size=60`, `sort=measurementDate,asc`, `busbarId.equals={iç ID}` bulunur ve `page` bulunmaz.
+- Hibrit CSV fallback isteğinde `measurementDate.greaterOrEqualThan`, `measurementDate.lessThan`, `sort=measurementDate,asc` ve `busbarId.equals={iç ID}` bulunur.
+- Hibrit CSV fallback isteğinde `page` parametresi bulunmaz.
+- Hibrit CSV fallback isteğinde `size` parametresi zorunlu değildir; YKS endpointi geniş aralığı kendi CSV/JSON cevabında döndürebilir.
+- AKYEL-1 RES için isteklerde görünen ID `6002` değil, YKS iç ID `9490732369` `busbarId.equals` değeridir.
 
 ### Konvansiyonel YKS Çekimi
 
@@ -834,49 +861,88 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Bara adı, santral adı veya kaynak türünde yardımcı kaynak ipucu aranır.
 - `yardimci`, `hibrit` veya `auxiliary` metinleri hibrit ipucu sayılır.
 - Katalog overlay'i yardımcı kaynak GES ünitelerini işaretleyebilir.
-- Hibrit işlerde job timeout 180 saniyeye kadar uzatılır.
+- Hibrit işlerde parent job timeout 300 saniyeye kadar uzatılır.
 - Hibrit işlerde aday ID sıralaması daha dikkatli yürütülür.
 - İlk aday genellikle YKS iç bara ID değeridir.
-- Ek aday olarak görünen bara ID denenebilir.
-- Display ID fallback öncesinde probe istekleri çalışabilir.
-- Probe saatleri veri çıkma ihtimali yüksek saatlerden seçilir.
-- Amaç yanlış ID ile 24 saat beklememektir.
+- Görünen bara ID yalnız doğrulama ve log ayrımı için önemlidir; YKS API isteğinde öncelik iç bara ID değerindedir.
+- AKYEL-1 RES için doğru iç bara ID `9490732369`, görünen bara ID `6002` değeridir.
+- Hibrit fast-probe aşamasında görünen ID ile geniş deneme yapılmaz.
+- Probe pencereleri veri çıkma ihtimali yüksek ve aralığı temsil eden en fazla üç page'siz pencereden seçilir.
+- Varsayılan probe sırası son tamamlanmış saat, gün başlangıç saati ve bir önceki tamamlanmış saat mantığıyla tekilleştirilir.
+- Her fast-probe isteği 15 saniye timeout ile çalışır.
+- Fast-probe concurrency değeri 1'dir.
+- Amaç yanlış request şekliyle veya yavaş YKS pencereleriyle 24 saat beklememektir.
 
-### Hibrit Page'siz Range Fallback
+### Hibrit Page'siz Prob, Continuation ve CSV Fallback
 
 - Hibrit yardımcı RES/GES baralarda YKS backend bazı saatlik `page=0` isteklerde timeout verebilir.
-- AKYEL-1 RES incelemesinde aynı iç ID ile YKS ekranındaki geniş aralık isteğinin çalıştığı görülmüştür.
-- Bu nedenle hibrit özel fallback YKS ekranının request şekline yaklaşır.
-- Saatlik isteklerin tamamı timeout olursa page'siz range fallback devreye girer.
-- Fallback fonksiyonu `fetchRgdhWindBusbarByYksUiRange()` adını taşır.
-- Parametre üretimi `buildWindRangeParams()` ile yapılır.
-- Üretilen query içinde `measurementDate.greaterOrEqualThan` bulunur.
-- Üretilen query içinde `measurementDate.lessThan` bulunur.
-- Üretilen query içinde `busbarId.equals` bulunur.
-- Üretilen query içinde `size=60` bulunur.
-- Üretilen query içinde `sort=measurementDate,asc` bulunur.
-- Üretilen query içinde `page` bulunmaz.
-- Bu fark bilerek korunur.
-- Başlangıç cursor değeri normalde yerel gün başlangıcının UTC karşılığıdır.
-- Bitiş değeri normalde yerel gün bitişinin UTC karşılığıdır.
-- Bugün çekiliyorsa bitiş gün sonu yerine mevcut zamana kadar kısaltılabilir.
-- İlk range isteği en geniş gerekli aralığı ister.
-- Cevap 60 satırdan azsa çekim tamamlanmış kabul edilir.
-- Cevap tam 60 satırsa daha fazla veri olabileceği varsayılır.
-- Tam sayfa cevabında son satırın `measurementDate` alanı okunur.
-- Cursor son ölçüm zamanının bir dakika sonrasına taşınır.
-- Yeni istek aynı bitiş zamanına kadar tekrar gönderilir.
+- AKYEL-1 RES incelemesinde doğru iç ID ile standart page-less API pencerelerinin de 0 satır veya timeout dönebildiği görülmüştür.
+- Aynı santral için YKS CSV endpointi geniş aralıkta veri döndürebildiği için hibrit akış artık CSV-first continuation ile tamamlanır.
+- Hibrit özel akışın amacı YKS ekranının request şekline yaklaşmak, fakat 24 pencereyi tüketmeden hızlı karar vermektir.
+- Hibrit akış önce `fetchRgdhWindBusbarByYksUiFastProbeWindows()` ile en fazla üç page'siz fast-probe penceresi dener.
+- Fast-probe pencereleri tam günlük aralıktan seçilir.
+- İlk probe adayı son tamamlanmış saat veya mevcut aralığın son penceresidir.
+- İkinci probe adayı yerel gün başlangıcının UTC karşılığıdır.
+- Üçüncü probe adayı son tamamlanmış saatten bir önceki penceredir.
+- Probe pencereleri tekilleştirilir; aynı pencere iki kez sorgulanmaz.
+- Her fast-probe isteği `size=60`, `sort=measurementDate,asc`, `busbarId.equals={iç ID}` taşır.
+- Fast-probe isteklerinde `page` parametresi bulunmaz.
+- Fast-probe timeout değeri 15 saniyedir.
+- Fast-probe concurrency değeri 1'dir.
+- Fast-probe satır döndürürse mevcut page'siz saatlik akış devam eder.
+- Bu durumda gelen partial satırlar korunur ve normalize edilir.
+- Fast-probe hiç satır döndürmezse veya timeout alırsa AKYEL tipi yavaş hibrit akış kabul edilir.
+- AKYEL tipi akışta 24 saatlik API pencereleri tek tek tüketilmez.
+- Bu durumda parent job `baseRows=[]` ile continuation payload oluşturabilir.
+- Continuation payload satır olmasa bile oluşturulur.
+- Continuation payload tüm istenen YKS aralığını kapsar.
+- `2026-05-01` İstanbul günü için başlangıç `2026-04-30T21:00:00Z` olur.
+- Bugün çekiminde continuation bitişi gün sonu yerine mevcut YKS bitiş zamanına kadar kısaltılır.
+- Continuation payload içinde `missingWindows`, `preferCsvFallback=true`, `sourceKey=WIND`, `endpoint=/api/rgdh-wind-busbar-data` ve `busbarId` bulunur.
+- Parent job bu durumda `continuationJobId` döndürür.
+- Parent job 0 satır döndürse bile `continuationJobId` varsa UI bunu final `NO_NORMALIZED_ROWS` hatası saymaz.
+- UI continuation job'u otomatik poll eder.
+- Kullanıcı açısından parent job ve continuation job tek çekim işlemi gibi görünür.
+- Continuation job `runRgdhHybridContinuationJob()` ile çalışır.
+- `preferCsvFallback=true` ise continuation önce `/api/rgdh-wind-busbar-data-csv` endpointini dener.
+- CSV fallback timeout bütçesi 900 saniyedir.
+- CSV fallback isteği geniş aralığı tek seferde ister.
+- CSV fallback query içinde `measurementDate.greaterOrEqualThan` bulunur.
+- CSV fallback query içinde `measurementDate.lessThan` bulunur.
+- CSV fallback query içinde `busbarId.equals` bulunur.
+- CSV fallback query içinde `sort=measurementDate,asc` bulunur.
+- CSV fallback query içinde `page` bulunmaz.
+- CSV fallback başarılı olduğunda `csvFallbackRows` satır sayısı loglanır.
+- CSV endpoint `application/json` dönerse JSON array yolu kullanılır.
+- CSV endpoint `text/csv` veya text içerik dönerse `rgdh-csv.js` içindeki mevcut CSV parser kullanılır.
+- CSV'den ayrıştırılan WIND satırları API benzeri raw row şekline çevrilir.
+- Bu API benzeri satırlar `normalizeWindApiRow()` yoluyla mevcut normalize modele girer.
+- Yardımcı kaynak MW/MVAr alanları CSV fallback satırlarında da `auxiliarySource` ve `auxiliarySourceReactive` benzeri alanlardan taşınır.
+- CSV fallback satır getirirse continuation saatlik API denemelerine düşmeden tamamlanır.
+- CSV fallback başarısız olursa continuation mevcut missing window listesini page'siz saatlik pencerelerle tamamlamayı deneyebilir.
+- Bu ikincil continuation saatlik akışta varsayılan pencere timeout değeri 45 saniyedir.
+- Bu ikincil continuation saatlik akışta concurrency değeri 4 ile sınırlıdır.
+- Eski page'siz range fallback mantığı `fetchRgdhWindBusbarByYksUiRange()` içinde korunur.
+- Eski range fallback `buildWindRangeParams()` ile geniş aralık requesti üretebilir.
+- Eski range fallback query içinde `measurementDate.greaterOrEqualThan`, `measurementDate.lessThan`, `busbarId.equals`, `size=60` ve `sort=measurementDate,asc` bulunur.
+- Eski range fallback query içinde de `page` bulunmaz.
+- Eski range fallback tam 60 satır aldığında cursor'u son `measurementDate` sonrasına taşıyarak devam edebilir.
 - Cursor ilerlemiyorsa döngü güvenli şekilde kırılır.
 - Maksimum request sayısı limitlidir.
 - Page timeout değeri job deadline bütçesini aşmayacak şekilde clamp edilir.
-- Deadline biterse `YKS_JOB_TIMEOUT` partial error üretilir.
+- Parent deadline biterse `YKS_JOB_TIMEOUT` partial error üretilir.
+- Continuation deadline biterse continuation tarafında hata üretilir; parent satırları varsa korunur.
 - Fallback başarılı olursa saatlik timeout hatası nihai hataya dönüştürülmez.
-- Fallback loglarında `fallbackPhase=hybrid-yks-ui-range` bulunur.
-- Fallback loglarında `requestUrl` bulunur.
+- Fast-probe loglarında `fallbackPhase=hybrid-yks-fast-probe` bulunur.
+- CSV fallback loglarında `fallbackPhase=hybrid-yks-csv-fallback` bulunur.
+- Eski range fallback loglarında `fallbackPhase=hybrid-yks-ui-range` bulunabilir.
+- Fallback loglarında `requestUrl`, `missingWindows`, `responseTotalCount`, `responseLink`, `preferCsvFallback`, `csvFallbackRows` ve `continuationJobId` alanları görülebilir.
 - Fallback request URL içinde `page=` görülmemelidir.
-- Fallback request başlangıcı AKYEL-1 örneğinde `2026-04-30T21:00:00Z` olmalıdır.
-- Fallback başarı ölçütü `apiRows > 0` olmasıdır.
+- AKYEL-1 RES için fallback requestlerinde `busbarId.equals=9490732369` görülmelidir.
+- AKYEL-1 RES için `6002` yalnız görünen bara ID'dir; API requestinde kullanılmamalıdır.
+- Fallback başarı ölçütü `apiRows > 0` veya `windRows > 0` olmasıdır.
 - Fallback sonrası job final hatası `YKS_HOURLY_TIMEOUT` olmamalıdır.
+- Continuation da satır getiremezse final hata `NO_NORMALIZED_ROWS_AFTER_CONTINUATION` olabilir.
 
 ### İç Bara ID Çözümleme
 
@@ -889,19 +955,24 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Broad catalog paging sayfa sınırı ile korunur.
 - Çözümleme sonucu `busbarInternalIds` listesine yazılır.
 - İlk uygun ID asıl aday olarak denenir.
-- Hibrit işlerde görünen ID de ek aday olarak değerlendirilebilir.
+- Hibrit işlerde görünen ID log ve kullanıcı doğrulaması için saklanır.
+- AKYEL tipi hızlı-probe başarısızlığında görünen ID ile 24 saatlik tekrar yapılmaz.
 - Başarılı fallback ID cache'e yazılabilir.
 - Cache sonraki çekimlerde tekrar çözümleme maliyetini azaltır.
 - Loglarda `resolverMethod` ve `resolverPageCount` alanları bulunabilir.
 - Loglarda `displayBusbarId`, `resolvedInternalBusbarId` ve `candidateBusbarId` ayrımı önemlidir.
 - İç ID yanlışsa genellikle HTTP 200 ama 0 satır veya tüm saatlerde boş sonuç görülür.
-- İç ID doğru ama request şekli sorunluysa saatlik timeout ve page'siz range başarı paterni görülür.
+- İç ID doğru ama request şekli sorunluysa fast-probe timeout/0 satır ve CSV fallback başarı paterni görülebilir.
+- İç ID doğru, page'siz API çalışıyor ama bazı saatler eksik kalıyorsa continuation missing window tamamlaması görülebilir.
 
 ### Normalizasyon
 
 - Konvansiyonel API satırları `normalizeConventionalApiRow()` ile işlenir.
 - RES/GES API satırları `normalizeWindApiRow()` ile işlenir.
 - CSV parse sonucu `normalizeCsvParseResult()` ile ortak modele çevrilir.
+- Hibrit CSV fallback sonucu JSON array dönerse doğrudan WIND API raw row olarak işlenebilir.
+- Hibrit CSV fallback sonucu text/csv dönerse önce CSV parser ile okunur, sonra WIND API benzeri raw row'a çevrilir.
+- Bu dönüşüm sayesinde CSV fallback satırları Ham Data sekmesinde `API`/WIND akışına uyumlu normalize edilir.
 - DOM satırları `finalizeRow()` ile tamamlanır.
 - Normalize modelde yerel tarih, yerel saat ve yerel dakika alanları bulunur.
 - Normalize modelde kaynak tipi bulunur.
@@ -930,6 +1001,8 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Ölçüm CSV'si yüklenirse `state.csvRows` içine normalize edilerek eklenir.
 - CSV satırları API satırlarıyla aynı sekmelerde gösterilir.
 - CSV satırları `CSV` kaynak rozetiyle ayrılır.
+- Hibrit CSV fallback kullanıcı dosya yüklemesi değildir; background job tarafından YKS CSV endpointinden alınan satırları normalize akışına verir.
+- Hibrit CSV fallback JSON döndüğünde satırlar kaynak API satırı gibi, text/csv döndüğünde parser üzerinden dönüştürülmüş satır gibi işlenir.
 - Karşılaştırma butonu API ve CSV verisini aynı normalize model üzerinden kıyaslar.
 - Dışa aktarım Excel/TR uyumlu semicolon CSV üretir.
 
@@ -943,6 +1016,13 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Loglarda row count bilgisi bulunabilir.
 - Loglarda candidate ID bilgileri bulunabilir.
 - Loglarda fallback aşaması bulunabilir.
+- Hibrit loglarında `continuationJobId` ve `parentJobId` bilgileri bulunabilir.
+- Hibrit loglarında `missingWindows` tamamlanacak pencere sayısını gösterir.
+- Hibrit loglarında `fallbackPhase=hybrid-yks-fast-probe` hızlı prob aşamasını gösterir.
+- Hibrit loglarında `fallbackPhase=hybrid-yks-csv-fallback` CSV-first continuation aşamasını gösterir.
+- Hibrit loglarında `fallbackPhase=hybrid-yks-ui-range` eski page'siz range fallback aşamasını gösterebilir.
+- Hibrit CSV fallback loglarında `preferCsvFallback=true` ve `csvFallbackRows` alanları görünür.
+- Network özetlerinde `responseTotalCount`, `responseLink` ve `responseContentType` alanları debug için korunur.
 - Hata paneli kullanıcıya özet hata listesini gösterir.
 - Aynı hata tekrarlanırsa sayaçla birleştirilebilir.
 - Diagnostik paneli network, console, header ve response kayıtlarını gösterir.
@@ -962,8 +1042,10 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - `PAGE_FETCH_TIMEOUT` YKS sayfası içi fetch isteğinin süresinde dönmediğini gösterir.
 - `YKS_HOURLY_TIMEOUT` tüm saatlik isteklerin başarısız olduğunu gösterir.
 - `YKS_JOB_TIMEOUT` toplam job süresinin dolduğunu gösterir.
+- `INCOMPLETE_HYBRID_FETCH` hibrit çekimde bazı pencerelerin eksik kaldığını, fakat fallback/continuation denenebileceğini gösterir.
 - `MISSING_BUSBAR_SELECTION` tekli bara seçimi yapılmadığını gösterir.
 - `NO_NORMALIZED_ROWS` fetch tamamlandığı halde normalize satır oluşmadığını gösterir.
+- `NO_NORMALIZED_ROWS_AFTER_CONTINUATION` parent job ve continuation tamamlandığı halde normalize satır oluşmadığını gösterir.
 - `METRIC_FIELDS_EMPTY_SOURCE` satır geldiğini fakat metrik alanların kaynakta boş olduğunu gösterir.
 
 ### Güvenlik ve Oturum İlkeleri
@@ -988,16 +1070,30 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Veri tipi `RES/GES` seçilir.
 - Katalogdan `AKYEL-1 RES` barası seçilir.
 - `YKS'den Çek` butonuna basılır.
-- Fetch log panelinde saatlik istekler izlenir.
-- Eğer saatlik istekler timeout olursa hibrit range fallback beklenir.
-- Başarılı hibrit fallback logunda `fallbackPhase=hybrid-yks-ui-range` görülür.
-- Başarılı hibrit fallback request URL içinde `page=` olmamalıdır.
-- Başarılı hibrit fallback başlangıcı `2026-04-30T21:00:00Z` olmalıdır.
+- Fetch log panelinde önce iç ID çözümleme sonucu izlenir.
+- AKYEL-1 RES için loglarda `internalBusbarId=9490732369` ve `displayBusbarId=6002` görülmelidir.
+- Fetch log panelinde en fazla üç hızlı hibrit prob izlenir.
+- Hızlı prob loglarında `fallbackPhase=hybrid-yks-fast-probe` görülür.
+- Hızlı prob request URL içinde `page=` olmamalıdır.
+- Hızlı prob requestlerinde `size=60`, `sort=measurementDate,asc` ve `busbarId.equals=9490732369` bulunmalıdır.
+- Hızlı problar 0 satır veya timeout dönerse `hibrit YKS hizli problari sonuc vermedi; CSV tamamlama baslatilacak` logu beklenir.
+- Bu logda `preferCsvFallback=true`, `missingWindows`, `probedWindows=3` ve tam aralık bilgisi bulunmalıdır.
+- Parent job bu aşamada `continuationJobId` döndürmelidir.
+- UI `Hibrit YKS tamamlama isi bekleniyor` loguyla continuation job'u otomatik beklemelidir.
+- Continuation job loglarında `fallbackPhase=hybrid-yks-csv-fallback` görülmelidir.
+- Başarılı CSV fallback request URL içinde `/api/rgdh-wind-busbar-data-csv` bulunmalıdır.
+- Başarılı CSV fallback request URL içinde `page=` olmamalıdır.
+- Başarılı CSV fallback request URL içinde `busbarId.equals=9490732369` bulunmalıdır.
+- Başarılı CSV fallback başlangıcı `2026-04-30T21:00:00Z` olmalıdır.
+- CSV fallback logunda `pageTimeoutMs=900000`, `preferCsvFallback=true`, `csvFallbackRows` ve `responseContentType` alanları görünmelidir.
+- AKYEL-1 RES canlı doğrulamasında `2026-05-01` için 1260 API/WIND satırının normalize edildiği görülmüştür.
 - Başarılı sonuçta Ham Data sekmesinde API satırları görünmelidir.
 - Başarılı sonuçta Günlük RGDH sekmesinde ilgili saatler dolmalıdır.
 - Başarılı sonuçta final hata `YKS_HOURLY_TIMEOUT` olmamalıdır.
+- Başarılı sonuçta final hata `NO_NORMALIZED_ROWS` olmamalıdır.
+- Continuation da satır getiremezse beklenen final hata `NO_NORMALIZED_ROWS_AFTER_CONTINUATION` olmalıdır.
 - Hata devam ederse Hata Detayları CSV'si indirilmelidir.
-- CSV'de `selectedBusbar`, `internalBusbarId`, `candidateBusbarId` ve `requestUrl` kolonları kontrol edilmelidir.
+- CSV'de `selectedBusbar`, `internalBusbarId`, `candidateBusbarId`, `continuationJobId`, `fallbackPhase`, `preferCsvFallback`, `csvFallbackRows` ve `requestUrl` kolonları kontrol edilmelidir.
 - YKS Network panelinde çalışan request ile eklenti request URL'si karşılaştırılmalıdır.
 
 ### Bakım ve Test Referansları
@@ -1012,6 +1108,12 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Eklenti paketi `npm run build:extension` ile üretilir.
 - Paket smoke kontrolü `npm run smoke:extension` ile yapılır.
 - Hibrit range fallback için özel testlerde page'siz request ve cursor ilerleme doğrulanır.
+- Hibrit fast-probe testlerinde en fazla üç page'siz probe, 15 saniye timeout ve `page` parametresinin olmaması doğrulanır.
+- Akyel senaryosu testlerinde tüm hızlı problar timeout/0 satır döndüğünde parent job'un `NO_NORMALIZED_ROWS` üretmeden `continuationJobId` döndürmesi doğrulanır.
+- Boş `baseRows=[]` continuation testlerinde CSV fallback'in `/api/rgdh-wind-busbar-data-csv` endpointini `page` olmadan çağırdığı doğrulanır.
+- CSV fallback testlerinde JSON array ve text/csv dönüşlerinin WIND raw row'a çevrilip normalize edilebilir hale geldiği doğrulanır.
+- Monitor testlerinde continuation devam ederken erken `NO_NORMALIZED_ROWS` loglanmadığı doğrulanır.
+- Erciyes benzeri hızlı page-less pencere başarı testlerinde CSV fallback'e geçmeden mevcut hızlı yolun korunduğu doğrulanır.
 - String `"true"` gelen `hasAuxiliarySource` değeri testlerle hibrit kabul edilir.
 - Bu bölüm güncellenirken gerçek kod davranışı ile README anlatımı birlikte tutulmalıdır.
 
