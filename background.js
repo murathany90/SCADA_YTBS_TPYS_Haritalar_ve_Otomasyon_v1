@@ -16,8 +16,8 @@ try {
 const RGDH_YKS_ORIGIN = 'https://yks.teias.gov.tr';
 const RGDH_PAGE_FETCH_TIMEOUT_MS = 60000;
 const RGDH_JOB_TIMEOUT_MS = 60000;
-const RGDH_HYBRID_JOB_TIMEOUT_MS = 180000;
-const RGDH_MAX_JOB_TIMEOUT_MS = 180000;
+const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;
+const RGDH_MAX_JOB_TIMEOUT_MS = 300000;
 const RGDH_HOUR_TIMEOUT_MS = 10000;
 const RGDH_PREFLIGHT_TIMEOUT_MS = 10000;
 const RGDH_HOUR_CONCURRENCY = 6;
@@ -25,6 +25,11 @@ const RGDH_HYBRID_WIND_HOUR_TIMEOUT_MS = 20000;
 const RGDH_HYBRID_WIND_HOUR_CONCURRENCY = 2;
 const RGDH_HYBRID_WIND_PROBE_TIMEOUT_MS = 20000;
 const RGDH_HYBRID_WIND_PROBE_HOURS = [11, 12, 0];
+const RGDH_HYBRID_WIND_RANGE_CHUNK_HOURS = 6;
+const RGDH_HYBRID_WIND_RANGE_CHUNK_TIMEOUT_MS = 30000;
+const RGDH_HYBRID_WIND_WINDOW_TIMEOUT_MS = 45000;
+const RGDH_HYBRID_WIND_WINDOW_CONCURRENCY = 4;
+const RGDH_HYBRID_CONTINUATION_TIMEOUT_MS = 420000;
 const RGDH_WIND_CHUNK_TIMEOUT_MS = 12000;
 const RGDH_WIND_CHUNK_CONCURRENCY = 3;
 const RGDH_WIND_CHUNK_SPAN_HOURS = 2;
@@ -34,6 +39,7 @@ const RGDH_FETCH_ROW_KINDS = ['conventionalRows', 'windRows', 'domRows'];
 const RGDH_ALLOWED_PATHS = [
   '/api/rgdh-conventional-busbar-data',
   '/api/rgdh-wind-busbar-data',
+  '/api/rgdh-wind-busbar-data-csv',
   '/api/general-parameter-by-name',
   '/api/busbars'
 ];
@@ -59,6 +65,8 @@ let cachedCsrfBaseUrl = '';
 let csrfTokenFetchedAt = 0;
 let rgdhDiagnosticEvents = [];
 const RGDH_DIAGNOSTIC_LIMIT = 1000;
+let rgdhYksLogEvents = [];
+const RGDH_YKS_LOG_LIMIT = 2000;
 const rgdhFetchJobs = new Map();
 let rgdhFetchJobSeq = 0;
 const rgdhBusbarInternalIdCache = new Map();
@@ -125,6 +133,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+  if (message?.type === 'RGDH_YKS_LOG_EVENT') {
+    handleRgdhYksLogEvent(message.payload || {}).then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, ...sanitizeRgdhBackgroundError(error) });
+    });
+    return true;
+  }
+  if (message?.type === 'RGDH_YKS_LOG_LIST') {
+    handleRgdhYksLogList(message.payload || {}).then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, ...sanitizeRgdhBackgroundError(error) });
+    });
+    return true;
+  }
+  if (message?.type === 'RGDH_YKS_LOG_CLEAR') {
+    handleRgdhYksLogClear().then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, ...sanitizeRgdhBackgroundError(error) });
+    });
+    return true;
+  }
+  if (message?.type === 'RGDH_YKS_LOG_CSV') {
+    handleRgdhYksLogCsv().then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, ...sanitizeRgdhBackgroundError(error) });
+    });
+    return true;
+  }
+  if (message?.type === 'RGDH_YKS_LOG_ATTACH') {
+    handleRgdhYksLogAttach().then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, ...sanitizeRgdhBackgroundError(error) });
+    });
+    return true;
+  }
   if (message?.type === 'RGDH_PAGE_FETCH') {
     handleRgdhPageFetch(message.payload || {}).then(sendResponse).catch((error) => {
       sendResponse({ ok: false, ...sanitizeRgdhBackgroundError(error) });
@@ -178,7 +216,56 @@ async function handleRgdhDiagnosticCsv() {
   return {
     ok: true,
     csv: diag.diagnosticEventsToCsv(rgdhDiagnosticEvents),
-    filename: `RGDH_HATA_DETAYLARI_${new Date().toISOString().slice(0, 10)}.csv`
+    filename: `RGDH_EKLENTI_LOGLARI_${new Date().toISOString().slice(0, 10)}.csv`
+  };
+}
+
+async function handleRgdhYksLogEvent(payload) {
+  const diag = getRgdhDiagnostics();
+  const event = diag.sanitizeDiagnosticEvent(payload);
+  rgdhYksLogEvents = diag.pushBoundedEvent(rgdhYksLogEvents, event, RGDH_YKS_LOG_LIMIT);
+  return { ok: true, event };
+}
+
+async function handleRgdhYksLogList(payload = {}) {
+  const limit = Math.max(1, Math.min(RGDH_YKS_LOG_LIMIT, Number(payload.limit || RGDH_YKS_LOG_LIMIT)));
+  return {
+    ok: true,
+    events: rgdhYksLogEvents.slice(0, limit),
+    total: rgdhYksLogEvents.length
+  };
+}
+
+async function handleRgdhYksLogClear() {
+  rgdhYksLogEvents = [];
+  return { ok: true, events: [] };
+}
+
+async function handleRgdhYksLogCsv() {
+  const diag = getRgdhDiagnostics();
+  return {
+    ok: true,
+    csv: diag.diagnosticEventsToCsv(rgdhYksLogEvents),
+    filename: `RGDH_YKS_LOGLARI_${new Date().toISOString().slice(0, 10)}.csv`
+  };
+}
+
+async function handleRgdhYksLogAttach() {
+  const tabs = await chrome.tabs.query({});
+  const yksTabs = (tabs || []).filter((item) => /^https:\/\/yks\.teias\.gov\.tr\//i.test(String(item.url || '')) && item.id);
+  const errors = [];
+  for (const tab of yksTabs) {
+    try {
+      await injectRgdhYksDiagnosticsIntoTab(tab.id);
+    } catch (error) {
+      errors.push({ tabId: tab.id, message: error?.message || String(error) });
+    }
+  }
+  return {
+    ok: errors.length === 0,
+    tabIds: yksTabs.map((tab) => tab.id),
+    attachedCount: yksTabs.length - errors.length,
+    errors
   };
 }
 
@@ -218,6 +305,8 @@ async function handleRgdhFetchStart(payload) {
     .then(() => handleRgdhFetch(effectivePayload))
     .then((result) => {
       if (job.status === 'cancelled') return;
+      const continuationJob = maybeStartRgdhContinuationJob(job, result);
+      if (continuationJob?.jobId) result.continuationJobId = continuationJob.jobId;
       job.status = 'completed';
       job.finishedAt = new Date().toISOString();
       job.rowStore = extractRgdhResultRows(result);
@@ -238,7 +327,8 @@ async function handleRgdhFetchStart(payload) {
           apiRows: job.result.rowCounts?.apiRows || 0,
           domRows: job.result.rowCounts?.domRows || 0,
           partialErrors: job.result.partialErrors?.length || 0,
-          errorClass: job.result.partialErrors?.[0]?.errorType || ''
+          errorClass: job.result.partialErrors?.[0]?.errorType || '',
+          continuationJobId: job.result.continuationJobId || ''
         }
       });
     })
@@ -258,6 +348,82 @@ async function handleRgdhFetchStart(payload) {
     });
 
   return { ok: true, jobId, status: job.status, startedAt: job.startedAt };
+}
+
+function maybeStartRgdhContinuationJob(parentJob, result) {
+  const continuationPayload = result?.continuationPayload || firstRgdhValue(result?.continuationPayloads);
+  if (!continuationPayload || parentJob?.payload?.isHybridContinuation) return null;
+  const jobId = `rgdh-cont-${Date.now()}-${++rgdhFetchJobSeq}`;
+  const job = {
+    jobId,
+    ok: true,
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    finishedAt: '',
+    payload: sanitizeRgdhLogDetail({ ...continuationPayload, parentJobId: parentJob?.jobId || '', isHybridContinuation: true }),
+    result: null,
+    error: null,
+    logs: [],
+    rowStore: createEmptyRgdhRowStore()
+  };
+  rgdhFetchJobs.set(jobId, job);
+  handleRgdhDiagnosticEvent({
+    level: 'info',
+    category: 'fetch-job',
+    route: 'rgdh-monitor',
+    message: `Hibrit YKS tamamlama isi basladi: ${jobId}`,
+    detail: {
+      jobId,
+      parentJobId: parentJob?.jobId || '',
+      sourceType: continuationPayload.sourceType || 'WIND',
+      internalBusbarId: continuationPayload.busbarId || '',
+      missingWindows: Array.isArray(continuationPayload.missingWindows) ? continuationPayload.missingWindows.length : 0
+    }
+  });
+  Promise.resolve()
+    .then(() => globalThis.runRgdhHybridContinuationJob({
+      ...continuationPayload,
+      parentJobId: parentJob?.jobId || '',
+      isHybridContinuation: true
+    }))
+    .then((continuationResult) => {
+      if (job.status === 'cancelled') return;
+      job.status = 'completed';
+      job.finishedAt = new Date().toISOString();
+      job.rowStore = extractRgdhResultRows(continuationResult);
+      job.result = summarizeRgdhFetchResult(continuationResult, job.rowStore);
+      job.logs = continuationResult?.logs || [];
+      handleRgdhDiagnosticEvent({
+        level: job.result.partialErrors?.length ? 'warn' : 'success',
+        category: 'fetch-job',
+        route: 'rgdh-monitor',
+        message: `Hibrit YKS tamamlama isi tamamlandi: ${jobId}`,
+        detail: {
+          jobId,
+          parentJobId: parentJob?.jobId || '',
+          sourceType: continuationPayload.sourceType || 'WIND',
+          internalBusbarId: continuationPayload.busbarId || '',
+          apiRows: job.result.rowCounts?.apiRows || 0,
+          partialErrors: job.result.partialErrors?.length || 0,
+          errorClass: job.result.partialErrors?.[0]?.errorType || ''
+        }
+      });
+    })
+    .catch((error) => {
+      if (job.status === 'cancelled') return;
+      job.status = 'failed';
+      job.finishedAt = new Date().toISOString();
+      job.error = sanitizeRgdhBackgroundError(error);
+      if (Array.isArray(error?.rgdhLogs)) job.logs = error.rgdhLogs;
+      handleRgdhDiagnosticEvent({
+        level: 'error',
+        category: 'fetch-job',
+        route: 'rgdh-monitor',
+        message: error?.message || String(error),
+        detail: { jobId, parentJobId: parentJob?.jobId || '', ...job.error }
+      });
+    });
+  return job;
 }
 
 async function handleRgdhFetchStatus(payload) {
@@ -329,6 +495,8 @@ function summarizeRgdhFetchResult(result, rowStore = createEmptyRgdhRowStore()) 
   RGDH_FETCH_ROW_KINDS.forEach((kind) => {
     delete summary[kind];
   });
+  delete summary.continuationPayload;
+  delete summary.continuationPayloads;
   const conventionalRows = rowStore.conventionalRows?.length || 0;
   const windRows = rowStore.windRows?.length || 0;
   const domRows = rowStore.domRows?.length || 0;
@@ -380,6 +548,7 @@ async function handleRgdhFetch(payload) {
     partialErrors: [],
     busbarInternalIds: selectedInternalIds,
     selectedBusbar,
+    continuationPayloads: [],
     logs: [],
     transport: 'direct'
   };
@@ -449,6 +618,10 @@ async function handleRgdhFetch(payload) {
         result.logs.push(...fetched.logs);
         result.windRows.push(...fetched.rows);
         result.partialErrors.push(...fetched.partialErrors);
+        if (fetched.continuationPayload) {
+          result.continuationPayloads.push(fetched.continuationPayload);
+          if (!result.continuationPayload) result.continuationPayload = fetched.continuationPayload;
+        }
         if (fetched.usedBusbarId && String(fetched.usedBusbarId) !== String(busbarId)) {
           result.busbarInternalIds = [String(fetched.usedBusbarId)];
           cacheResolvedRgdhWindCandidate(selectedBusbar, requestedSourceType, fetched.usedBusbarId);
@@ -457,6 +630,7 @@ async function handleRgdhFetch(payload) {
     }
   }
 
+  result.windRows = sortRgdhRowsByMeasurementDate(dedupeRgdhRows(result.windRows));
   return result;
 }
 
@@ -477,6 +651,71 @@ async function fetchRgdhWindBusbarWithCandidateFallback({ api, source, endpoint,
       resolvedInternalBusbarId,
       hybridAuxiliary
     };
+
+    if (hybridAuxiliary) {
+      const windowPrimary = await fetchRgdhWindBusbarByYksUiHourlyWindows({
+        api,
+        source,
+        endpoint,
+        localDate,
+        busbarId: candidateBusbarId,
+        payload: candidatePayload,
+        deadlineAt,
+        logContext
+      });
+      logs.push(...windowPrimary.logs);
+      if (windowPrimary.rows.length) {
+        return {
+          rows: windowPrimary.rows,
+          logs,
+          partialErrors: [...failedCandidateErrors, ...annotateRgdhCandidateErrors(windowPrimary.partialErrors || [], logContext)],
+          usedBusbarId: candidateBusbarId,
+          continuationPayload: windowPrimary.continuationPayload
+        };
+      }
+
+      const rangePrimary = await fetchRgdhWindBusbarByYksUiRange({
+        api,
+        source,
+        endpoint,
+        localDate,
+        busbarId: candidateBusbarId,
+        payload: candidatePayload,
+        deadlineAt,
+        logContext
+      });
+      logs.push(...rangePrimary.logs);
+      if (rangePrimary.rows.length) {
+        return {
+          rows: rangePrimary.rows,
+          logs,
+          partialErrors: [...failedCandidateErrors, ...annotateRgdhCandidateErrors(rangePrimary.partialErrors || [], logContext)],
+          usedBusbarId: candidateBusbarId,
+          continuationPayload: rangePrimary.continuationPayload
+        };
+      }
+      if (shouldTryRgdhHybridRangeChunks(rangePrimary)) {
+        const rangeChunks = await fetchRgdhWindBusbarByYksUiChunks({
+          api,
+          source,
+          endpoint,
+          localDate,
+          busbarId: candidateBusbarId,
+          payload: candidatePayload,
+          deadlineAt,
+          logContext
+        });
+        logs.push(...rangeChunks.logs);
+        if (rangeChunks.rows.length) {
+          return {
+            rows: rangeChunks.rows,
+            logs,
+            partialErrors: [...failedCandidateErrors, ...annotateRgdhCandidateErrors(rangeChunks.partialErrors || [], logContext)],
+            usedBusbarId: candidateBusbarId
+          };
+        }
+      }
+    }
 
     if (index > 0) {
       const probe = await probeRgdhWindCandidate({
@@ -510,6 +749,27 @@ async function fetchRgdhWindBusbarWithCandidateFallback({ api, source, endpoint,
     logs.push(...fetched.logs);
 
     const partialErrors = annotateRgdhCandidateErrors(fetched.partialErrors, logContext);
+    if (!fetched.rows.length && hybridAuxiliary && isFullDayHourlyTimeout(partialErrors)) {
+      const rangeFallback = await fetchRgdhWindBusbarByYksUiRange({
+        api,
+        source,
+        endpoint,
+        localDate,
+        busbarId: candidateBusbarId,
+        payload: candidatePayload,
+        deadlineAt,
+        logContext
+      });
+      logs.push(...rangeFallback.logs);
+      if (rangeFallback.rows.length) {
+        return {
+          rows: rangeFallback.rows,
+          logs,
+          partialErrors: failedCandidateErrors,
+          usedBusbarId: candidateBusbarId
+        };
+      }
+    }
     if (!fetched.rows.length && hybridAuxiliary && shouldTryNextRgdhWindCandidate({ hybridAuxiliary, candidateIds, index, partialErrors })) {
       const fallback = await tryHybridWindCandidateDayFallback({
         api,
@@ -574,6 +834,27 @@ async function tryHybridWindCandidateDayFallback({ api, source, endpoint, localD
       fallbackPhase: 'hybrid-full-day',
       ...logContext
     }));
+    const chunkFallback = await fetchRgdhWindBusbarByYksUiChunks({
+      api,
+      source,
+      endpoint,
+      localDate,
+      busbarId: candidateBusbarId,
+      payload,
+      deadlineAt,
+      logContext: {
+        ...logContext,
+        fallbackPhase: 'hybrid-yks-ui-chunk'
+      }
+    });
+    logs.push(...(chunkFallback.logs || []));
+    if ((chunkFallback.rows || []).length) {
+      return {
+        rows: sortRgdhRowsByMeasurementDate(chunkFallback.rows || []),
+        logs,
+        partialErrors: chunkFallback.partialErrors || []
+      };
+    }
     const fallback = await fetchRgdhWindBusbarByDayPages({
       api,
       source,
@@ -623,6 +904,13 @@ function withHybridWindFetchDefaults(payload) {
     windHourTimeoutMs: payload?.windHourTimeoutMs || RGDH_HYBRID_WIND_HOUR_TIMEOUT_MS,
     windHourConcurrency: payload?.windHourConcurrency || RGDH_HYBRID_WIND_HOUR_CONCURRENCY,
     windProbeTimeoutMs: payload?.windProbeTimeoutMs || RGDH_HYBRID_WIND_PROBE_TIMEOUT_MS,
+    windRangeSize: payload?.windRangeSize || 500,
+    windRangeTimeoutMs: payload?.windRangeTimeoutMs || 60000,
+    windRangeChunkHours: payload?.windRangeChunkHours || RGDH_HYBRID_WIND_RANGE_CHUNK_HOURS,
+    windRangeChunkSize: payload?.windRangeChunkSize || 60,
+    windRangeChunkTimeoutMs: payload?.windRangeChunkTimeoutMs || RGDH_HYBRID_WIND_RANGE_CHUNK_TIMEOUT_MS,
+    windWindowTimeoutMs: payload?.windWindowTimeoutMs || RGDH_HYBRID_WIND_WINDOW_TIMEOUT_MS,
+    windWindowConcurrency: payload?.windWindowConcurrency || RGDH_HYBRID_WIND_WINDOW_CONCURRENCY,
     jobTimeoutMs: payload?.jobTimeoutMs || RGDH_HYBRID_JOB_TIMEOUT_MS
   };
 }
@@ -720,9 +1008,16 @@ function annotateRgdhCandidateErrors(errors, logContext) {
 
 function shouldTryNextRgdhWindCandidate({ hybridAuxiliary, candidateIds, index, partialErrors }) {
   if (!hybridAuxiliary || index >= candidateIds.length - 1) return false;
+  return isFullDayHourlyTimeout(partialErrors);
+}
+
+function isFullDayHourlyTimeout(partialErrors) {
   return (partialErrors || []).some((error) => {
     const type = String(error?.errorType || error?.errorClass || '');
-    return type === 'YKS_HOURLY_TIMEOUT' && Number(error?.failedHours || 0) >= 24;
+    const failedHours = Number(error?.failedHours || 0);
+    const attemptedHours = Number(error?.attemptedHours || 0);
+    return type === 'YKS_HOURLY_TIMEOUT'
+      && (failedHours >= 24 || (attemptedHours > 0 && failedHours >= attemptedHours));
   });
 }
 
@@ -752,7 +1047,7 @@ function summarizeRgdhFailedWindCandidates(errors, context) {
 
 function isAuxiliaryRgdhBusbar(selectedBusbar) {
   if (!selectedBusbar) return false;
-  if (selectedBusbar.hasAuxiliarySource === true || selectedBusbar.hybridAuxiliary === true) return true;
+  if (isTruthyRgdhFlag(selectedBusbar.hasAuxiliarySource) || isTruthyRgdhFlag(selectedBusbar.hybridAuxiliary)) return true;
   const text = normalizeRgdhLookupText([
     selectedBusbar.busbarName,
     selectedBusbar.plantName,
@@ -760,6 +1055,12 @@ function isAuxiliaryRgdhBusbar(selectedBusbar) {
     selectedBusbar.sourceKind
   ].filter(Boolean).join(' '));
   return /yardimci|hibrit|auxiliary/.test(text);
+}
+
+function isTruthyRgdhFlag(value) {
+  if (value === true) return true;
+  const text = String(value ?? '').trim().toLowerCase();
+  return text === 'true' || text === '1' || text === 'yes' || text === 'evet';
 }
 
 function cacheResolvedRgdhWindCandidate(selectedBusbar, requestedSourceType, usedBusbarId) {
@@ -1297,6 +1598,656 @@ async function fetchRgdhWindBusbarByDayPages({ api, source, endpoint, localDate,
   return { rows, logs, partialErrors: [] };
 }
 
+async function fetchRgdhWindBusbarByYksUiHourlyWindows({ api, source, endpoint, localDate, busbarId, payload, deadlineAt, logContext = {}, windows = null }) {
+  const sourceKey = String(source || 'WIND').toUpperCase();
+  const logs = [];
+  const rows = [];
+  const missingWindows = [];
+  const partialErrors = [];
+  const dayRange = api.buildUtcDayRangeForIstanbul(localDate);
+  const rangeStartUtc = String(payload.windRangeStartUtc || dayRange.startUtc);
+  const rangeEndUtc = resolveHybridWindRangeEndUtc(api, localDate, payload);
+  const hourlyWindows = Array.isArray(windows) && windows.length
+    ? windows.map(normalizeRgdhWindow).filter(Boolean)
+    : buildRgdhHourlyWindows(rangeStartUtc, rangeEndUtc);
+  const concurrency = Math.max(1, Math.min(8, Number(payload.windWindowConcurrency || RGDH_HYBRID_WIND_WINDOW_CONCURRENCY)));
+  const windowTimeoutMs = Number(payload.windWindowTimeoutMs || RGDH_HYBRID_WIND_WINDOW_TIMEOUT_MS);
+  const size = Math.max(1, Math.min(60, Number(payload.windWindowSize || 60)));
+  const expectedRows = hourlyWindows.reduce((sum, item) => sum + estimateRgdhMinuteRows(item.startUtc, item.endUtc), 0);
+
+  await runWithConcurrency(hourlyWindows, concurrency, async (windowItem, index) => {
+    const effectiveTimeoutMs = clampRgdhRequestTimeout(windowTimeoutMs, deadlineAt);
+    const params = api.buildWindRangeParams(windowItem.startUtc, windowItem.endUtc, busbarId, { size });
+    const requestUrl = buildSafeRgdhRequestUrl(api, endpoint, params);
+    const windowDetail = {
+      endpoint,
+      params: sanitizeRgdhParams(params),
+      busbarId,
+      internalBusbarId: busbarId,
+      localDate,
+      chunkStart: windowItem.startUtc,
+      chunkEnd: windowItem.endUtc,
+      windowStart: windowItem.startUtc,
+      windowEnd: windowItem.endUtc,
+      requestUrl,
+      pageTimeoutMs: effectiveTimeoutMs,
+      fallbackPhase: 'hybrid-yks-ui-window',
+      chunkIndex: index,
+      ...logContext
+    };
+    if (effectiveTimeoutMs <= 0) {
+      missingWindows.push({ ...windowItem, reason: 'YKS_JOB_TIMEOUT', requestUrl });
+      return;
+    }
+    logs.push(createRgdhLog('info', sourceKey, `${localDate}: hibrit YKS saatlik pencere sorgulanacak: ${busbarId}`, windowDetail));
+    const pageResult = await runRgdhPageFetchInYksTab({ endpoint, params, timeoutMs: effectiveTimeoutMs });
+    if (!pageResult?.ok) {
+      const sanitized = sanitizeRgdhBackgroundError({ ...(pageResult || {}), message: pageResult?.error || pageResult?.reason || pageResult?.message });
+      const error = {
+        source: sourceKey,
+        busbarId,
+        internalBusbarId: busbarId,
+        localDate,
+        chunkStart: windowItem.startUtc,
+        chunkEnd: windowItem.endUtc,
+        windowStart: windowItem.startUtc,
+        windowEnd: windowItem.endUtc,
+        requestUrl,
+        fallbackPhase: 'hybrid-yks-ui-window',
+        errorClass: sanitized.errorType,
+        ...logContext,
+        ...sanitized
+      };
+      partialErrors.push(error);
+      missingWindows.push({ ...windowItem, reason: sanitized.errorType, requestUrl });
+      logs.push(createRgdhLog('warn', sourceKey, `${localDate}: hibrit YKS saatlik pencere basarisiz: ${sanitized.message}`, error));
+      return;
+    }
+
+    const pageRows = pageResult.rows || [];
+    rows.push(...pageRows);
+    const totalCount = Number(pageResult.totalCount || 0);
+    const responseLink = pageResult.responseLink || '';
+    const expectedWindowRows = estimateRgdhMinuteRows(windowItem.startUtc, windowItem.endUtc);
+    const missingByTotal = totalCount > 0 && pageRows.length < totalCount;
+    const missingByEmptyWindow = expectedWindowRows > 0 && pageRows.length === 0;
+    if (missingByTotal || missingByEmptyWindow) {
+      missingWindows.push({
+        ...windowItem,
+        reason: missingByTotal ? 'TOTAL_COUNT_MISMATCH' : 'EMPTY_WINDOW',
+        requestUrl,
+        responseTotalCount: totalCount || null,
+        responseLink
+      });
+    }
+    logs.push(createRgdhLog('success', sourceKey, `${localDate}: hibrit YKS saatlik pencere ${pageRows.length} kayit aldi.`, {
+      ...windowDetail,
+      rowCount: pageRows.length,
+      apiRows: rows.length,
+      responseTotalCount: totalCount || null,
+      responseLink
+    }));
+  });
+
+  const dedupedRows = sortRgdhRowsByMeasurementDate(dedupeRgdhRows(rows));
+  const fetchedRows = dedupedRows.length;
+  const isComplete = missingWindows.length === 0;
+  if (!isComplete) {
+    const summary = createIncompleteHybridFetchError({
+      sourceKey,
+      busbarId,
+      localDate,
+      expectedRows,
+      fetchedRows,
+      missingWindows,
+      fallbackPhase: 'hybrid-yks-ui-window',
+      logContext
+    });
+    partialErrors.push(summary);
+    logs.push(createRgdhLog(dedupedRows.length ? 'warn' : 'error', sourceKey, summary.message, summary));
+  }
+
+  return {
+    rows: dedupedRows,
+    logs,
+    partialErrors,
+    expectedRows,
+    fetchedRows,
+    missingWindows,
+    isComplete,
+    continuationPayload: !isComplete && dedupedRows.length ? {
+      sourceType: sourceKey,
+      endpoint,
+      localDate,
+      busbarId,
+      baseRows: dedupedRows,
+      missingWindows,
+      jobTimeoutMs: RGDH_HYBRID_CONTINUATION_TIMEOUT_MS,
+      windWindowTimeoutMs: RGDH_HYBRID_WIND_WINDOW_TIMEOUT_MS,
+      windWindowConcurrency: RGDH_HYBRID_WIND_WINDOW_CONCURRENCY,
+      allowCsvFallback: true
+    } : null
+  };
+}
+
+async function fetchRgdhWindBusbarByYksUiRange({ api, source, endpoint, localDate, busbarId, payload, deadlineAt, logContext = {} }) {
+  const sourceKey = String(source || 'WIND').toUpperCase();
+  const logs = [];
+  const rows = [];
+  const dayRange = api.buildUtcDayRangeForIstanbul(localDate);
+  const rangeStartUtc = String(payload.windRangeStartUtc || dayRange.startUtc);
+  const endUtc = resolveHybridWindRangeEndUtc(api, localDate, payload);
+  const pageSize = Math.max(1, Math.min(500, Number(payload.windRangeSize || 500)));
+  const maxRequests = Math.max(1, Math.min(200, Number(payload.windRangeMaxRequests || 80)));
+  const pageTimeoutMs = Number(payload.windRangeTimeoutMs || payload.windFullDayTimeoutMs || 60000);
+  let cursorUtc = rangeStartUtc;
+  let responseTotalCount = null;
+  let responseLink = '';
+  let responseLastPage = null;
+
+  for (let index = 0; index < maxRequests && cursorUtc && cursorUtc < endUtc; index += 1) {
+    let pageResult = null;
+    let params = null;
+    let requestUrl = '';
+    let activePageSize = pageSize;
+    const sizeAttempts = pageSize === 60 ? [60] : [pageSize, 60];
+    for (let attemptIndex = 0; attemptIndex < sizeAttempts.length; attemptIndex += 1) {
+      const effectiveTimeoutMs = clampRgdhRequestTimeout(pageTimeoutMs, deadlineAt);
+      if (effectiveTimeoutMs <= 0) {
+        return createRgdhHybridRangeTimeoutResult({
+          rows,
+          logs,
+          sourceKey,
+          busbarId,
+          localDate,
+          chunkStart: cursorUtc,
+          chunkEnd: endUtc,
+          payload,
+          logContext
+        });
+      }
+      const attemptSize = sizeAttempts[attemptIndex];
+      activePageSize = attemptSize;
+      params = api.buildWindRangeParams(cursorUtc, endUtc, busbarId, { size: attemptSize });
+      requestUrl = buildSafeRgdhRequestUrl(api, endpoint, params);
+      logs.push(createRgdhLog('info', sourceKey, `${localDate}: hibrit YKS ekran araligi sorgulanacak: ${busbarId}`, {
+        endpoint,
+        params: sanitizeRgdhParams(params),
+        busbarId,
+        internalBusbarId: busbarId,
+        localDate,
+        chunkStart: cursorUtc,
+        chunkEnd: endUtc,
+        requestUrl,
+        pageTimeoutMs: effectiveTimeoutMs,
+        fallbackPhase: 'hybrid-yks-ui-range',
+        retrySize: attemptIndex > 0 ? attemptSize : undefined,
+        ...logContext
+      }));
+
+      pageResult = await runRgdhPageFetchInYksTab({ endpoint, params, timeoutMs: effectiveTimeoutMs });
+      const resultRows = pageResult?.rows || [];
+      const shouldRetrySize = attemptIndex === 0
+        && sizeAttempts.length > 1
+        && (
+          (pageResult?.ok && resultRows.length === 0 && Number(pageResult.totalCount || 0) > 0)
+          || (!pageResult?.ok && shouldRetryHybridRangeWithSmallSize(pageResult))
+        );
+      if (!shouldRetrySize) break;
+      logs.push(createRgdhLog('warn', sourceKey, `${localDate}: hibrit YKS ekran araligi ${attemptSize} boyutuyla bos/hata dondu; size=60 deneniyor.`, {
+        endpoint,
+        busbarId,
+        internalBusbarId: busbarId,
+        localDate,
+        chunkStart: cursorUtc,
+        chunkEnd: endUtc,
+        rowCount: resultRows.length,
+        totalCount: pageResult?.totalCount ?? null,
+        requestUrl,
+        fallbackPhase: 'hybrid-yks-ui-range',
+        ...logContext
+      }));
+    }
+
+    if (!pageResult?.ok) {
+      const sanitized = sanitizeRgdhBackgroundError({ ...(pageResult || {}), message: pageResult?.error || pageResult?.reason || pageResult?.message });
+      logs.push(createRgdhLog('warn', sourceKey, `${localDate}: hibrit YKS ekran araligi basarisiz: ${sanitized.message}`, {
+        ...sanitized,
+        endpoint,
+        busbarId,
+        internalBusbarId: busbarId,
+        localDate,
+        chunkStart: cursorUtc,
+        chunkEnd: endUtc,
+        requestUrl,
+        fallbackPhase: 'hybrid-yks-ui-range',
+        ...logContext
+      }));
+      return {
+        rows,
+        logs,
+        partialErrors: [{
+          source: sourceKey,
+          busbarId,
+          internalBusbarId: busbarId,
+          localDate,
+          chunkStart: cursorUtc,
+          chunkEnd: endUtc,
+          requestUrl,
+          fallbackPhase: 'hybrid-yks-ui-range',
+          errorClass: sanitized.errorType,
+          ...logContext,
+          ...sanitized
+        }]
+      };
+    }
+
+    const pageRows = pageResult.rows || [];
+    rows.push(...pageRows);
+    const pageTotalCount = Number(pageResult.totalCount || pageResult.responseTotalCount || 0);
+    if (pageTotalCount > 0) responseTotalCount = Math.max(Number(responseTotalCount || 0), pageTotalCount);
+    if (pageResult.responseLink) responseLink = pageResult.responseLink;
+    if (pageResult.lastPage !== undefined && pageResult.lastPage !== null) responseLastPage = Number(pageResult.lastPage);
+    logs.push(createRgdhLog('success', sourceKey, `${localDate}: hibrit YKS ekran araligi ${pageRows.length} kayit aldi.`, {
+      endpoint,
+      busbarId,
+      internalBusbarId: busbarId,
+      localDate,
+      chunkStart: cursorUtc,
+      chunkEnd: endUtc,
+      rowCount: pageRows.length,
+      apiRows: rows.length,
+      responseTotalCount,
+      responseLink,
+      fallbackPhase: 'hybrid-yks-ui-range',
+      ...logContext
+    }));
+
+    if (pageRows.length < activePageSize) break;
+    const lastMeasurement = pageRows[pageRows.length - 1]?.measurementDate;
+    const nextCursor = addOneMinuteUtc(lastMeasurement);
+    if (!nextCursor || nextCursor <= cursorUtc) break;
+    cursorUtc = nextCursor;
+  }
+
+  const dedupedRows = sortRgdhRowsByMeasurementDate(dedupeRgdhRows(rows));
+  const fetchedRows = dedupedRows.length;
+  const expectedRows = estimateRgdhMinuteRows(rangeStartUtc, endUtc);
+  const missingWindows = [];
+  if (responseTotalCount !== null && fetchedRows < responseTotalCount) {
+    missingWindows.push({
+      startUtc: cursorUtc || rangeStartUtc,
+      endUtc,
+      reason: 'TOTAL_COUNT_MISMATCH',
+      responseTotalCount,
+      responseLink,
+      lastPage: responseLastPage
+    });
+  }
+  const partialErrors = [];
+  const isComplete = missingWindows.length === 0;
+  if (!isComplete) {
+    partialErrors.push(createIncompleteHybridFetchError({
+      sourceKey,
+      busbarId,
+      localDate,
+      expectedRows,
+      fetchedRows,
+      responseTotalCount,
+      responseLink,
+      missingWindows,
+      fallbackPhase: 'hybrid-yks-ui-range',
+      logContext
+    }));
+  }
+  return {
+    rows: dedupedRows,
+    logs,
+    partialErrors,
+    expectedRows,
+    fetchedRows,
+    responseTotalCount,
+    responseLink,
+    missingWindows,
+    isComplete,
+    continuationPayload: !isComplete && dedupedRows.length ? {
+      sourceType: sourceKey,
+      endpoint,
+      localDate,
+      busbarId,
+      baseRows: dedupedRows,
+      missingWindows,
+      jobTimeoutMs: RGDH_HYBRID_CONTINUATION_TIMEOUT_MS,
+      windWindowTimeoutMs: RGDH_HYBRID_WIND_WINDOW_TIMEOUT_MS,
+      windWindowConcurrency: RGDH_HYBRID_WIND_WINDOW_CONCURRENCY,
+      allowCsvFallback: true
+    } : null
+  };
+}
+
+async function fetchRgdhWindBusbarByYksUiChunks({ api, source, endpoint, localDate, busbarId, payload, deadlineAt, logContext = {} }) {
+  const sourceKey = String(source || 'WIND').toUpperCase();
+  const logs = [];
+  const rows = [];
+  const partialErrors = [];
+  const dayRange = api.buildUtcDayRangeForIstanbul(localDate);
+  const rangeEndUtc = resolveHybridWindRangeEndUtc(api, localDate, payload);
+  const chunkHours = Math.max(1, Math.min(12, Number(payload.windRangeChunkHours || RGDH_HYBRID_WIND_RANGE_CHUNK_HOURS)));
+  const chunkSize = Math.max(1, Math.min(500, Number(payload.windRangeChunkSize || 60)));
+  const chunkTimeoutMs = Number(payload.windRangeChunkTimeoutMs || payload.windRangeTimeoutMs || RGDH_HYBRID_WIND_RANGE_CHUNK_TIMEOUT_MS);
+  let cursorUtc = String(payload.windRangeStartUtc || dayRange.startUtc);
+  let chunkIndex = 0;
+
+  while (cursorUtc && cursorUtc < rangeEndUtc) {
+    const chunkEndUtc = minRgdhIsoUtc(addHoursUtc(cursorUtc, chunkHours), rangeEndUtc);
+    if (!chunkEndUtc || chunkEndUtc <= cursorUtc) break;
+    const chunkPayload = {
+      ...payload,
+      windRangeStartUtc: cursorUtc,
+      windRangeEndUtc: chunkEndUtc,
+      windRangeSize: chunkSize,
+      windRangeTimeoutMs: chunkTimeoutMs
+    };
+    logs.push(createRgdhLog('info', sourceKey, `${localDate}: hibrit YKS ekran parcasi sorgulanacak: ${busbarId}`, {
+      endpoint,
+      busbarId,
+      internalBusbarId: busbarId,
+      localDate,
+      chunkStart: cursorUtc,
+      chunkEnd: chunkEndUtc,
+      rangeChunkHours: chunkHours,
+      fallbackPhase: 'hybrid-yks-ui-chunk',
+      ...logContext
+    }));
+
+    const chunkResult = await fetchRgdhWindBusbarByYksUiRange({
+      api,
+      source,
+      endpoint,
+      localDate,
+      busbarId,
+      payload: chunkPayload,
+      deadlineAt,
+      logContext: {
+        ...logContext,
+        fallbackPhase: 'hybrid-yks-ui-chunk',
+        rangeChunkHours: chunkHours,
+        chunkIndex
+      }
+    });
+    logs.push(...(chunkResult.logs || []));
+    rows.push(...(chunkResult.rows || []));
+    partialErrors.push(...(chunkResult.partialErrors || []));
+    if ((chunkResult.partialErrors || []).some((error) => String(error?.errorType || error?.errorClass || '') === 'YKS_JOB_TIMEOUT')) {
+      break;
+    }
+    cursorUtc = chunkEndUtc;
+    chunkIndex += 1;
+  }
+
+  return { rows: sortRgdhRowsByMeasurementDate(rows), logs, partialErrors };
+}
+
+async function runRgdhHybridContinuationJob(payload = {}) {
+  const api = getRgdhApiClient();
+  const sourceType = String(payload.sourceType || 'WIND').toUpperCase();
+  const endpoint = String(payload.endpoint || api.RGDH_ENDPOINTS.wind);
+  const localDate = String(payload.localDate || '').trim();
+  const busbarId = String(payload.busbarId || payload.internalBusbarId || '').trim();
+  const baseRows = Array.isArray(payload.baseRows) ? payload.baseRows : [];
+  const missingWindows = Array.isArray(payload.missingWindows) ? payload.missingWindows.map(normalizeRgdhWindow).filter(Boolean) : [];
+  const deadlineAt = Date.now() + Math.max(5000, Number(payload.jobTimeoutMs || RGDH_HYBRID_CONTINUATION_TIMEOUT_MS));
+  const logs = [];
+  let partialErrors = [];
+  let windRows = dedupeRgdhRows(baseRows);
+
+  if (missingWindows.length) {
+    const fetched = await fetchRgdhWindBusbarByYksUiHourlyWindows({
+      api,
+      source: sourceType,
+      endpoint,
+      localDate,
+      busbarId,
+      payload: {
+        ...payload,
+        windWindowTimeoutMs: payload.windWindowTimeoutMs || RGDH_HYBRID_WIND_WINDOW_TIMEOUT_MS,
+        windWindowConcurrency: payload.windWindowConcurrency || RGDH_HYBRID_WIND_WINDOW_CONCURRENCY
+      },
+      deadlineAt,
+      logContext: {
+        parentJobId: payload.parentJobId || '',
+        fallbackPhase: 'hybrid-yks-continuation'
+      },
+      windows: missingWindows
+    });
+    logs.push(...(fetched.logs || []));
+    windRows = dedupeRgdhRows([...windRows, ...(fetched.rows || [])]);
+    partialErrors = fetched.partialErrors || [];
+  }
+
+  if (partialErrors.length && payload.allowCsvFallback !== false && api.RGDH_ENDPOINTS.windCsv) {
+    const csvRange = resolveRgdhWindowBounds(missingWindows);
+    if (csvRange.startUtc && csvRange.endUtc && csvRange.startUtc < csvRange.endUtc) {
+      const csvFetched = await fetchRgdhWindBusbarCsvRange({
+        api,
+        source: sourceType,
+        localDate,
+        busbarId,
+        startUtc: csvRange.startUtc,
+        endUtc: csvRange.endUtc,
+        timeoutMs: Number(payload.csvTimeoutMs || RGDH_HYBRID_CONTINUATION_TIMEOUT_MS),
+        deadlineAt,
+        logContext: { parentJobId: payload.parentJobId || '' }
+      });
+      logs.push(...(csvFetched.logs || []));
+      if ((csvFetched.rows || []).length) {
+        windRows = dedupeRgdhRows([...windRows, ...csvFetched.rows]);
+        partialErrors = [];
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    conventionalRows: [],
+    windRows: sortRgdhRowsByMeasurementDate(windRows),
+    domRows: [],
+    partialErrors,
+    logs,
+    parentJobId: payload.parentJobId || ''
+  };
+}
+
+async function fetchRgdhWindBusbarCsvRange({ api, source, localDate, busbarId, startUtc, endUtc, timeoutMs, deadlineAt, logContext = {} }) {
+  const sourceKey = String(source || 'WIND').toUpperCase();
+  const endpoint = api.RGDH_ENDPOINTS.windCsv;
+  const logs = [];
+  const effectiveTimeoutMs = clampRgdhRequestTimeout(timeoutMs, deadlineAt);
+  const params = api.buildWindRangeParams(startUtc, endUtc, busbarId, {});
+  delete params.size;
+  delete params.page;
+  const requestUrl = buildSafeRgdhRequestUrl(api, endpoint, params);
+  logs.push(createRgdhLog('info', sourceKey, `${localDate}: hibrit YKS CSV fallback sorgulanacak: ${busbarId}`, {
+    endpoint,
+    params: sanitizeRgdhParams(params),
+    busbarId,
+    internalBusbarId: busbarId,
+    localDate,
+    chunkStart: startUtc,
+    chunkEnd: endUtc,
+    requestUrl,
+    pageTimeoutMs: effectiveTimeoutMs,
+    fallbackPhase: 'hybrid-yks-csv-fallback',
+    ...logContext
+  }));
+  if (effectiveTimeoutMs <= 0) {
+    return { rows: [], logs, partialErrors: [createRgdhHybridRangeTimeoutResult({ rows: [], logs: [], sourceKey, busbarId, localDate, chunkStart: startUtc, chunkEnd: endUtc, payload: { jobTimeoutMs: timeoutMs }, logContext }).partialErrors[0]] };
+  }
+  const pageResult = await runRgdhPageFetchInYksTab({ endpoint, params, timeoutMs: effectiveTimeoutMs });
+  if (!pageResult?.ok) {
+    const sanitized = sanitizeRgdhBackgroundError({ ...(pageResult || {}), message: pageResult?.error || pageResult?.reason || pageResult?.message });
+    const error = {
+      source: sourceKey,
+      busbarId,
+      internalBusbarId: busbarId,
+      localDate,
+      chunkStart: startUtc,
+      chunkEnd: endUtc,
+      requestUrl,
+      fallbackPhase: 'hybrid-yks-csv-fallback',
+      errorClass: sanitized.errorType,
+      ...sanitized
+    };
+    logs.push(createRgdhLog('warn', sourceKey, `${localDate}: hibrit YKS CSV fallback basarisiz: ${sanitized.message}`, error));
+    return { rows: [], logs, partialErrors: [error] };
+  }
+  const rows = dedupeRgdhRows(pageResult.rows || []);
+  logs.push(createRgdhLog('success', sourceKey, `${localDate}: hibrit YKS CSV fallback ${rows.length} kayit aldi.`, {
+    endpoint,
+    busbarId,
+    internalBusbarId: busbarId,
+    localDate,
+    chunkStart: startUtc,
+    chunkEnd: endUtc,
+    requestUrl,
+    rowCount: rows.length,
+    apiRows: rows.length,
+    responseTotalCount: pageResult.totalCount || pageResult.responseTotalCount || null,
+    responseLink: pageResult.responseLink || '',
+    fallbackPhase: 'hybrid-yks-csv-fallback',
+    ...logContext
+  }));
+  return { rows, logs, partialErrors: [] };
+}
+
+function shouldTryRgdhHybridRangeChunks(result) {
+  if (!result || (result.rows || []).length) return false;
+  return (result.partialErrors || []).some((error) => {
+    const type = String(error?.errorType || error?.errorClass || '');
+    return type === 'PAGE_FETCH_TIMEOUT';
+  });
+}
+
+function createRgdhHybridRangeTimeoutResult({ rows, logs, sourceKey, busbarId, localDate, chunkStart, chunkEnd, payload, logContext = {} }) {
+  return {
+    rows,
+    logs,
+    partialErrors: [{
+      source: sourceKey,
+      busbarId,
+      internalBusbarId: busbarId,
+      localDate,
+      chunkStart,
+      chunkEnd,
+      errorType: 'YKS_JOB_TIMEOUT',
+      errorClass: 'YKS_JOB_TIMEOUT',
+      fallbackPhase: 'hybrid-yks-ui-range',
+      ...logContext,
+      message: `YKS cekimi ${Math.round(Number(payload.jobTimeoutMs || RGDH_JOB_TIMEOUT_MS) / 1000)} sn toplam sure butcesini doldurdu.`
+    }]
+  };
+}
+
+function shouldRetryHybridRangeWithSmallSize(result) {
+  const type = String(result?.errorType || result?.errorClass || '');
+  if (type === 'PAGE_FETCH_TIMEOUT') return true;
+  const status = Number(result?.httpStatus || result?.status || 0);
+  if (!Number.isFinite(status) || status < 400 || status >= 500) return false;
+  return status !== 401 && status !== 403;
+}
+
+function normalizeRgdhWindow(input) {
+  const startUtc = String(input?.startUtc || input?.chunkStart || input?.windowStart || '').trim();
+  const endUtc = String(input?.endUtc || input?.chunkEnd || input?.windowEnd || '').trim();
+  if (!startUtc || !endUtc || startUtc >= endUtc) return null;
+  return { startUtc, endUtc, reason: input?.reason || '', requestUrl: input?.requestUrl || '' };
+}
+
+function buildRgdhHourlyWindows(startUtc, endUtc) {
+  const windows = [];
+  let cursorUtc = String(startUtc || '');
+  const rangeEndUtc = String(endUtc || '');
+  while (cursorUtc && rangeEndUtc && cursorUtc < rangeEndUtc) {
+    const nextUtc = minRgdhIsoUtc(addHoursUtc(cursorUtc, 1), rangeEndUtc);
+    if (!nextUtc || nextUtc <= cursorUtc) break;
+    windows.push({ startUtc: cursorUtc, endUtc: nextUtc });
+    cursorUtc = nextUtc;
+  }
+  return windows;
+}
+
+function estimateRgdhMinuteRows(startUtc, endUtc) {
+  const start = new Date(startUtc);
+  const end = new Date(endUtc);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) return 0;
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+}
+
+function createIncompleteHybridFetchError({ sourceKey, busbarId, localDate, expectedRows, fetchedRows, responseTotalCount = null, responseLink = '', missingWindows = [], fallbackPhase, logContext = {} }) {
+  const first = missingWindows[0] || {};
+  const last = missingWindows[missingWindows.length - 1] || first;
+  return {
+    source: sourceKey,
+    busbarId,
+    internalBusbarId: busbarId,
+    localDate,
+    errorType: 'INCOMPLETE_HYBRID_FETCH',
+    errorClass: 'INCOMPLETE_HYBRID_FETCH',
+    message: `${missingWindows.length} hibrit YKS penceresi eksik kaldi; ${fetchedRows}/${responseTotalCount || expectedRows || fetchedRows} kayit alindi.`,
+    expectedRows,
+    fetchedRows,
+    responseTotalCount,
+    responseLink,
+    missingWindows: missingWindows.length,
+    chunkStart: first.startUtc || '',
+    chunkEnd: last.endUtc || '',
+    fallbackPhase,
+    requestUrl: first.requestUrl || '',
+    ...logContext
+  };
+}
+
+function resolveRgdhWindowBounds(windows) {
+  const normalized = (windows || []).map(normalizeRgdhWindow).filter(Boolean);
+  return {
+    startUtc: normalized.map((item) => item.startUtc).sort()[0] || '',
+    endUtc: normalized.map((item) => item.endUtc).sort().pop() || ''
+  };
+}
+
+function resolveHybridWindRangeEndUtc(api, localDate, payload = {}) {
+  if (payload.windRangeEndUtc) return String(payload.windRangeEndUtc);
+  const range = api.buildUtcDayRangeForIstanbul(localDate);
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Istanbul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+  if (localDate !== today) return range.endUtc;
+  const now = new Date();
+  const end = new Date(Math.min(now.getTime(), new Date(range.endUtc).getTime()));
+  return end.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function addOneMinuteUtc(isoValue) {
+  const date = new Date(isoValue);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Date(date.getTime() + 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function addHoursUtc(isoValue, hours) {
+  const date = new Date(isoValue);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Date(date.getTime() + (Number(hours) || 0) * 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function minRgdhIsoUtc(left, right) {
+  if (!left) return right || '';
+  if (!right) return left || '';
+  return left <= right ? left : right;
+}
+
 function clampRgdhRequestTimeout(timeoutMs, deadlineAt) {
   const requested = Math.max(1000, Number(timeoutMs || RGDH_HOUR_TIMEOUT_MS));
   if (!Number.isFinite(Number(deadlineAt))) return requested;
@@ -1412,6 +2363,25 @@ async function runWithConcurrency(items, limit, worker) {
 
 function sortRgdhRowsByMeasurementDate(rows) {
   return [...(rows || [])].sort((a, b) => String(a?.measurementDate || '').localeCompare(String(b?.measurementDate || '')));
+}
+
+function dedupeRgdhRows(rows) {
+  const seen = new Set();
+  const result = [];
+  (rows || []).forEach((row) => {
+    const key = rgdhRowIdentity(row);
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(row);
+  });
+  return result;
+}
+
+function rgdhRowIdentity(row) {
+  const explicitId = row?.id ?? row?.rowId;
+  if (explicitId !== undefined && explicitId !== null && explicitId !== '') return `id:${explicitId}`;
+  const busbarId = row?.busbar?.id ?? row?.busbar?.busbarId ?? row?.busbarId?.id ?? row?.busbarId?.busbarId ?? row?.busbarId ?? '';
+  return `time:${row?.measurementDate || ''}|busbar:${busbarId}`;
 }
 
 function firstRgdhValue(value) {
@@ -1561,6 +2531,7 @@ function buildRgdhBusbarCacheKey(selectedBusbar, sourceType) {
 
 function normalizeSelectedRgdhBusbar(raw) {
   const item = raw && typeof raw === 'object' ? raw : {};
+  const hasAuxiliarySource = isTruthyRgdhFlag(item.hasAuxiliarySource) || isTruthyRgdhFlag(item.hybridAuxiliary);
   return {
     busbarInternalId: String(item.busbarInternalId || item.internalId || '').trim(),
     busbarId: String(item.busbarId || '').trim(),
@@ -1569,8 +2540,8 @@ function normalizeSelectedRgdhBusbar(raw) {
     plantName: String(item.plantName || '').trim(),
     rgkType: String(item.rgkType || '').trim(),
     sourceKind: String(item.sourceKind || '').trim(),
-    hasAuxiliarySource: item.hasAuxiliarySource === true || item.hybridAuxiliary === true,
-    hybridAuxiliary: item.hybridAuxiliary === true || item.hasAuxiliarySource === true
+    hasAuxiliarySource,
+    hybridAuxiliary: hasAuxiliarySource
   };
 }
 
@@ -1647,7 +2618,7 @@ async function safeRgdhDomScrape(payload) {
 async function runRgdhPageFetchInYksTab(payload) {
   validateRgdhEndpoint(payload.endpoint);
   const tab = await findYksTab();
-  await injectRgdhYksInstrumentation(tab.id);
+  await injectRgdhYksDiagnosticsIntoTab(tab.id);
   const startedAt = Date.now();
   const [execution] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
@@ -1658,6 +2629,28 @@ async function runRgdhPageFetchInYksTab(payload) {
   const result = execution?.result || { ok: false, error: 'YKS sekmesinden yanit alinamadi.', errorType: 'PAGE_FETCH_ERROR' };
   await recordRgdhPageFetchDiagnostic(payload, result, Date.now() - startedAt);
   return result;
+}
+
+async function injectRgdhYksDiagnosticsIntoTab(tabId) {
+  await injectRgdhYksBridge(tabId);
+  await injectRgdhYksInstrumentation(tabId);
+}
+
+async function injectRgdhYksBridge(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']
+    });
+  } catch (error) {
+    await handleRgdhDiagnosticEvent({
+      level: 'warn',
+      category: 'instrumentation',
+      route: 'rgdh-monitor',
+      message: `YKS diagnostic bridge enjekte edilemedi: ${error?.message || String(error)}`,
+      detail: { errorType: 'YKS_BRIDGE_INJECT_FAILED' }
+    });
+  }
 }
 
 async function injectRgdhYksInstrumentation(tabId) {
@@ -1688,7 +2681,7 @@ async function recordRgdhPageFetchDiagnostic(payload, result, durationMs) {
     ? Number(result.httpStatus)
     : (ok ? 200 : null);
   const rowCount = Array.isArray(result?.rows) ? result.rows.length : 0;
-  await handleRgdhDiagnosticEvent({
+  await handleRgdhYksLogEvent({
     level: ok ? 'success' : 'error',
     category: 'network',
     route: endpoint.replace(/^\/api\//, ''),
@@ -1696,6 +2689,11 @@ async function recordRgdhPageFetchDiagnostic(payload, result, durationMs) {
     url: requestUrl,
     status: httpStatus,
     durationMs,
+    responseHeaders: result?.responseHeaders || {},
+    responsePreview: result?.responsePreview || '',
+    responseRowCount: result?.responseRowCount ?? rowCount,
+    responseTotalCount: result?.responseTotalCount ?? result?.totalCount ?? null,
+    responseLink: result?.responseLink || '',
     message: ok ? `GET ${endpoint} -> ${httpStatus}` : (result?.error || result?.reason || `GET ${endpoint} basarisiz.`),
     detail: {
       endpoint,
@@ -1703,6 +2701,8 @@ async function recordRgdhPageFetchDiagnostic(payload, result, durationMs) {
       requestUrl,
       rowCount,
       apiRows: rowCount,
+      responseTotalCount: result?.responseTotalCount ?? result?.totalCount ?? null,
+      responseLink: result?.responseLink || '',
       httpStatus,
       errorType: result?.errorType || null,
       errorClass: result?.errorType || null,
@@ -1842,10 +2842,13 @@ function sanitizeRgdhLogDetail(detail) {
     'endpoint', 'params', 'httpStatus', 'errorType', 'errorClass', 'source', 'busbarId', 'busbarName',
     'selectedBusbar', 'busbarInternalIds', 'internalBusbarId', 'displayBusbarId', 'resolvedInternalBusbarId',
     'candidateBusbarId', 'candidateBusbarIds', 'hybridAuxiliary', 'localDate',
-    'sourceType', 'hour', 'hourStart', 'hourEnd', 'hourRange', 'chunkStart', 'chunkEnd', 'rowCount', 'rowCounts', 'pageCount',
+    'sourceType', 'hour', 'hourStart', 'hourEnd', 'hourRange', 'chunkStart', 'chunkEnd', 'windowStart', 'windowEnd', 'rowCount', 'rowCounts', 'pageCount',
     'resolverMethod', 'resolverPageCount', 'transport', 'apiRows', 'domRows', 'partialErrors',
     'metricEmptyRows', 'failedHours', 'attemptedHours', 'failedChunks', 'attemptedChunks',
-    'requestUrl', 'pageTimeoutMs', 'concurrency', 'jobTimeoutMs'
+    'requestUrl', 'pageTimeoutMs', 'concurrency', 'jobTimeoutMs', 'fallbackPhase',
+    'retrySize', 'rangeChunkHours', 'chunkIndex', 'expectedRows', 'fetchedRows',
+    'responseTotalCount', 'responseLink', 'missingWindows', 'isComplete',
+    'continuationJobId', 'parentJobId', 'isHybridContinuation'
   ].forEach((key) => {
     if (detail[key] !== undefined) allowed[key] = key === 'params' ? sanitizeRgdhParams(detail[key]) : detail[key];
   });
@@ -1872,6 +2875,7 @@ async function rgdhPageFetchMainWorld(request) {
   const allowed = [
     '/api/rgdh-conventional-busbar-data',
     '/api/rgdh-wind-busbar-data',
+    '/api/rgdh-wind-busbar-data-csv',
     '/api/general-parameter-by-name',
     '/api/busbars'
   ];
@@ -1880,14 +2884,18 @@ async function rgdhPageFetchMainWorld(request) {
 
   const baseUrl = String(request?.baseUrl || 'https://yks.teias.gov.tr').replace(/\/+$/, '');
   const params = request?.params || {};
-  const page = Number(params.page || 0);
+  const hasPage = params.page !== undefined && params.page !== null && params.page !== '';
+  const page = hasPage ? Number(params.page) : undefined;
   const size = Number(params.size || 2000);
-  const pageFetchTimeoutMs = Math.max(5000, Math.min(60000, Number(request?.timeoutMs || 60000)));
+  const pageFetchTimeoutMs = Math.max(5000, Math.min(420000, Number(request?.timeoutMs || 60000)));
   const token = readYksBearerToken();
 
   const buildUrl = () => {
     const url = new URL(endpoint, baseUrl);
-    Object.entries({ ...params, page, size }).forEach(([key, value]) => {
+    const queryParams = { ...params, size };
+    if (hasPage) queryParams.page = Number.isFinite(page) ? page : 0;
+    else delete queryParams.page;
+    Object.entries(queryParams).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
     });
     return url.toString();
@@ -1922,14 +2930,39 @@ async function rgdhPageFetchMainWorld(request) {
         httpStatus: response.status
       };
     }
+    const responseHeaders = headersObjectFromFetch(response.headers);
     const json = await response.json();
     const pageRows = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
     const lastPage = parseLast(response.headers.get('link'));
     const totalCount = Number(response.headers.get('x-total-count')) || null;
-    return { ok: true, rows: pageRows, page, lastPage, totalCount, httpStatus: 200, transport: 'page-context' };
+    return {
+      ok: true,
+      rows: pageRows,
+      page,
+      lastPage,
+      totalCount,
+      responseTotalCount: totalCount,
+      responseLink: response.headers.get('link') || '',
+      responseHeaders,
+      responseRowCount: pageRows.length,
+      responsePreview: JSON.stringify(json).slice(0, 4000),
+      httpStatus: 200,
+      transport: 'page-context'
+    };
   } catch (error) {
     if (fetchTimer !== null) clearTimeout(fetchTimer);
     return { ok: false, error: String(error?.message || error).slice(0, 500), errorType: classifyPageFetchMainWorldError(error) };
+  }
+
+  function headersObjectFromFetch(headers) {
+    const output = {};
+    if (!headers || typeof headers.entries !== 'function') return output;
+    try {
+      Array.from(headers.entries()).forEach(([key, value]) => {
+        output[key] = value;
+      });
+    } catch {}
+    return output;
   }
 
   function classifyPageFetchMainWorldError(error) {

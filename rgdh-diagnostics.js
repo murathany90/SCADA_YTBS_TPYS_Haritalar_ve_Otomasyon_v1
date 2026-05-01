@@ -10,11 +10,16 @@
     'rgdh-conventional-busbar-data',
     'rgdh-wind-busbar-data',
     'analogchart-busbar-data',
-    'rgdh-busbar-participant'
+    'rgdh-busbar-participant',
+    'teias-rgdh-conv-unit-data'
   ];
   const TARGET_API_PATHS = [
     '/api/rgdh-conventional-busbar-data',
     '/api/rgdh-wind-busbar-data',
+    '/api/rgdh-wind-busbar-data-csv',
+    '/api/rgdh-busbar-participant',
+    '/api/rgdh-busbar-participants',
+    '/api/teias-rgdh-conv-unit-data',
     '/api/general-parameter-by-name',
     '/api/busbars'
   ];
@@ -29,7 +34,7 @@
     try {
       const url = new URL(raw, 'https://yks.teias.gov.tr');
       const apiPath = TARGET_API_PATHS.find((path) => url.pathname === path);
-      if (apiPath) return apiPath.replace(/^\/api\//, '');
+      if (apiPath) return apiPath.replace(/^\/api\//, '').replace(/-csv$/, '');
     } catch {}
     return '';
   }
@@ -61,6 +66,11 @@
       durationMs: nullableNumber(event.durationMs),
       requestHeaders: sanitizeHeaders(event.requestHeaders),
       responseHeaders: sanitizeHeaders(event.responseHeaders),
+      responsePreview: sanitizeMessage(event.responsePreview || '').slice(0, 4000),
+      responseRowCount: nullableNumber(event.responseRowCount),
+      responseTotalCount: nullableNumber(event.responseTotalCount),
+      responseLink: sanitizeMessage(event.responseLink || '').slice(0, 1000),
+      responseKeys: normalizeStringArray(event.responseKeys, 40),
       message: sanitizeMessage(event.message || ''),
       detail: sanitizeDetail(event.detail)
     };
@@ -98,8 +108,8 @@
   }
 
   function diagnosticEventsToCsv(events) {
-    const extraHeaders = ['Job ID', 'Kaynak Tipi', 'Secili Bara ID', 'YKS Ic Bara ID', 'Saat Baslangic', 'Saat Bitis', 'Chunk Baslangic', 'Chunk Bitis', 'Hata Sinifi', 'Istek URL', 'API Satir', 'Metrik Bos Satir'];
-    const headers = ['Zaman', 'Seviye', 'Kategori', 'Route', 'Metot', 'URL', 'HTTP', 'Süre(ms)', 'Mesaj', 'Detay', ...extraHeaders];
+    const extraHeaders = ['Job ID', 'Kaynak Tipi', 'Secili Bara ID', 'YKS Ic Bara ID', 'Saat Baslangic', 'Saat Bitis', 'Chunk Baslangic', 'Chunk Bitis', 'Fallback Phase', 'Hata Sinifi', 'Istek URL', 'API Satir', 'Metrik Bos Satir'];
+    const headers = ['Zaman', 'Seviye', 'Kategori', 'Route', 'Metot', 'URL', 'HTTP', 'Süre(ms)', 'Mesaj', 'Request Headers', 'Response Headers', 'Response Preview', 'Response Row Count', 'Response Total Count', 'Response Link', 'Response Keys', ...extraHeaders];
     const lines = [headers.join(';')];
     (events || []).forEach((event) => {
       const safe = sanitizeDiagnosticEvent(event);
@@ -114,11 +124,13 @@
         safe.status ?? '',
         safe.durationMs ?? '',
         safe.message,
-        JSON.stringify({
-          requestHeaders: safe.requestHeaders,
-          responseHeaders: safe.responseHeaders,
-          detail
-        }),
+        JSON.stringify(safe.requestHeaders || {}),
+        JSON.stringify(safe.responseHeaders || {}),
+        safe.responsePreview || '',
+        safe.responseRowCount ?? '',
+        safe.responseTotalCount ?? '',
+        safe.responseLink || '',
+        (safe.responseKeys || []).join(','),
         detail.jobId || '',
         detail.sourceType || detail.source || '',
         detail.displayBusbarId || detail.busbarId || '',
@@ -127,6 +139,7 @@
         detail.hourEnd || '',
         detail.chunkStart || '',
         detail.chunkEnd || '',
+        detail.fallbackPhase || '',
         detail.errorClass || detail.errorType || '',
         detail.requestUrl || safe.url || '',
         detail.apiRows || detail.rowCount || '',
@@ -221,8 +234,17 @@
   }
 
   function nullableNumber(value) {
+    if (value === undefined || value === null || value === '') return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  function normalizeStringArray(value, limit) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => stringValue(item).slice(0, 80))
+      .filter((item) => item && !SENSITIVE_KEYS.test(item))
+      .slice(0, limit || 20);
   }
 
   function stringValue(value) {

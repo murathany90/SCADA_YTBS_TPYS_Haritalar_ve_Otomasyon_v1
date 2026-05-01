@@ -9,6 +9,7 @@
   const RGDH_ENDPOINTS = {
     conventional: '/api/rgdh-conventional-busbar-data',
     wind: '/api/rgdh-wind-busbar-data',
+    windCsv: '/api/rgdh-wind-busbar-data-csv',
     parameter: '/api/general-parameter-by-name',
     busbars: '/api/busbars'
   };
@@ -174,6 +175,19 @@
       busbarInternalId,
       ...extra
     });
+  }
+
+  function buildWindRangeParams(startUtc, endUtc, busbarInternalId, extra = {}) {
+    const params = normalizeBusbarExtra({
+      'measurementDate.greaterOrEqualThan': startUtc,
+      'measurementDate.lessThan': endUtc,
+      size: 60,
+      sort: 'measurementDate,asc',
+      busbarInternalId,
+      ...extra
+    });
+    delete params.page;
+    return params;
   }
 
   function buildWindChunkParams(localDate, busbarInternalId, localHour, durationHours = 2, extra = {}) {
@@ -343,6 +357,7 @@
     buildWindDayParams,
     buildConventionalHourParams,
     buildWindHourParams,
+    buildWindRangeParams,
     buildWindChunkParams,
     buildGeneralParameterParams,
     buildBusbarCatalogParams,

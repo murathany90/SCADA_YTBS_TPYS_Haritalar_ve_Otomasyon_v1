@@ -37,6 +37,8 @@ test('normalizeConventionalApiRow maps API fields to the shared model', () => {
     busTa3Volt: 407.25,
     busTa3VoltQ0Txt: 'Actual',
     busbarSetToleranceApprove: 1,
+    diMvarApprove: 1,
+    aiMvarApprove: 0,
     approvalStatus: 1
   });
 
@@ -58,6 +60,10 @@ test('normalizeConventionalApiRow maps API fields to the shared model', () => {
   assert.equal(row.qgenMvar, -0.51);
   assert.equal(row.diMvarLimit, -1.25);
   assert.equal(row.aiMvarLimit, 2.5);
+  assert.equal(row.offBoardStatus, 0);
+  assert.equal(row.noObligationStatus, 0);
+  assert.equal(row.diMvarApprove, 1);
+  assert.equal(row.aiMvarApprove, 0);
   assert.equal(row.approvalStatus, 1);
   assert.equal(row.flags.voltageOutOfBand, false);
 });
@@ -107,6 +113,10 @@ test('normalizeWindApiRow keeps RES/GES as main type and separates auxiliary sou
     sumPgenReactive: 0.39,
     sumDIMvarLimit: -0.59,
     sumAIMvarLimit: 0.91,
+    rgdhOffBoardStatus: 0,
+    noObligationStatus: 1,
+    diMvarApprove: 1,
+    aiMvarApprove: 0,
     approvalStatus: 0
   });
 
@@ -124,6 +134,10 @@ test('normalizeWindApiRow keeps RES/GES as main type and separates auxiliary sou
   assert.equal(row.qgenMvar, 0.39);
   assert.equal(row.diMvarLimit, -0.59);
   assert.equal(row.aiMvarLimit, 0.91);
+  assert.equal(row.offBoardStatus, 0);
+  assert.equal(row.noObligationStatus, 1);
+  assert.equal(row.diMvarApprove, 1);
+  assert.equal(row.aiMvarApprove, 0);
   assert.equal(row.approvalStatus, 0);
   assert.equal(row.auxiliaryMw, 2.5);
   assert.equal(row.auxiliaryMvar, -0.75);

@@ -51,6 +51,7 @@ $files = @(
   'rgdh-auxiliary-catalog.js',
   'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv',
   'yks-rgdh-instrumentation.js',
+  'yks-rgdh-diagnostic-bridge.js',
   'map.html',
   'map.css',
   'map.js',

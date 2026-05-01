@@ -52,25 +52,68 @@ test('manifest injects YKS diagnostics helpers before the main content script', 
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   const scripts = manifest.content_scripts.flatMap((entry) => entry.js || []);
   const diagnosticsIndex = scripts.indexOf('rgdh-diagnostics.js');
+  const bridgeIndex = scripts.indexOf('yks-rgdh-diagnostic-bridge.js');
   const contentIndex = scripts.indexOf('content-script.js');
   const mainWorldEntry = manifest.content_scripts.find((entry) => entry.world === 'MAIN');
+  const yksBridgeEntry = manifest.content_scripts.find((entry) => {
+    return entry.run_at === 'document_start'
+      && entry.world !== 'MAIN'
+      && (entry.matches || []).includes('https://yks.teias.gov.tr/*')
+      && (entry.js || []).includes('yks-rgdh-diagnostic-bridge.js');
+  });
 
   assert.ok(diagnosticsIndex >= 0, 'rgdh-diagnostics.js should be injected into the isolated content-script world');
+  assert.ok(bridgeIndex >= 0, 'YKS diagnostic bridge should be injected');
   assert.ok(contentIndex >= 0, 'content-script.js should still be injected');
-  assert.ok(diagnosticsIndex < contentIndex, 'diagnostics helper should load before content-script.js');
+  assert.ok(diagnosticsIndex < bridgeIndex, 'diagnostics helper should load before YKS bridge');
+  assert.ok(yksBridgeEntry, 'YKS isolated bridge content script should load at document_start');
+  assert.deepEqual(yksBridgeEntry.js, ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']);
   assert.ok(mainWorldEntry, 'YKS MAIN-world instrumentation content script should exist');
   assert.deepEqual(mainWorldEntry.matches, ['https://yks.teias.gov.tr/*']);
   assert.ok(mainWorldEntry.js.includes('yks-rgdh-instrumentation.js'));
   assert.equal(mainWorldEntry.run_at, 'document_start');
 });
 
-test('rgdh monitor exposes unified error log export controls', () => {
+test('rgdh monitor exposes separate extension and YKS log panels', () => {
   const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
 
-  assert.match(html, /id="btnExportErrorLogCsv"/);
+  assert.doesNotMatch(html, />Hata Detaylari\s*</);
+  assert.match(html, /id="btnErrorDetails"[\s\S]*Eklenti Loglari/);
+  assert.match(html, /id="extensionLogCount"/);
+  assert.match(html, /id="btnYksLogs"[\s\S]*YKS Loglari/);
+  assert.match(html, /id="yksLogCount"/);
+  assert.match(html, /id="extensionLogPanel"/);
+  assert.match(html, /id="yksLogPanel"/);
+  assert.match(html, /id="extensionLogList"/);
+  assert.match(html, /id="yksLogList"/);
+  assert.match(html, /id="btnExportExtensionLogCsv"/);
+  assert.match(html, /id="btnExportYksLogCsv"/);
   assert.match(html, /id="btnClearErrorLogs"/);
-  assert.match(html, /id="diagnosticList"/);
+  assert.match(html, /id="btnClearYksLogs"/);
   assert.match(html, /id="btnCancelFetch"/);
+});
+
+test('rgdh monitor raw data table exposes original YKS status and approval columns', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  ['TPYS GD', 'Devre Durumu', 'Yukumluluk Durumu', 'D.I MVAR ONAY', 'A.I MVAR ONAY', 'Onay Durum'].forEach((header) => {
+    assert.match(js, new RegExp(header.replace('.', '\\.')));
+  });
+  assert.match(js, /formatStatusFlag/);
+  assert.match(js, /formatObligationStatus/);
+});
+
+test('rgdh monitor caps auxiliary RES/GES polling budget at five minutes', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  assert.match(js, /300000/);
+  assert.doesNotMatch(js, /Math\.min\(180000/);
+});
+
+test('extension build includes YKS diagnostic bridge file', () => {
+  const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
+
+  assert.match(buildScript, /yks-rgdh-diagnostic-bridge\.js/);
 });
 
 test('rgdh monitor daily table is date-first without summary and voltage toggle excludes TPYS/live busbar', () => {

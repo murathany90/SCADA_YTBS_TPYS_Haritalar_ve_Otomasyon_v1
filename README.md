@@ -508,11 +508,512 @@ data/kml_layers_v2.json   # 34 MB — gereksiz yere commit etmeyin
 
 ## RGDH İzleme Modülü
 
-Popup üzerindeki **RGDH İzleme** butonu ile açılan modül; Konvansiyonel Bara Data ve RES/GES Bara Data verilerini YKS API, CSV veya DOM kaynaklarından ortak normalize modele dönüştürür. Ham Data, Günlük RGDH İzleme, RGDH Grafik Rapor ve RGDH Testleri sekmeleri aynı normalize veri üzerinden çalışır.
+RGDH İzleme Modülü, popup üzerindeki **RGDH İzleme** butonu ile açılan ayrı izleme ekranıdır.
+Bu ekranın amacı, YKS tarafındaki RGDH verisini CSV ve DOM kaynakları ile aynı normalize modele taşımaktır.
+Modül hem Konvansiyonel Bara Data hem de RES/GES Bara Data ekranlarını destekler.
+Modül tek bara odaklı YKS çekimi yapar; toplu YKS çekimi yerine seçili katalog barası üzerinden ilerler.
+Modülün ana ekranı `rgdh-monitor.html`, iş mantığı `rgdh-monitor.js`, YKS transport katmanı `background.js` içindedir.
+API URL ve parametre üretimi `rgdh-api-client.js` içinde tutulur.
+CSV ayrıştırma `rgdh-csv.js`, normalize model `rgdh-normalizer.js`, günlük özet `rgdh-pivot.js` ile yapılır.
+Grafik raporu `rgdh-charts.js`, hata ve network kayıtları `rgdh-diagnostics.js` tarafından desteklenir.
+YKS sayfası ile köprü kuran kısım `rgdh-dom-bridge.js` dosyasında toplanır.
+Ekranın dört ana sekmesi vardır: **Ham Data**, **Günlük RGDH İzleme**, **RGDH Grafik Rapor**, **RGDH Testleri**.
+Bu dört sekme aynı veri havuzunu okur.
+Veri havuzunda API satırları, CSV satırları ve DOM fallback satırları ayrı tutulur.
+Sekmelerde gösterilen tablolar, üst filtrelerin sonucuna göre yeniden hesaplanır.
+Üst filtreler tarih, bitiş tarihi, veri tipi ve bara seçimi alanlarından oluşur.
+Veri tipi `Tümü`, `Konvansiyonel` veya `RES/GES` olabilir.
+Tarih alanı İstanbul yerel günü kabul eder.
+Bitiş tarihi seçilirse aralık bitiş tarihi hariç olacak şekilde okunur.
+Bara seçimi katalogdan gelen tekil bara özetleri ile doldurulur.
+YKS çekimi için katalogdan bara seçmek zorunludur.
+CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 
-Bara/Ünite Tanımlama CSV'si katalog olarak algılanır; santral, bara ve ünite combobox'ları bu katalogdan beslenir. RES/GES API çağrılarında `busbarId.equals` değeri katalog, yüklenen dosya adı veya YKS sayfasındaki seçimlerden çözümlenir. YKS'den çekme paneli, direct/page-context/DOM fallback adımlarını ve satır sayılarını kullanıcıya detaylı log olarak gösterir.
+### Ana Kavramlar
 
-Modül kullanıcı oturum bilgisi saklamaz. Bearer token, cookie, Authorization header veya kullanıcı kimliği console'a, storage'a, fixture'a ya da rapora yazılmaz. YKS oturumu açıksa önce yetkili API erişimi denenir; başarısız olursa whitelisted page-context fetch ve kısmi DOM fallback kullanılır.
+- `API satırı`: YKS endpointlerinden dönen ham JSON satırıdır.
+- `CSV satırı`: YKS dışa aktarım CSV dosyasından ayrıştırılan satırdır.
+- `DOM satırı`: API erişimi başarısız olduğunda YKS ekran tablosundan okunabilen sınırlı satırdır.
+- `Normalize satır`: API, CSV veya DOM satırının ortak RGDH modeline dönüştürülmüş halidir.
+- `Katalog satırı`: Bara/Ünite Tanımlama CSV'sinden veya gömülü katalogdan gelen tanım satırıdır.
+- `Bara özeti`: Aynı bara altındaki ünitelerin gruplanmış katalog görünümüdür.
+- `İç bara ID`: YKS API'nin `busbarId.equals` parametresinde beklediği ID'dir.
+- `Görünen bara ID`: YKS ekranında veya katalogda kullanıcıya görünen bara numarasıdır.
+- `Hibrit yardımcı kaynak`: RES/GES barasında ana kaynak yanında yardımcı GES veya yardımcı ünite bulunmasıdır.
+- `Job`: Uzun YKS çekimini background service worker içinde yürüten izleme işidir.
+- `Row chunk`: Büyük cevaplarda satırların status yanıtı yerine parça parça taşınmasıdır.
+- `Partial error`: Bazı saatler veya aday ID'ler başarısız olsa bile işin tamamen düşmemesi için saklanan uyarıdır.
+- `Diagnostic event`: Background, content script veya YKS sayfasından toplanan debug kaydıdır.
+- `Fetch log`: Kullanıcının panelde gördüğü, her aşamayı okunabilir şekilde anlatan iş günlüğüdür.
+
+### Üst Araç Çubuğu
+
+- `Tarih` alanı çekilecek ana İstanbul gününü belirler.
+- `Bitiş Tarihi (hariç)` alanı çok günlük rapor için kullanılır.
+- Boş bitiş tarihi tek gün anlamına gelir.
+- Bitiş tarihi doluysa `buildLocalDateRange` ile gün listesi üretilir.
+- `Veri Tipi` seçimi endpoint kararını etkiler.
+- `Konvansiyonel` seçilirse yalnız `/api/rgdh-conventional-busbar-data` okunur.
+- `RES/GES` seçilirse yalnız `/api/rgdh-wind-busbar-data` okunur.
+- `Tümü` seçiliyse seçili baranın tipine göre etkili veri tipi yeniden çözümlenir.
+- `Bara Ara` alanı katalogdaki bara özetlerini listeler.
+- Hibrit baralar listede `[Yardimci kaynak]` etiketiyle ayırt edilir.
+- Hibrit baralar tabloda küçük işaret ile görünür.
+- `YKS'den Çek` butonu background job başlatır.
+- `İptal` butonu aktif job için cancel isteği gönderir.
+- `CSV Yükle` butonu YKS CSV dosyalarını veya katalog CSV'sini okur.
+- `Gerilim Kaynaklarını Göster` butonu gerilim kolonlarını görünür yapar.
+- `Karşılaştır` butonu API ve CSV normalize satırlarını karşılaştırır.
+- `CSV Dışarı Aktar` butonu mevcut normalize görünümü dışa aktarır.
+- `Hata Detayları` butonu hata panelini açar.
+- Hata panelinde hem yerel hata listesi hem de network/console diagnostikleri bulunur.
+- `YKS Çekim Detayları` paneli her job sırasında otomatik açılır.
+
+### Sekme 1: Ham Data
+
+- Ham Data sekmesi normalize edilmiş satırları satır satır gösterir.
+- Kaynak kolonu satırın `API`, `CSV` veya `DOM` kökenini gösterir.
+- Tarih-Saat kolonu İstanbul yerel zamanına göre gösterilir.
+- Tip kolonu `CONVENTIONAL` veya `WIND` değerini taşır.
+- YTM kolonu katalog zenginleştirmesinden gelir.
+- Santral kolonu `plantName` alanından okunur.
+- Bara ID kolonu görünen bara kimliğini gösterir.
+- Bara Adı kolonu kullanıcıya tanıdık bara adını gösterir.
+- İç ID kolonu YKS API sorgusunda kullanılan iç bara ID bilgisini gösterir.
+- TPYS Set kolonu `tpysBusVoltSet` veya karşılık gelen normalize değerden gelir.
+- Canlı Bara kolonu canlı bara gerilim değerini gösterir.
+- Pgen MW kolonu aktif üretimi gösterir.
+- Qgen MVAr kolonu reaktif üretimi gösterir.
+- Yrd. MW kolonu yardımcı kaynak aktif gücünü gösterir.
+- Yrd. MVAr kolonu yardımcı kaynak reaktif gücünü gösterir.
+- Yrd. D.I. kolonu yardımcı kaynak düşük ikaz limitini gösterir.
+- Yrd. A.I. kolonu yardımcı kaynak aşırı ikaz limitini gösterir.
+- D.I. kolonu ana kaynağın düşük ikaz limitini gösterir.
+- A.I. kolonu ana kaynağın aşırı ikaz limitini gösterir.
+- Onay kolonu ana veya yardımcı onay durumunu gösterir.
+- Kalite kolonu normalize kalite ve karşılaştırma farkı bilgisini gösterir.
+- Tablo ilk 2000 satırı render eder.
+- Daha fazla satır bellekte kalır, fakat UI performansı için ekranda sınır uygulanır.
+- Üst filtreler değiştikçe tablo yeniden süzülür.
+- Bir CSV ve bir API yükü birlikte varsa aynı tablo içinde kaynak rozetiyle ayrılır.
+- Eğer metrik alanları kaynakta boşsa satır kalite alanında uyarı üretebilir.
+- DOM satırları sıfır ölçüm ise normalize modele alınmadan elenir.
+- Ham Data sekmesi en iyi debug başlangıç noktasıdır.
+- YKS'den veri geldi mi sorusuna ilk cevap bu sekmedeki satır sayısıdır.
+- İç ID doğru mu sorusu için İç ID kolonu kontrol edilir.
+- Hibrit yardımcı veriler geldi mi sorusu için Yrd. MW ve Yrd. MVAr kolonları kontrol edilir.
+- Gerilim farkı analizi için TPYS Set ve Canlı Bara kolonları birlikte okunur.
+
+### Sekme 2: Günlük RGDH İzleme
+
+- Günlük RGDH İzleme sekmesi normalize satırları saatlik katılım tablosuna çevirir.
+- Her satır bir tarih, bir bara ve bir kontrol tipi kombinasyonudur.
+- Tablo başında Tarih, Bara, Tip ve Kontrol kolonları bulunur.
+- Sonrasında 00 ile 23 arasında 24 saat kolonu yer alır.
+- Saat hücreleri ilgili saatteki dakika bazlı katılım yüzdesini gösterir.
+- Beklenen dakika sayısı normal durumda 60 dakikadır.
+- Başarılı dakika sayısı onay, yükümlülük ve veri kalitesine göre hesaplanır.
+- Katılım yüzdesi `successMinuteCount / expectedMinuteCount` üzerinden üretilir.
+- Hücre rengi `participationClass` sonucuna göre atanır.
+- Yeterli veri varsa hücre yeşil sınıfa yakın görünür.
+- Eksik veya uyarılı veri varsa hücre uyarı sınıfına düşer.
+- Başarısız veya çok eksik veri varsa hücre kırmızı sınıfa düşer.
+- Veri yoksa hücre `-` gösterir.
+- Hücre tooltip bilgisinde saat, katılım, set gerilimi, canlı gerilim, P, Q ve başarılı dakika sayısı bulunur.
+- Tarih hücresine tıklanırsa aynı bara için tam gün grafik rapora geçilir.
+- Saat hücresine tıklanırsa aynı bara, aynı tarih ve seçili saat için grafik rapora geçilir.
+- Bu davranış `state.chartSelection` üzerinden taşınır.
+- Günlük tablo grafik sekmesine bağlanan ana drilldown ekranıdır.
+- Çok günlük aralık seçilirse her yerel gün ayrı satır grubu olarak hesaplanır.
+- Bitiş tarihi hariç mantığı sayesinde rapor aralıkları üst üste binmez.
+- RES/GES ve konvansiyonel satırlar aynı pivot mantığıyla işlenir.
+- Hibrit yardımcı kaynak etiketi günlük tabloda da bara adının yanında korunur.
+- Gerilim kolonları günlük tabloda doğrudan kolon olarak gösterilmez, fakat hücre tooltipinde özetlenir.
+- Günlük sekme operasyonel izleme için en hızlı genel durum ekranıdır.
+- Hangi saatte veri boş kaldı sorusu bu sekmede hemen görülür.
+- Hangi saatin grafiğine bakılmalı sorusu saat hücrelerinden seçilerek cevaplanır.
+- CSV ve API karşılaştırması yapılmışsa kalite rozetleri ham data üzerinden kontrol edilir.
+- Günlük tablo, normalize edilmiş veri yoksa boş kalır.
+- YKS çekimi tamamlandı ama bu sekme boşsa önce Ham Data ve hata paneli kontrol edilmelidir.
+
+### Sekme 3: RGDH Grafik Rapor
+
+- RGDH Grafik Rapor sekmesi zaman serisini Chart.js ile çizer.
+- Grafik sekmesi yalnız aktif sekme olduğunda render edilir.
+- Başlangıç seçimleri Günlük RGDH İzleme drilldown durumundan gelir.
+- Seçili bara yoksa filtrelenmiş satırlardaki ilk bara varsayılan alınır.
+- Seçili tarih yoksa ilgili baranın ilk mevcut tarihi kullanılır.
+- Sekme üstünde bağlam etiketi bulunur.
+- Bağlam etiketi bara adını, tarihi ve saat seçimini gösterir.
+- Tam gün seçiliyse etikette `tüm gün` mantığı gösterilir.
+- Saat seçiliyse etikette `HH:00` formatı gösterilir.
+- Grafik araç çubuğunda Bara seçimi bulunur.
+- Grafik araç çubuğunda BYTM seçimi bulunur.
+- Grafik araç çubuğunda Tarih seçimi bulunur.
+- Grafik araç çubuğunda Başlangıç saat/dakika alanları bulunur.
+- Grafik araç çubuğunda Bitiş saat/dakika alanları bulunur.
+- `Sorgula` butonu bu grafik içi filtreleri uygular.
+- `Tam Ekran` butonu grafik alanını geniş okumaya uygun hale getirir.
+- Ana grafik P, Q, limit ve gerilim serilerini satır içeriğine göre oluşturur.
+- TPYS Set gerilimi ayrı seri olarak tutulur.
+- Canlı bara gerilimi ayrı seri olarak tutulur.
+- Gerilim kaynakları görünürlüğü üstteki gerilim toggle ile yönetilir.
+- Konvansiyonel tolerans bantları uygun veri olduğunda grafiğe eklenebilir.
+- Detay tablosu varsayılan gizlidir.
+- `Tablo Göster` butonu seçili grafik satırlarını tablo olarak açar.
+- Detay tablosu grafikle aynı filtreyi kullanır.
+- 24 saat sonuçlar paneli grafik sekmesinin altında bulunur.
+- 24 saat sonuçlar paneli günlük pivotun kompakt ısı haritasıdır.
+- Isı haritasındaki saat hücreleri de saat seçimi yapabilir.
+- Isı haritası tıklanınca grafik aynı bara ve aynı saat için yeniden render edilir.
+- Grafik rapor saatlik anomali incelemesi için kullanılır.
+- Eğer ham veri satırı geldiği halde grafik boşsa tarih, bara ve saat filtresi kontrol edilmelidir.
+- Eğer gerilim çizgileri görünmüyorsa `Gerilim Kaynaklarını Göster` butonu kontrol edilmelidir.
+- Eğer yardımcı kaynak verileri bekleniyorsa Ham Data sekmesindeki yardımcı kolonlarla grafik birlikte okunmalıdır.
+
+### Sekme 4: RGDH Testleri
+
+- RGDH Testleri sekmesi ölçüm satırlarından çok katalog ve sertifika tanımlarına odaklanır.
+- Ana kaynak Bara/Ünite Tanımlama CSV'sidir.
+- Gömülü katalog verileri de ekran açılışında yüklenir.
+- Yardımcı kaynak katalog overlay'i hibrit santral bilgilerini zenginleştirir.
+- Sekmede Santral/Bara Ara filtresi bulunur.
+- Sekmede Bara Tipi filtresi bulunur.
+- Sekmede Bara Adı filtresi bulunur.
+- Sekmede Hibrit santraller checkbox filtresi bulunur.
+- Hibrit filtresi yalnız `hasAuxiliarySource` işareti taşıyan baraları gösterir.
+- Ana test tablosunda bara tipi gösterilir.
+- Ana test tablosunda bara ID gösterilir.
+- Ana test tablosunda bara adı gösterilir.
+- Ana test tablosunda RGK tipi gösterilir.
+- Ana test tablosunda bara gerilim seviyesi gösterilir.
+- Ana test tablosunda BYTM gösterilir.
+- Ana test tablosunda TPYS santral ID gösterilir.
+- Ana test tablosunda TPYS santral ismi gösterilir.
+- Ana test tablosunda Bara 1 TA ve Setnum gösterilir.
+- Ana test tablosunda Bara 2 TA ve Setnum gösterilir.
+- Ana test tablosunda Bara 3 TA ve Setnum gösterilir.
+- Bir bara satırına tıklanınca ünite detay tablosu güncellenir.
+- Ünite detay tablosunda ünite adı gösterilir.
+- Ünite detay tablosunda UEVCB adı gösterilir.
+- Ünite detay tablosunda TPYS UEVCB ID gösterilir.
+- Ünite detay tablosunda kaynak tipi gösterilir.
+- Ünite detay tablosunda aktif güç TA ve setnum gösterilir.
+- Ünite detay tablosunda reaktif güç TA ve setnum gösterilir.
+- Ünite detay tablosunda ünite nominal güç gösterilir.
+- Ünite detay tablosunda ünite PMKUD gösterilir.
+- Ünite detay tablosunda nominal düşük ikaz değeri gösterilir.
+- Ünite detay tablosunda nominal aşırı ikaz değeri gösterilir.
+- `CSV İndir` butonu test/katalog görünümünü dışa aktarır.
+- Bu sekme YKS veri çekiminden bağımsız olarak katalog doğrulama için kullanılabilir.
+- YKS çekiminde seçilecek baranın yardımcı kaynak taşıyıp taşımadığı bu sekmeden doğrulanabilir.
+- Hibrit sorunlarında önce bu sekmede baranın `[Yardimci kaynak]` olarak işaretlenip işaretlenmediği kontrol edilmelidir.
+
+### YKS'den Çek Akışı: Kullanıcı Tarafı
+
+- Kullanıcı önce tarih seçer.
+- Kullanıcı gerekirse bitiş tarihi seçer.
+- Kullanıcı veri tipini seçer.
+- Kullanıcı katalogdan tek bir bara seçer.
+- Kullanıcı `YKS'den Çek` butonuna basar.
+- `rgdh-monitor.js` mevcut filtreleri `readFilters()` ile okur.
+- `resolveSelectedBusbar()` katalog seçimini normalize eder.
+- `resolveSelectedInternalIds()` seçili bara için bilinen iç ID adaylarını çıkarır.
+- `resolveFetchSourceType()` etkili kaynak tipini belirler.
+- Fetch log paneli açılır.
+- Butonlar job süresince kilitlenir.
+- Payload içine `localDate`, `endDate`, `sourceType`, `busbarInternalIds`, `selectedBusbar` ve `jobTimeoutMs` yazılır.
+- Hibrit yardımcı RES/GES için job timeout değeri 180 saniyeye çıkarılır.
+- Normal işler için job timeout değeri 60 saniye civarında tutulur.
+- Payload `RGDH_DOM_BRIDGE.startRgdhFetchJob()` üzerinden background'a gönderilir.
+- Eski köprü yoksa doğrudan request yolu kullanılabilir.
+- Background job ID döndürür.
+- UI her saniye `getRgdhFetchJobStatus(jobId)` ile durumu poll eder.
+- Status içinde loglar taşınır.
+- Status tamamlandığında satırlar doğrudan status içinde taşınmaz.
+- Büyük satırlar için `getRgdhFetchRows(jobId, kind, offset, limit)` çağrıları yapılır.
+- UI `conventionalRows`, `windRows` ve `domRows` parçalarını hydrate eder.
+- Gelen API satırları normalizer'dan geçirilir.
+- Normalize edilen satırlar katalog bilgisiyle zenginleştirilir.
+- Ekran istatistikleri ve sekmeler yeniden render edilir.
+- Partial error varsa iş tamamen başarısız sayılmayabilir.
+- Partial error kullanıcıya hata panelinde ve fetch log panelinde gösterilir.
+- API satırı gelmediyse durum `YKS çekimi başarısız: kayıt yok` mesajına dönebilir.
+
+### YKS'den Çek Akışı: Background Job Katmanı
+
+- `handleRgdhFetchStart()` yeni job ID üretir.
+- Job ID formatı `rgdh-job-{timestamp}-{seq}` şeklindedir.
+- Job başlangıç zamanı kaydedilir.
+- Job payload'ı sanitize edilerek diagnostik kayda yazılır.
+- Hassas header, token veya cookie bilgisi job kaydına yazılmaz.
+- Asıl fetch işi promise zinciriyle arka planda başlar.
+- UI thread uzun fetch boyunca bloklanmaz.
+- `handleRgdhFetchStatus()` job durumunu döndürür.
+- `handleRgdhFetchRows()` büyük satır parçalarını döndürür.
+- `handleRgdhFetchCancel()` çalışan job için iptal durumu yazar.
+- Job `running`, `completed`, `failed` veya `cancelled` durumlarından birini alır.
+- Başarılı job sonucunda satırlar `rowStore` içine taşınır.
+- Status sonucunda yalnız özet bilgiler döner.
+- Satırların parça parça taşınması Chrome mesaj boyutu sorunlarını azaltır.
+- Her job sonunda diagnostik event üretilir.
+- Diagnostik event içinde job ID, kaynak tipi, seçili bara, iç ID, satır sayıları ve hata sınıfı bulunur.
+- Job hataya düşerse hata `sanitizeRgdhBackgroundError()` ile güvenli hale getirilir.
+- Hata loglarında Authorization, cookie ve token benzeri alanlar redakte edilir.
+
+### Tarih ve Saat Dönüşümü
+
+- UI tarihleri İstanbul yerel günü olarak kabul eder.
+- API ise UTC ISO zaman aralığı bekler.
+- `buildUtcDayRangeForIstanbul(localDate)` yerel günü UTC başlangıç ve bitişe çevirir.
+- Örneğin `2026-05-01` İstanbul günü `2026-04-30T21:00:00Z` başlangıcına karşılık gelir.
+- Aynı günün bitişi `2026-05-01T21:00:00Z` olur.
+- Saatlik sorgularda `buildUtcHourRangeForIstanbul()` kullanılır.
+- Yerel 00:00 saati UTC'de bir önceki gün 21:00 aralığına denk gelir.
+- Bu dönüşüm hem konvansiyonel hem RES/GES sorgularında aynıdır.
+- Çok günlük çekimde her yerel gün ayrı ayrı işlenir.
+- Bitiş tarihi hariç tutulur.
+- Bugünün hibrit range fallback'inde bitiş zamanı gün sonunu aşmaz.
+- Bugünün range fallback'inde bitiş zamanı mevcut zamana kadar kısaltılabilir.
+
+### Endpoint ve Parametre Üretimi
+
+- Konvansiyonel veri endpointi `/api/rgdh-conventional-busbar-data` yoludur.
+- RES/GES veri endpointi `/api/rgdh-wind-busbar-data` yoludur.
+- Genel parametre endpointi `/api/general-parameter-by-name` yoludur.
+- Bara katalog endpointi `/api/busbars` yoludur.
+- `buildRgdhUrl()` yalnız izin verilen path değerlerini kabul eder.
+- Bu allow-list hatalı veya dış domainli RGDH path üretimini engeller.
+- Ortak query alanı `measurementDate.greaterOrEqualThan` başlangıç zamanını taşır.
+- Ortak query alanı `measurementDate.lessThan` bitiş zamanını taşır.
+- Sıralama çoğunlukla `measurementDate,asc` olarak verilir.
+- Sayfa boyutu endpoint ve akışa göre 60 veya daha yüksek olabilir.
+- `busbarId.equals` alanı YKS iç bara ID değerini alır.
+- API helper fonksiyonları `busbarInternalId` alanını `busbarId.equals` parametresine dönüştürür.
+- Konvansiyonel saatlik sorguda `page=0` kullanılır.
+- Standart RES/GES saatlik sorguda `page=0` kullanılır.
+- Hibrit özel range sorguda `page` parametresi özellikle silinir.
+- Page'siz hibrit sorgu YKS ekranındaki çalışan request biçimini taklit eder.
+
+### Konvansiyonel YKS Çekimi
+
+- Konvansiyonel seçildiğinde önce seçili bara iç ID değeri kullanılır.
+- Her yerel gün 24 saatlik parçalara bölünür.
+- Her saat için bir API isteği hazırlanır.
+- Parametreler `buildConventionalHourParams()` ile üretilir.
+- Her istek `page=0`, `size=60`, `sort=measurementDate,asc` taşır.
+- Saatlik istekler deadline bütçesine göre timeout alır.
+- Satır geldikçe sonuç listesine eklenir.
+- Bazı saatler boş gelebilir.
+- Bazı saatler timeout olabilir.
+- Tüm saatler başarısız olursa partial error üretilir.
+- Konvansiyonel hata durumunda DOM fallback denenebilir.
+- DOM fallback yalnız YKS ekranından okunabilen tablo satırlarını döndürebilir.
+- DOM fallback API'nin tüm zengin alanlarını garanti etmez.
+
+### Standart RES/GES YKS Çekimi
+
+- RES/GES seçildiğinde endpoint `/api/rgdh-wind-busbar-data` olur.
+- Seçili bara için iç ID adayları hazırlanır.
+- İç ID katalogdan, yüklenen dosya adından veya YKS katalog lookup sonucundan gelebilir.
+- Her iç ID için saatlik çekim denenir.
+- Standart saatlik çekim `buildWindHourParams()` ile hazırlanır.
+- Standart saatlik çekimde `page=0` bulunur.
+- Standart saatlik çekimde saat aralığı tek yerel saatle sınırlıdır.
+- Bu yol normal RES/GES baralar için hızlı ve öngörülebilir çalışır.
+- Başarılı satırlar `windRows` listesine eklenir.
+- Sonuçta kullanılan ID beklenenden farklı ise cache güncellenir.
+- Satır yoksa ve hata tam gün saatlik timeout değilse iş o aday için sonuçlanabilir.
+
+### Hibrit ve Yardımcı Kaynak RES/GES Tespiti
+
+- Hibrit tespiti `selectedBusbar` üzerinden yapılır.
+- `hasAuxiliarySource` alanı boolean `true` ise hibrit kabul edilir.
+- `hasAuxiliarySource` alanı string `"true"` ise de hibrit kabul edilir.
+- `hybridAuxiliary` alanı boolean veya string true ise hibrit kabul edilir.
+- Bara adı, santral adı veya kaynak türünde yardımcı kaynak ipucu aranır.
+- `yardimci`, `hibrit` veya `auxiliary` metinleri hibrit ipucu sayılır.
+- Katalog overlay'i yardımcı kaynak GES ünitelerini işaretleyebilir.
+- Hibrit işlerde job timeout 180 saniyeye kadar uzatılır.
+- Hibrit işlerde aday ID sıralaması daha dikkatli yürütülür.
+- İlk aday genellikle YKS iç bara ID değeridir.
+- Ek aday olarak görünen bara ID denenebilir.
+- Display ID fallback öncesinde probe istekleri çalışabilir.
+- Probe saatleri veri çıkma ihtimali yüksek saatlerden seçilir.
+- Amaç yanlış ID ile 24 saat beklememektir.
+
+### Hibrit Page'siz Range Fallback
+
+- Hibrit yardımcı RES/GES baralarda YKS backend bazı saatlik `page=0` isteklerde timeout verebilir.
+- AKYEL-1 RES incelemesinde aynı iç ID ile YKS ekranındaki geniş aralık isteğinin çalıştığı görülmüştür.
+- Bu nedenle hibrit özel fallback YKS ekranının request şekline yaklaşır.
+- Saatlik isteklerin tamamı timeout olursa page'siz range fallback devreye girer.
+- Fallback fonksiyonu `fetchRgdhWindBusbarByYksUiRange()` adını taşır.
+- Parametre üretimi `buildWindRangeParams()` ile yapılır.
+- Üretilen query içinde `measurementDate.greaterOrEqualThan` bulunur.
+- Üretilen query içinde `measurementDate.lessThan` bulunur.
+- Üretilen query içinde `busbarId.equals` bulunur.
+- Üretilen query içinde `size=60` bulunur.
+- Üretilen query içinde `sort=measurementDate,asc` bulunur.
+- Üretilen query içinde `page` bulunmaz.
+- Bu fark bilerek korunur.
+- Başlangıç cursor değeri normalde yerel gün başlangıcının UTC karşılığıdır.
+- Bitiş değeri normalde yerel gün bitişinin UTC karşılığıdır.
+- Bugün çekiliyorsa bitiş gün sonu yerine mevcut zamana kadar kısaltılabilir.
+- İlk range isteği en geniş gerekli aralığı ister.
+- Cevap 60 satırdan azsa çekim tamamlanmış kabul edilir.
+- Cevap tam 60 satırsa daha fazla veri olabileceği varsayılır.
+- Tam sayfa cevabında son satırın `measurementDate` alanı okunur.
+- Cursor son ölçüm zamanının bir dakika sonrasına taşınır.
+- Yeni istek aynı bitiş zamanına kadar tekrar gönderilir.
+- Cursor ilerlemiyorsa döngü güvenli şekilde kırılır.
+- Maksimum request sayısı limitlidir.
+- Page timeout değeri job deadline bütçesini aşmayacak şekilde clamp edilir.
+- Deadline biterse `YKS_JOB_TIMEOUT` partial error üretilir.
+- Fallback başarılı olursa saatlik timeout hatası nihai hataya dönüştürülmez.
+- Fallback loglarında `fallbackPhase=hybrid-yks-ui-range` bulunur.
+- Fallback loglarında `requestUrl` bulunur.
+- Fallback request URL içinde `page=` görülmemelidir.
+- Fallback request başlangıcı AKYEL-1 örneğinde `2026-04-30T21:00:00Z` olmalıdır.
+- Fallback başarı ölçütü `apiRows > 0` olmasıdır.
+- Fallback sonrası job final hatası `YKS_HOURLY_TIMEOUT` olmamalıdır.
+
+### İç Bara ID Çözümleme
+
+- YKS API için kritik parametre `busbarId.equals` değeridir.
+- Bu değer her zaman kullanıcıya görünen bara ID ile aynı olmayabilir.
+- Katalog satırları iç ID bilgisini sağlayabilir.
+- Dosya adlarından iç ID çıkarılabilir.
+- Seçili YKS katalog barası üzerinden targeted lookup yapılabilir.
+- Broad catalog paging yalnız gerekli olduğunda kullanılır.
+- Broad catalog paging sayfa sınırı ile korunur.
+- Çözümleme sonucu `busbarInternalIds` listesine yazılır.
+- İlk uygun ID asıl aday olarak denenir.
+- Hibrit işlerde görünen ID de ek aday olarak değerlendirilebilir.
+- Başarılı fallback ID cache'e yazılabilir.
+- Cache sonraki çekimlerde tekrar çözümleme maliyetini azaltır.
+- Loglarda `resolverMethod` ve `resolverPageCount` alanları bulunabilir.
+- Loglarda `displayBusbarId`, `resolvedInternalBusbarId` ve `candidateBusbarId` ayrımı önemlidir.
+- İç ID yanlışsa genellikle HTTP 200 ama 0 satır veya tüm saatlerde boş sonuç görülür.
+- İç ID doğru ama request şekli sorunluysa saatlik timeout ve page'siz range başarı paterni görülür.
+
+### Normalizasyon
+
+- Konvansiyonel API satırları `normalizeConventionalApiRow()` ile işlenir.
+- RES/GES API satırları `normalizeWindApiRow()` ile işlenir.
+- CSV parse sonucu `normalizeCsvParseResult()` ile ortak modele çevrilir.
+- DOM satırları `finalizeRow()` ile tamamlanır.
+- Normalize modelde yerel tarih, yerel saat ve yerel dakika alanları bulunur.
+- Normalize modelde kaynak tipi bulunur.
+- Normalize modelde bara ID, bara adı, santral adı ve YTM bulunur.
+- Normalize modelde TPYS set gerilimi ayrı tutulur.
+- Normalize modelde canlı bara gerilimi ayrı tutulur.
+- Normalize modelde ana aktif ve reaktif güç değerleri ayrı tutulur.
+- Normalize modelde yardımcı aktif ve reaktif güç değerleri ayrı tutulur.
+- Normalize modelde ana düşük/aşırı ikaz limitleri ayrı tutulur.
+- Normalize modelde yardımcı düşük/aşırı ikaz limitleri ayrı tutulur.
+- Normalize modelde onay durumları korunur.
+- Kaynakta metrik alanları boşsa `metricFieldsEmptySource` flag'i üretilebilir.
+- Bu flag normalizer hatası değil, YKS kaynağında veri boşluğu göstergesidir.
+- Normalize satırlar katalog ile zenginleştirilebilir.
+- Zenginleştirme santral adı, YTM ve iç ID gibi alanları tamamlar.
+- Karşılaştırma işlemi API ve CSV satırları arasında toleranslı alan farkı üretir.
+
+### CSV Kullanımı
+
+- `CSV Yükle` birden fazla dosya kabul eder.
+- Bara/Ünite Tanımlama CSV'si katalog olarak algılanır.
+- Konvansiyonel RGDH CSV'si ölçüm satırı olarak algılanır.
+- RES/GES RGDH CSV'si ölçüm satırı olarak algılanır.
+- CSV tipi tanınamazsa hata paneline yazılır.
+- Katalog CSV'si yüklenirse mevcut katalog satırlarıyla birleştirilir.
+- Ölçüm CSV'si yüklenirse `state.csvRows` içine normalize edilerek eklenir.
+- CSV satırları API satırlarıyla aynı sekmelerde gösterilir.
+- CSV satırları `CSV` kaynak rozetiyle ayrılır.
+- Karşılaştırma butonu API ve CSV verisini aynı normalize model üzerinden kıyaslar.
+- Dışa aktarım Excel/TR uyumlu semicolon CSV üretir.
+
+### Hata, Log ve Diagnostik Sistemi
+
+- Fetch log paneli job sırasında adım adım bilgi verir.
+- Log seviyesi `debug`, `info`, `success`, `warn` veya `error` olabilir.
+- Loglarda endpoint bilgisi bulunabilir.
+- Loglarda sanitize edilmiş params bilgisi bulunabilir.
+- Loglarda HTTP status bilgisi bulunabilir.
+- Loglarda row count bilgisi bulunabilir.
+- Loglarda candidate ID bilgileri bulunabilir.
+- Loglarda fallback aşaması bulunabilir.
+- Hata paneli kullanıcıya özet hata listesini gösterir.
+- Aynı hata tekrarlanırsa sayaçla birleştirilebilir.
+- Diagnostik paneli network, console, header ve response kayıtlarını gösterir.
+- Diagnostikler en fazla 300 kayıt olarak ekranda gösterilir.
+- Hata detayları CSV olarak indirilebilir.
+- CSV dosya adı `RGDH_HATA_DETAYLARI_YYYY-MM-DD.csv` formatındadır.
+- Diagnostik CSV ek kolonlar taşır.
+- Ek kolonlar job ID, kaynak tipi, seçili bara ID ve YKS iç bara ID bilgisini içerir.
+- Ek kolonlar saat başlangıç ve bitiş bilgilerini içerir.
+- Ek kolonlar chunk başlangıç ve bitiş bilgilerini içerir.
+- Ek kolonlar hata sınıfı ve istek URL bilgisini içerir.
+- Ek kolonlar API satır ve metrik boş satır sayılarını içerir.
+- Token, cookie ve Authorization bilgileri diagnostik çıktıda redakte edilir.
+- Hata sınıfları debug sırasında kök neden ayrımı yapmak için kullanılır.
+- `NO_YKS_TAB` açık YKS sekmesi bulunamadığını gösterir.
+- `AUTH_REQUIRED` YKS oturumu veya yetki sorunu olduğunu gösterir.
+- `PAGE_FETCH_TIMEOUT` YKS sayfası içi fetch isteğinin süresinde dönmediğini gösterir.
+- `YKS_HOURLY_TIMEOUT` tüm saatlik isteklerin başarısız olduğunu gösterir.
+- `YKS_JOB_TIMEOUT` toplam job süresinin dolduğunu gösterir.
+- `MISSING_BUSBAR_SELECTION` tekli bara seçimi yapılmadığını gösterir.
+- `NO_NORMALIZED_ROWS` fetch tamamlandığı halde normalize satır oluşmadığını gösterir.
+- `METRIC_FIELDS_EMPTY_SOURCE` satır geldiğini fakat metrik alanların kaynakta boş olduğunu gösterir.
+
+### Güvenlik ve Oturum İlkeleri
+
+- Modül kullanıcı oturum bilgisi saklamaz.
+- Bearer token storage'a yazılmaz.
+- Cookie storage'a yazılmaz.
+- Authorization header rapora yazılmaz.
+- Kullanıcı kimliği fixture dosyalarına yazılmaz.
+- YKS requestleri mevcut tarayıcı oturumunun yetkileriyle yapılır.
+- Açık YKS sekmesi yoksa kullanıcıdan YKS sayfasında oturum açması beklenir.
+- `rgdhPageFetchMainWorld` YKS sayfa bağlamında fetch yapar.
+- Page-context fetch sonucu token bilgisini dışarı taşımaz.
+- Sadece response satırları, HTTP özetleri ve sanitize hata bilgileri taşınır.
+- `buildRgdhUrl()` allow-list dışı endpoint üretmez.
+- Diagnostik export güvenlik açısından sanitize edilir.
+- Chrome storage yalnız filtre, tema ve güvenli kullanıcı tercihleri için kullanılır.
+
+### Canlı YKS Doğrulama Reçeteleri
+
+- AKYEL-1 RES için tarih `2026-05-01` seçilir.
+- Veri tipi `RES/GES` seçilir.
+- Katalogdan `AKYEL-1 RES` barası seçilir.
+- `YKS'den Çek` butonuna basılır.
+- Fetch log panelinde saatlik istekler izlenir.
+- Eğer saatlik istekler timeout olursa hibrit range fallback beklenir.
+- Başarılı hibrit fallback logunda `fallbackPhase=hybrid-yks-ui-range` görülür.
+- Başarılı hibrit fallback request URL içinde `page=` olmamalıdır.
+- Başarılı hibrit fallback başlangıcı `2026-04-30T21:00:00Z` olmalıdır.
+- Başarılı sonuçta Ham Data sekmesinde API satırları görünmelidir.
+- Başarılı sonuçta Günlük RGDH sekmesinde ilgili saatler dolmalıdır.
+- Başarılı sonuçta final hata `YKS_HOURLY_TIMEOUT` olmamalıdır.
+- Hata devam ederse Hata Detayları CSV'si indirilmelidir.
+- CSV'de `selectedBusbar`, `internalBusbarId`, `candidateBusbarId` ve `requestUrl` kolonları kontrol edilmelidir.
+- YKS Network panelinde çalışan request ile eklenti request URL'si karşılaştırılmalıdır.
+
+### Bakım ve Test Referansları
+
+- RGDH background davranışları `tests/background.test.js` ile korunur.
+- API parametre üretimi `tests/rgdh-api-client.test.js` ile korunur.
+- Normalizer davranışları `tests/rgdh-normalizer.test.js` ile korunur.
+- Grafik davranışları `tests/rgdh-charts.test.js` ile korunur.
+- UI smoke kontrolleri `tests/rgdh-ui-smoke.test.js` ile korunur.
+- Diagnostik export davranışları `tests/rgdh-diagnostics.test.js` ile korunur.
+- Tam test paketi `npm test` ile çalışır.
+- Eklenti paketi `npm run build:extension` ile üretilir.
+- Paket smoke kontrolü `npm run smoke:extension` ile yapılır.
+- Hibrit range fallback için özel testlerde page'siz request ve cursor ilerleme doğrulanır.
+- String `"true"` gelen `hasAuxiliarySource` değeri testlerle hibrit kabul edilir.
+- Bu bölüm güncellenirken gerçek kod davranışı ile README anlatımı birlikte tutulmalıdır.
 
 ---
 

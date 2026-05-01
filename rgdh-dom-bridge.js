@@ -81,6 +81,22 @@
     return sendRuntimeMessage({ type: 'RGDH_DIAG_CSV', payload: {} }, 15000);
   }
 
+  function attachYksLogs() {
+    return sendRuntimeMessage({ type: 'RGDH_YKS_LOG_ATTACH', payload: {} }, 30000);
+  }
+
+  function listYksLogs(limit) {
+    return sendRuntimeMessage({ type: 'RGDH_YKS_LOG_LIST', payload: { limit } }, 15000);
+  }
+
+  function clearYksLogs() {
+    return sendRuntimeMessage({ type: 'RGDH_YKS_LOG_CLEAR', payload: {} }, 15000);
+  }
+
+  function exportYksLogCsv() {
+    return sendRuntimeMessage({ type: 'RGDH_YKS_LOG_CSV', payload: {} }, 15000);
+  }
+
   return {
     ALLOWED_RGDH_PATHS,
     isAllowedRgdhPath,
@@ -94,6 +110,10 @@
     listDiagnostics,
     clearDiagnostics,
     exportDiagnosticsCsv,
+    attachYksLogs,
+    listYksLogs,
+    clearYksLogs,
+    exportYksLogCsv,
     sendRuntimeMessage
   };
 });

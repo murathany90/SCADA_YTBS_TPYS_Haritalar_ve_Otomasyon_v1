@@ -12,12 +12,14 @@
     selectedTestBusbarKey: '',
     errors: [],
     fetchLogs: [],
-    diagnostics: [],
+    yksLogs: [],
     activeFetchJobId: '',
     showVoltage: false
   };
 
   const el = {};
+  const RGDH_STANDARD_JOB_TIMEOUT_MS = 60000;
+  const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -113,7 +115,8 @@
       'statSource', 'statRows', 'statBusbars',
       'statMismatch', 'statStatus', 'rawTable', 'dailyTable', 'chartContextLabel', 'chartsRoot', 'testsTable', 'testUnitDetailsTable',
       'testCatalogSearchInput', 'testBusbarTypeSelect', 'testBusbarSelect', 'testHybridOnlyCheckbox', 'btnExportTestsCsv',
-      'btnErrorDetails', 'errorCount', 'errorPanel', 'btnCloseErrors', 'btnExportErrorLogCsv', 'btnClearErrorLogs', 'errorList', 'diagnosticList',
+      'btnErrorDetails', 'extensionLogCount', 'extensionLogPanel', 'btnCloseErrors', 'btnExportExtensionLogCsv', 'btnClearErrorLogs', 'extensionLogList',
+      'btnYksLogs', 'yksLogCount', 'yksLogPanel', 'btnRefreshYksLogs', 'btnExportYksLogCsv', 'btnClearYksLogs', 'btnCloseYksLogs', 'yksLogList',
       'fetchLogPanel', 'btnCloseFetchLog', 'fetchLogList'
     ].forEach((id) => { el[id] = document.getElementById(id); });
     el.tabs = Array.from(document.querySelectorAll('[data-tab]'));
@@ -140,12 +143,20 @@
     el.btnExportCsv.addEventListener('click', exportCsv);
     el.btnExportTestsCsv?.addEventListener('click', exportTestsCsv);
     el.btnErrorDetails.addEventListener('click', () => {
-      el.errorPanel.hidden = !el.errorPanel.hidden;
-      if (!el.errorPanel.hidden) refreshDiagnostics();
+      el.extensionLogPanel.hidden = !el.extensionLogPanel.hidden;
+      if (!el.extensionLogPanel.hidden) renderErrors();
     });
-    el.btnCloseErrors.addEventListener('click', () => { el.errorPanel.hidden = true; });
-    el.btnExportErrorLogCsv?.addEventListener('click', exportErrorLogCsv);
+    el.btnYksLogs?.addEventListener('click', async () => {
+      el.yksLogPanel.hidden = !el.yksLogPanel.hidden;
+      if (!el.yksLogPanel.hidden) await refreshYksLogs();
+    });
+    el.btnCloseErrors.addEventListener('click', () => { el.extensionLogPanel.hidden = true; });
+    el.btnCloseYksLogs?.addEventListener('click', () => { el.yksLogPanel.hidden = true; });
+    el.btnRefreshYksLogs?.addEventListener('click', refreshYksLogs);
+    el.btnExportExtensionLogCsv?.addEventListener('click', exportExtensionLogCsv);
+    el.btnExportYksLogCsv?.addEventListener('click', exportYksLogCsv);
     el.btnClearErrorLogs?.addEventListener('click', clearErrorLogs);
+    el.btnClearYksLogs?.addEventListener('click', clearYksLogs);
     el.btnCloseFetchLog.addEventListener('click', () => { el.fetchLogPanel.hidden = true; });
     el.btnToggleTheme.addEventListener('click', toggleTheme);
     el.btnToggleVoltage.addEventListener('click', toggleVoltageColumns);
@@ -240,7 +251,7 @@
         el.btnCancelFetch.hidden = true;
         el.btnCancelFetch.disabled = false;
       }
-      refreshDiagnostics();
+      refreshYksLogs();
     }
     renderAll();
   }
@@ -254,7 +265,7 @@
     state.activeFetchJobId = started.jobId;
     pushFetchLog('info', 'Job', `YKS cekim isi basladi: ${started.jobId}`, { transport: 'background-job' });
     const startedAt = Date.now();
-    const timeoutMs = Math.min(180000, Math.max(5000, Number(payload?.jobTimeoutMs || 60000)));
+    const timeoutMs = Math.min(RGDH_HYBRID_JOB_TIMEOUT_MS, Math.max(5000, Number(payload?.jobTimeoutMs || RGDH_STANDARD_JOB_TIMEOUT_MS)));
     while (Date.now() - startedAt < timeoutMs) {
       await delay(1000);
       const status = await RGDH_DOM_BRIDGE.getRgdhFetchJobStatus(started.jobId);
@@ -483,8 +494,9 @@
     el.statRows.textContent = String(rows.length);
     el.statBusbars.textContent = String(busbars.size);
     el.statMismatch.textContent = String(mismatchCount());
-    const diagnosticErrorCount = state.diagnostics.filter((item) => item.level === 'error').length;
-    el.errorCount.textContent = String(state.errors.reduce((sum, item) => sum + (item.count || 1), 0) + diagnosticErrorCount);
+    const extensionCount = state.errors.reduce((sum, item) => sum + (item.count || 1), 0) + state.fetchLogs.length;
+    if (el.extensionLogCount) el.extensionLogCount.textContent = String(extensionCount);
+    if (el.yksLogCount) el.yksLogCount.textContent = String(state.yksLogs.length);
   }
 
   function sourceLabel() {
@@ -502,7 +514,7 @@
 
   function hasAuxiliarySourceMarker(row) {
     if (!row) return false;
-    if (row.hasAuxiliarySource === true || row.hybridAuxiliary === true) return true;
+    if (isTruthyFlag(row.hasAuxiliarySource) || isTruthyFlag(row.hybridAuxiliary)) return true;
     if (Array.isArray(row.auxiliaryUnits) && row.auxiliaryUnits.length) return true;
     const hasAuxiliaryMetric = ['auxiliaryMw', 'auxiliaryMvar', 'auxiliaryDiMvarLimit', 'auxiliaryAiMvarLimit', 'auxiliaryApprovalStatus']
       .some((field) => row[field] !== null && row[field] !== undefined && row[field] !== '');
@@ -518,8 +530,8 @@
 
   function resolveFetchJobTimeoutMs(sourceType, selectedBusbar) {
     return String(sourceType || '').toUpperCase() === 'WIND' && hasAuxiliarySourceMarker(selectedBusbar)
-      ? 180000
-      : 60000;
+      ? RGDH_HYBRID_JOB_TIMEOUT_MS
+      : RGDH_STANDARD_JOB_TIMEOUT_MS;
   }
 
   function renderHybridNameHtml(value, row) {
@@ -543,6 +555,7 @@
       { text: 'Bara Adi', cls: '' },
       { text: 'Ic ID', cls: '' },
       { text: 'TPYS Set', cls: '' },
+      { text: 'TPYS GD', cls: '' },
       { text: 'Canli Bara', cls: '' },
       { text: 'Pgen MW', cls: '' },
       { text: 'Qgen MVAr', cls: '' },
@@ -552,7 +565,11 @@
       { text: 'Yrd. A.I.', cls: '' },
       { text: 'D.I.', cls: '' },
       { text: 'A.I.', cls: '' },
-      { text: 'Onay', cls: '' },
+      { text: 'Devre Durumu', cls: '' },
+      { text: 'Yukumluluk Durumu', cls: '' },
+      { text: 'D.I MVAR ONAY', cls: '' },
+      { text: 'A.I MVAR ONAY', cls: '' },
+      { text: 'Onay Durum', cls: '' },
       { text: 'Kalite', cls: '' }
     ];
     el.rawTable.innerHTML = `<thead><tr>${headers.map((h) => `<th class="${h.cls}">${h.text}</th>`).join('')}</tr></thead>`;
@@ -560,7 +577,7 @@
     rows.slice(0, 2000).forEach((row) => {
       const tr = document.createElement('tr');
       const status = rowStatus(row);
-      const cols = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+      const cols = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
       tr.innerHTML = [
         badge(row.sourceOrigin),
         escapeHtml(row.measurementDateLocal || '-'),
@@ -571,6 +588,7 @@
         renderHybridNameHtml(row.busbarName || '-', row),
         escapeHtml(row.busbarInternalId ?? '-'),
         formatNumber(row.tpysVoltageSet),
+        formatNumber(row.tpysVoltageDrop),
         formatNumber(row.liveBusbarVoltage),
         formatNumber(row.pgenMw),
         formatNumber(row.qgenMvar),
@@ -580,7 +598,11 @@
         formatNumber(row.auxiliaryAiMvarLimit),
         formatNumber(row.diMvarLimit),
         formatNumber(row.aiMvarLimit),
-        escapeHtml(row.approvalStatus ?? row.auxiliaryApprovalStatus ?? '-'),
+        formatStatusFlag(row.offBoardStatus, { invert: true }),
+        formatObligationStatus(row.noObligationStatus),
+        formatStatusFlag(row.diMvarApprove),
+        formatStatusFlag(row.aiMvarApprove),
+        formatStatusFlag(row.approvalStatus ?? row.auxiliaryApprovalStatus),
         `${badge(status)} ${rowMismatchBadge(row)}`
       ].map((value, index) => `<td class="${cols[index]}">${value}</td>`).join('');
       tbody.appendChild(tr);
@@ -762,16 +784,19 @@
   }
 
   function renderErrors() {
-    el.errorList.innerHTML = state.errors.length
-      ? state.errors.map((item) => `<div class="rgdh-error-item"><strong>${escapeHtml(item.source)}${item.count > 1 ? ` x${item.count}` : ''}</strong><br>${escapeHtml(item.message)}<br><small>${escapeHtml(item.time)}</small></div>`).join('')
-      : '<div class="rgdh-error-item">Hata yok.</div>';
-    renderDiagnostics();
+    if (!el.extensionLogList) return;
+    const errorRows = state.errors.map((item) => `<div class="rgdh-error-item"><strong>${escapeHtml(item.source)}${item.count > 1 ? ` x${item.count}` : ''}</strong><br>${escapeHtml(item.message)}${formatLogDetail(item.detail)}<small>${escapeHtml(item.time)}</small></div>`);
+    const fetchRows = aggregateLogs(state.fetchLogs).map((item) => `<div class="rgdh-log-item ${escapeHtml(item.level)}"><strong>${escapeHtml(item.phase)}${item.count > 1 ? ` x${item.count}` : ''}</strong><br>${escapeHtml(item.message)}${formatLogDetail(item.detail)}<small>${escapeHtml(item.time)}</small></div>`);
+    el.extensionLogList.innerHTML = errorRows.length || fetchRows.length
+      ? [...errorRows, ...fetchRows].join('')
+      : '<div class="rgdh-error-item">Eklenti logu yok.</div>';
+    renderYksLogs();
   }
 
-  function renderDiagnostics() {
-    if (!el.diagnosticList) return;
-    const rows = state.diagnostics.slice(0, 300);
-    el.diagnosticList.innerHTML = rows.length
+  function renderYksLogs() {
+    if (!el.yksLogList) return;
+    const rows = state.yksLogs.slice(0, 300);
+    el.yksLogList.innerHTML = rows.length
       ? rows.map((item) => `<div class="rgdh-log-item ${escapeHtml(item.level)}"><strong>${escapeHtml(item.category || 'diagnostic')} / ${escapeHtml(item.route || '-')}</strong><br>${escapeHtml(item.message || '')}${formatDiagnosticDetail(item)}<small>${escapeHtml(formatDiagnosticTime(item.time))}</small></div>`).join('')
       : '<div class="rgdh-log-item">YKS network/console kaydi yok. YKS sayfasi acikken ilgili route uzerinde islem yapin.</div>';
   }
@@ -863,13 +888,14 @@
   function resolveSelectedBusbar(filters) {
     const selected = getCatalogBusbarSummaries().find((row) => catalogBusbarKey(row) === filters.search);
     if (!selected) return null;
+    const hasAuxiliarySource = hasAuxiliarySourceMarker(selected);
     return {
       busbarId: String(selected.busbarId || '').trim(),
       busbarName: selected.busbarName || '',
       sourceType: inferCatalogSourceType(selected),
       ytm: selected.ytm || '',
       plantName: selected.plantName || '',
-      hasAuxiliarySource: selected.hasAuxiliarySource === true
+      hasAuxiliarySource
     };
   }
 
@@ -992,6 +1018,7 @@
     });
     state.fetchLogs = state.fetchLogs.slice(0, 150);
     renderFetchLogs();
+    renderErrors();
   }
 
   function pushError(source, message, detail) {
@@ -1010,6 +1037,7 @@
       count: 1
     });
     state.errors = state.errors.slice(0, 50);
+    renderErrors();
   }
 
   function aggregateLogs(logs) {
@@ -1064,6 +1092,9 @@
       durationMs: item.durationMs,
       requestHeaders: item.requestHeaders || {},
       responseHeaders: item.responseHeaders || {},
+      responsePreview: item.responsePreview || '',
+      responseRowCount: item.responseRowCount ?? '',
+      responseKeys: item.responseKeys || [],
       detail: item.detail || {}
     };
     return `<small>${escapeHtml(JSON.stringify(detail))}</small>`;
@@ -1075,19 +1106,20 @@
     return date.toLocaleString('tr-TR');
   }
 
-  async function refreshDiagnostics() {
-    if (!RGDH_DOM_BRIDGE.listDiagnostics) return;
+  async function refreshYksLogs() {
+    if (!RGDH_DOM_BRIDGE.listYksLogs) return;
     try {
-      const response = await RGDH_DOM_BRIDGE.listDiagnostics(500);
+      if (RGDH_DOM_BRIDGE.attachYksLogs) await RGDH_DOM_BRIDGE.attachYksLogs().catch(() => {});
+      const response = await RGDH_DOM_BRIDGE.listYksLogs(500);
       if (response?.ok) {
-        state.diagnostics = response.events || [];
+        state.yksLogs = response.events || [];
         renderStats(getFilteredRows());
-        renderDiagnostics();
+        renderYksLogs();
       }
     } catch {}
   }
 
-  async function exportErrorLogCsv() {
+  async function exportExtensionLogCsv() {
     const response = RGDH_DOM_BRIDGE.exportDiagnosticsCsv
       ? await RGDH_DOM_BRIDGE.exportDiagnosticsCsv()
       : null;
@@ -1114,14 +1146,29 @@
       ? RGDH_DIAGNOSTICS.diagnosticEventsToCsv(localEvents)
       : '';
     const merged = mergeCsvTexts(diagnosticsCsv, localCsv);
-    downloadText(response?.filename || `RGDH_HATA_DETAYLARI_${readFilters().date}.csv`, merged || '\uFEFFZaman;Seviye;Kategori;Route;Metot;URL;HTTP;Süre(ms);Mesaj;Detay;Job ID;Kaynak Tipi;Secili Bara ID;YKS Ic Bara ID;Saat Baslangic;Saat Bitis;Chunk Baslangic;Chunk Bitis;Hata Sinifi;Istek URL;API Satir;Metrik Bos Satir\n', 'text/csv;charset=utf-8');
+    downloadText(response?.filename || `RGDH_EKLENTI_LOGLARI_${readFilters().date}.csv`, merged || '\uFEFFZaman;Seviye;Kategori;Route;Metot;URL;HTTP;Süre(ms);Mesaj\n', 'text/csv;charset=utf-8');
+  }
+
+  async function exportYksLogCsv() {
+    const response = RGDH_DOM_BRIDGE.exportYksLogCsv
+      ? await RGDH_DOM_BRIDGE.exportYksLogCsv()
+      : null;
+    const localCsv = RGDH_DIAGNOSTICS?.diagnosticEventsToCsv
+      ? RGDH_DIAGNOSTICS.diagnosticEventsToCsv(state.yksLogs)
+      : '';
+    downloadText(response?.filename || `RGDH_YKS_LOGLARI_${readFilters().date}.csv`, response?.ok ? response.csv : localCsv, 'text/csv;charset=utf-8');
   }
 
   async function clearErrorLogs() {
     state.errors = [];
     state.fetchLogs = [];
-    state.diagnostics = [];
     if (RGDH_DOM_BRIDGE.clearDiagnostics) await RGDH_DOM_BRIDGE.clearDiagnostics().catch(() => {});
+    renderAll();
+  }
+
+  async function clearYksLogs() {
+    state.yksLogs = [];
+    if (RGDH_DOM_BRIDGE.clearYksLogs) await RGDH_DOM_BRIDGE.clearYksLogs().catch(() => {});
     renderAll();
   }
 
@@ -1183,6 +1230,29 @@
     return Number.isFinite(numeric) ? numeric.toLocaleString('tr-TR', { maximumFractionDigits: 3 }) : '-';
   }
 
+  function formatStatusFlag(value, options = {}) {
+    const normalized = normalizeStatusFlag(value);
+    if (normalized === null) return '-';
+    const active = options.invert ? !normalized : normalized;
+    return active ? '&#10003;' : '&#10005;';
+  }
+
+  function formatObligationStatus(value) {
+    return formatStatusFlag(value, { invert: true });
+  }
+
+  function normalizeStatusFlag(value) {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'boolean') return value;
+    const text = String(value).trim().toLowerCase();
+    if (!text) return null;
+    if (['1', 'true', 'evet', 'var', 'aktif', 'ok', 'onay', 'approved'].includes(text)) return true;
+    if (['0', 'false', 'hayir', 'yok', 'pasif', 'red', 'reject', 'rejected'].includes(text)) return false;
+    const numeric = Number(text.replace(',', '.'));
+    if (Number.isFinite(numeric)) return numeric !== 0;
+    return null;
+  }
+
   function formatPercent(value) {
     return Number.isFinite(Number(value)) ? `${Number(value).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}%` : '-';
   }
@@ -1199,6 +1269,12 @@
 
   function uniqueStrings(values) {
     return [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  }
+
+  function isTruthyFlag(value) {
+    if (value === true) return true;
+    const text = String(value ?? '').trim().toLowerCase();
+    return text === 'true' || text === '1' || text === 'yes' || text === 'evet';
   }
 
   function normalizeText(value) {

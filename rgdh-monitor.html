@@ -17,7 +17,8 @@
         </div>
       </div>
       <button id="btnToggleTheme" class="ghost" type="button" title="Tema degistir">🌙</button>
-      <button id="btnErrorDetails" class="ghost" type="button">Hata Detaylari <span id="errorCount">0</span></button>
+      <button id="btnErrorDetails" class="ghost" type="button">Eklenti Loglari <span id="extensionLogCount">0</span></button>
+      <button id="btnYksLogs" class="ghost" type="button">YKS Loglari <span id="yksLogCount">0</span></button>
     </header>
 
     <section class="rgdh-page-title">
@@ -125,18 +126,29 @@
       <div id="fetchLogList"></div>
     </aside>
 
-    <aside id="errorPanel" class="rgdh-error-panel" hidden>
+    <aside id="extensionLogPanel" class="rgdh-error-panel" hidden>
       <header>
-        <strong>Hata Detaylari</strong>
+        <strong>Eklenti Loglari</strong>
         <div class="rgdh-panel-actions">
-          <button id="btnExportErrorLogCsv" type="button">CSV</button>
+          <button id="btnExportExtensionLogCsv" type="button">CSV</button>
           <button id="btnClearErrorLogs" type="button">Temizle</button>
           <button id="btnCloseErrors" type="button">Kapat</button>
         </div>
       </header>
-      <div id="errorList"></div>
-      <div class="rgdh-diagnostic-title">Network / Console / Header / Response Kayitlari</div>
-      <div id="diagnosticList"></div>
+      <div id="extensionLogList"></div>
+    </aside>
+
+    <aside id="yksLogPanel" class="rgdh-error-panel" hidden>
+      <header>
+        <strong>YKS Loglari</strong>
+        <div class="rgdh-panel-actions">
+          <button id="btnRefreshYksLogs" type="button">Yenile</button>
+          <button id="btnExportYksLogCsv" type="button">CSV</button>
+          <button id="btnClearYksLogs" type="button">Temizle</button>
+          <button id="btnCloseYksLogs" type="button">Kapat</button>
+        </div>
+      </header>
+      <div id="yksLogList"></div>
     </aside>
   </main>
 

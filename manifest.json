@@ -33,6 +33,16 @@
         "https://yks.teias.gov.tr/*"
       ],
       "js": [
+        "rgdh-diagnostics.js",
+        "yks-rgdh-diagnostic-bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://yks.teias.gov.tr/*"
+      ],
+      "js": [
         "yks-rgdh-instrumentation.js"
       ],
       "run_at": "document_start",

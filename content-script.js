@@ -52,12 +52,13 @@
     if (event.source !== window) return;
     if (event.origin !== window.location.origin) return;
     if (event.data?.source !== 'RGDH_YKS_DIAGNOSTIC') return;
+    if (window.__rgdhYksDiagnosticBridgeLoaded) return;
     const diagnostics = window.RGDH_DIAGNOSTICS;
     const payload = diagnostics?.sanitizeDiagnosticEvent
       ? diagnostics.sanitizeDiagnosticEvent(event.data.event || {})
       : (event.data.event || {});
     try {
-      chrome.runtime.sendMessage({ type: 'RGDH_DIAG_EVENT', payload }, () => {
+      chrome.runtime.sendMessage({ type: 'RGDH_YKS_LOG_EVENT', payload }, () => {
         void chrome.runtime.lastError;
       });
     } catch {}
