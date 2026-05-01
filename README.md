@@ -18,6 +18,7 @@
 8. [NPM Betikleri](#8-npm-betikleri)
 9. [Test Altyapısı](#9-test-altyapısı)
 10. [Güvenlik Notları](#10-güvenlik-notları)
+11. [RGDH İzleme Modülü](#rgdh-izleme-modülü)
 
 ---
 
@@ -502,6 +503,16 @@ data/kml_layers_v2.json   # 34 MB — gereksiz yere commit etmeyin
 **Chrome Storage:** CSV verileri `chrome.storage.local`'da saklanır (3 MB sınırı üstünde metadata-only moda geçer). Şifre bilgisi storage'a yazılmaz; yalnızca `data/scada_auth.json` dosyasından okunur.
 
 **Host Permissions:** `manifest.json` içindeki `host_permissions` yalnızca Superset ve TPYS domain'leri ile sınırlandırılmıştır.
+
+---
+
+## RGDH İzleme Modülü
+
+Popup üzerindeki **RGDH İzleme** butonu ile açılan modül; Konvansiyonel Bara Data ve RES/GES Bara Data verilerini YKS API, CSV veya DOM kaynaklarından ortak normalize modele dönüştürür. Ham Data, Günlük RGDH İzleme, RGDH Grafik Rapor ve RGDH Testleri sekmeleri aynı normalize veri üzerinden çalışır.
+
+Bara/Ünite Tanımlama CSV'si katalog olarak algılanır; santral, bara ve ünite combobox'ları bu katalogdan beslenir. RES/GES API çağrılarında `busbarId.equals` değeri katalog, yüklenen dosya adı veya YKS sayfasındaki seçimlerden çözümlenir. YKS'den çekme paneli, direct/page-context/DOM fallback adımlarını ve satır sayılarını kullanıcıya detaylı log olarak gösterir.
+
+Modül kullanıcı oturum bilgisi saklamaz. Bearer token, cookie, Authorization header veya kullanıcı kimliği console'a, storage'a, fixture'a ya da rapora yazılmaz. YKS oturumu açıksa önce yetkili API erişimi denenir; başarısız olursa whitelisted page-context fetch ve kısmi DOM fallback kullanılır.
 
 ---
 

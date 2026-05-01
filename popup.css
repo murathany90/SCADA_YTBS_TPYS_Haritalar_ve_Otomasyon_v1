@@ -37,6 +37,7 @@ button {
   font-weight: 700;
 }
 button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+button.rgdh-action { background: #0f172a; color: #e2e8f0; border-color: #334155; }
 button:hover { filter: brightness(0.98); }
 .file-pill {
   font-size: 12px;

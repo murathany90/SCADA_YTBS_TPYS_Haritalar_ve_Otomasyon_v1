@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RGDH Izleme</title>
+  <link rel="stylesheet" href="rgdh-monitor.css">
+</head>
+<body>
+  <main class="rgdh-shell">
+    <header class="yks-navbar">
+      <div class="yks-brand">
+        <span class="yks-logo" aria-hidden="true"></span>
+        <div>
+          <strong>YAN HIZMETLER KONTROL SISTEMI</strong>
+          <small>RGDH Izleme</small>
+        </div>
+      </div>
+      <button id="btnToggleTheme" class="ghost" type="button" title="Tema degistir">🌙</button>
+      <button id="btnErrorDetails" class="ghost" type="button">Hata Detaylari <span id="errorCount">0</span></button>
+    </header>
+
+    <section class="rgdh-page-title">
+      <h1>RGDH Izleme ve Dogrulama Paneli</h1>
+      <p>Yan Hizmetler Analiz Platformu verilerini API, CSV ve DOM kaynaklarindan normalize eder.</p>
+    </section>
+
+    <section class="rgdh-toolbar yks-card" aria-label="RGDH filtreleri">
+      <label>Tarih <input id="filterDate" type="date"></label>
+      <label>Bitis Tarihi (haric) <input id="filterEndDate" type="date"></label>
+      <label>Veri Tipi
+        <select id="filterSourceType">
+          <option value="ALL">Tumu</option>
+          <option value="CONVENTIONAL">Konvansiyonel</option>
+          <option value="WIND">RES/GES</option>
+        </select>
+      </label>
+      <label>Bara Ara
+        <select id="filterSearch">
+          <option value="">Bara secin (tekli YKS cekimi)</option>
+        </select>
+      </label>
+      <div class="rgdh-actions">
+        <button id="btnFetchYks" class="primary" type="button">YKS'den Cek</button>
+        <button id="btnCancelFetch" type="button" hidden>Iptal</button>
+        <button id="btnPickCsv" type="button">CSV Yukle</button>
+        <input id="csvInput" type="file" accept=".csv,text/csv" multiple hidden>
+        <button id="btnToggleVoltage" type="button" title="Gerilim kaynaklarini goster/gizle">Gerilim Kaynaklarini Goster</button>
+        <button id="btnCompare" type="button">Karsilastir</button>
+        <button id="btnExportCsv" type="button">CSV Disari Aktar</button>
+      </div>
+    </section>
+
+    <div id="filterNotice" class="rgdh-filter-notice" hidden></div>
+
+    <section class="rgdh-status-grid">
+      <div><span>Kaynak</span><strong id="statSource">-</strong></div>
+      <div><span>Normalize Kayit</span><strong id="statRows">0</strong></div>
+      <div><span>Bara</span><strong id="statBusbars">0</strong></div>
+      <div><span>Fark</span><strong id="statMismatch">0</strong></div>
+      <div><span>Durum</span><strong id="statStatus">Hazir</strong></div>
+    </section>
+
+    <nav class="rgdh-tabs" aria-label="RGDH sekmeleri">
+      <button class="active" data-tab="raw" type="button">Ham Data</button>
+      <button data-tab="daily" type="button">Gunluk RGDH Izleme</button>
+      <button data-tab="charts" type="button">RGDH Grafik Rapor</button>
+      <button data-tab="tests" type="button">RGDH Testleri</button>
+    </nav>
+
+    <section id="panelRaw" class="rgdh-panel active" data-panel="raw">
+      <div class="rgdh-table-wrap">
+        <table id="rawTable" class="rgdh-table"></table>
+      </div>
+    </section>
+
+    <section id="panelDaily" class="rgdh-panel" data-panel="daily">
+      <div class="rgdh-table-wrap">
+        <table id="dailyTable" class="rgdh-table compact"></table>
+      </div>
+    </section>
+
+    <section id="panelCharts" class="rgdh-panel" data-panel="charts">
+      <div id="chartContextLabel" class="rgdh-context-label">-</div>
+      <div id="chartsRoot" class="rgdh-charts"></div>
+    </section>
+
+    <section id="panelTests" class="rgdh-panel" data-panel="tests">
+      <div class="yks-card rgdh-tests-filters">
+        <label>Santral / Bara Ara
+          <input id="testCatalogSearchInput" type="search" placeholder="Santral veya bara adı">
+        </label>
+        <label>Bara Tipi
+          <select id="testBusbarTypeSelect">
+            <option value="">Tumu</option>
+          </select>
+        </label>
+        <label>Bara Adı
+          <select id="testBusbarSelect">
+            <option value="">Tumu</option>
+          </select>
+        </label>
+        <label class="rgdh-checkbox-label">
+          <input id="testHybridOnlyCheckbox" type="checkbox">
+          Hibrit santraller
+        </label>
+        <div class="rgdh-tests-actions">
+          <button id="btnExportTestsCsv" type="button">CSV İndir</button>
+        </div>
+      </div>
+      <div class="rgdh-table-wrap tests">
+        <table id="testsTable" class="rgdh-table"></table>
+      </div>
+      <div class="rgdh-detail-title">Unite Sertifika Detaylari</div>
+      <div class="rgdh-table-wrap tests detail">
+        <table id="testUnitDetailsTable" class="rgdh-table"></table>
+      </div>
+    </section>
+
+    <aside id="fetchLogPanel" class="rgdh-log-panel" hidden>
+      <header>
+        <strong>YKS Cekim Detaylari</strong>
+        <button id="btnCloseFetchLog" type="button">Kapat</button>
+      </header>
+      <div id="fetchLogList"></div>
+    </aside>
+
+    <aside id="errorPanel" class="rgdh-error-panel" hidden>
+      <header>
+        <strong>Hata Detaylari</strong>
+        <div class="rgdh-panel-actions">
+          <button id="btnExportErrorLogCsv" type="button">CSV</button>
+          <button id="btnClearErrorLogs" type="button">Temizle</button>
+          <button id="btnCloseErrors" type="button">Kapat</button>
+        </div>
+      </header>
+      <div id="errorList"></div>
+      <div class="rgdh-diagnostic-title">Network / Console / Header / Response Kayitlari</div>
+      <div id="diagnosticList"></div>
+    </aside>
+  </main>
+
+  <script src="lib/chart.min.js"></script>
+  <script src="rgdh-catalog-data.js"></script>
+  <script src="rgdh-auxiliary-catalog.js"></script>
+  <script src="rgdh-api-client.js"></script>
+  <script src="rgdh-csv.js"></script>
+  <script src="rgdh-normalizer.js"></script>
+  <script src="rgdh-pivot.js"></script>
+  <script src="rgdh-storage.js"></script>
+  <script src="rgdh-diagnostics.js"></script>
+  <script src="rgdh-dom-bridge.js"></script>
+  <script src="rgdh-charts.js"></script>
+  <script src="rgdh-monitor.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+[
+  {
+    "measurementDate": "2026-04-01T07:59:00Z",
+    "busbar": {
+      "id": 10933818954,
+      "busbarId": 4772,
+      "busbarName": "KURTKAYASI RES",
+      "busbarType": "WIND",
+      "voltageLevel": 154
+    },
+    "tpysBusVoltSet": 160,
+    "tpysBusVoltDrop": 7,
+    "mainBusbarVoltage": 160.44,
+    "sumPgenActive": 41.93,
+    "sumPgenReactive": 0.39
+  }
+]

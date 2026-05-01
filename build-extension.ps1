@@ -36,6 +36,21 @@ $files = @(
   'popup.html',
   'popup.css',
   'popup.js',
+  'rgdh-monitor.html',
+  'rgdh-monitor.css',
+  'rgdh-monitor.js',
+  'rgdh-api-client.js',
+  'rgdh-normalizer.js',
+  'rgdh-pivot.js',
+  'rgdh-charts.js',
+  'rgdh-csv.js',
+  'rgdh-storage.js',
+  'rgdh-dom-bridge.js',
+  'rgdh-diagnostics.js',
+  'rgdh-catalog-data.js',
+  'rgdh-auxiliary-catalog.js',
+  'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv',
+  'yks-rgdh-instrumentation.js',
   'map.html',
   'map.css',
   'map.js',
@@ -64,6 +79,10 @@ New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
 foreach ($relativePath in $files) {
   $sourcePath = Join-Path $root $relativePath
   $targetPath = Join-Path $extensionRoot $relativePath
+  $targetDirectory = Split-Path -Parent $targetPath
+  if (-not (Test-Path -LiteralPath $targetDirectory)) {
+    New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+  }
   Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
 }
 
@@ -72,8 +91,8 @@ foreach ($relativePath in $directories) {
   Copy-Item -LiteralPath $sourcePath -Destination $extensionRoot -Recurse -Force
 }
 
-$reservedPaths = Get-ChildItem -LiteralPath $extensionRoot -Recurse -Force |
-  Where-Object { $_.Name -like '_*' } |
+$reservedPaths = Get-ChildItem -LiteralPath $extensionRoot -Recurse -Force -File |
+  Where-Object { $_.Name.StartsWith('_') -and -not $_.Name.EndsWith('.csv') } |
   Select-Object -ExpandProperty FullName
 
 if ($reservedPaths) {

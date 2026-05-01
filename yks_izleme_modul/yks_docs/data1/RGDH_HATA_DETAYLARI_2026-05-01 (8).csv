@@ -1,0 +1,1605 @@
+﻿Zaman;Seviye;Kategori;Route;Metot;URL;HTTP;Süre(ms);Mesaj;Detay;Job ID;Kaynak Tipi;Secili Bara ID;YKS Ic Bara ID;Saat Baslangic;Saat Bitis;Chunk Baslangic;Chunk Bitis;Hata Sinifi;Istek URL;API Satir;Metrik Bos Satir
+1.05.2026 14:44;error;YKS;rgdh-monitor;;;;;YKS cekimi tamamlandi ancak normalize API kaydi olusmadi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""NO_NORMALIZED_ROWS"",""rowCounts"":{""conventionalRows"":""0"",""windRows"":""0"",""domRows"":""0"",""apiRows"":""0""}}}";;;;;;;;;NO_NORMALIZED_ROWS;;;
+1.05.2026 14:44;error;API;rgdh-monitor;;;;;2026-05-01: tum aday RES/GES busbar id degerleri basarisiz: 10933818957, 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""source"":""WIND"",""busbarId"":""5052"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""failedHours"":""24"",""attemptedHours"":""24"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;WIND;5052;10933818957;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;YKS_HOURLY_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Normalize;rgdh-monitor;;;;;YKS cekimi tamamlandi ancak normalize API kaydi olusmadi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""NO_NORMALIZED_ROWS"",""rowCounts"":{""conventionalRows"":""0"",""windRows"":""0"",""domRows"":""0"",""apiRows"":""0""}}}";;;;;;;;;NO_NORMALIZED_ROWS;;;
+1.05.2026 14:44;warn;Normalize;rgdh-monitor;;;;;API kaydi normalize edilmedi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""apiRows"":""0"",""domRows"":""0"",""metricSummary"":{""total"":""0"",""pgenMw"":""0"",""qgenMvar"":""0"",""diMvarLimit"":""0"",""aiMvarLimit"":""0"",""approvalStatus"":""0"",""auxiliaryMw"":""0"",""auxiliaryMvar"":""0"",""auxiliaryDiMvarLimit"":""0"",""auxiliaryAiMvarLimit"":""0"",""auxiliaryApprovalStatus"":""0"",""metricEmptyRows"":""0""},""rawFieldKeys"":[],""metricEmptyRows"":""0""}}";;;;;;;;;;;0;0
+1.05.2026 14:44;error;WIND;rgdh-monitor;;;;;2026-05-01: tum aday RES/GES busbar id degerleri basarisiz: 10933818957, 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""source"":""WIND"",""busbarId"":""5052"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""failedHours"":""24"",""attemptedHours"":""24"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;WIND;5052;10933818957;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;YKS_HOURLY_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;WIND;rgdh-monitor;;;;;2026-05-01: tum aday RES/GES busbar id degerleri basarisiz: 10933818957, 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""source"":""WIND"",""busbarId"":""5052"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""failedHours"":""24"",""attemptedHours"":""24"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;WIND;5052;10933818957;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;YKS_HOURLY_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01: hibrit RES/GES aday probe basarisiz: 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""source"":""WIND"",""busbarId"":""5052"",""internalBusbarId"":""5052"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""0"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052""}}";;WIND;5052;5052;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;2026-05-01: hibrit RES/GES aday probe sorgulanacak: 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T21:00:00Z"",""measurementDate.lessThan"":""2026-04-30T22:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""5052""},""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""0"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052"",""pageTimeoutMs"":""12000""}}";;;5052;;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;"2026-05-01: 10933818957 aday RES/GES busbar id zaman asimina ugradi; display id probe denenecek.";"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01""}}";;;5052;;;;;;YKS_HOURLY_TIMEOUT;;;
+1.05.2026 14:44;success;WIND;rgdh-monitor;;;;;Saatlik toplam 0 kayit alindi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""rowCount"":""0"",""partialErrors"":""1""}}";;;5052;10933818957;;;;;;;0;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;24 RES/GES saatlik YKS istegi zaman asimina ugradi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":"""",""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""source"":""WIND"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""localDate"":""2026-05-01"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-05-01T21:00:00Z"",""hourRange"":""0-23"",""failedHours"":""24"",""attemptedHours"":""24"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;WIND;10933818957;10933818957;2026-04-30T21:00:00Z;2026-05-01T21:00:00Z;;;YKS_HOURLY_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 23:00-00:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""23"",""hourStart"":""2026-05-01T20:00:00Z"",""hourEnd"":""2026-05-01T21:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T20:00:00Z;2026-05-01T21:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T20:00:00Z"",""measurementDate.lessThan"":""2026-05-01T21:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 22:00-23:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""22"",""hourStart"":""2026-05-01T19:00:00Z"",""hourEnd"":""2026-05-01T20:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T19:00:00Z;2026-05-01T20:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T19:00:00Z"",""measurementDate.lessThan"":""2026-05-01T20:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 21:00-22:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""21"",""hourStart"":""2026-05-01T18:00:00Z"",""hourEnd"":""2026-05-01T19:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T18:00:00Z;2026-05-01T19:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T18:00:00Z"",""measurementDate.lessThan"":""2026-05-01T19:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 20:00-21:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""20"",""hourStart"":""2026-05-01T17:00:00Z"",""hourEnd"":""2026-05-01T18:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T17:00:00Z;2026-05-01T18:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T17:00:00Z"",""measurementDate.lessThan"":""2026-05-01T18:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 19:00-20:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""19"",""hourStart"":""2026-05-01T16:00:00Z"",""hourEnd"":""2026-05-01T17:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T16:00:00Z;2026-05-01T17:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T16:00:00Z"",""measurementDate.lessThan"":""2026-05-01T17:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 18:00-19:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""18"",""hourStart"":""2026-05-01T15:00:00Z"",""hourEnd"":""2026-05-01T16:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T15%3A00%3A00Z&measurementDate.lessThan=2026-05-01T16%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T15:00:00Z;2026-05-01T16:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T15%3A00%3A00Z&measurementDate.lessThan=2026-05-01T16%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T15:00:00Z"",""measurementDate.lessThan"":""2026-05-01T16:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 23:00-00:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T20:00:00Z"",""measurementDate.lessThan"":""2026-05-01T21:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""23"",""hourStart"":""2026-05-01T20:00:00Z"",""hourEnd"":""2026-05-01T21:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T20:00:00Z;2026-05-01T21:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 17:00-18:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""17"",""hourStart"":""2026-05-01T14:00:00Z"",""hourEnd"":""2026-05-01T15:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T14%3A00%3A00Z&measurementDate.lessThan=2026-05-01T15%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T14:00:00Z;2026-05-01T15:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T14%3A00%3A00Z&measurementDate.lessThan=2026-05-01T15%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T14:00:00Z"",""measurementDate.lessThan"":""2026-05-01T15:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 22:00-23:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T19:00:00Z"",""measurementDate.lessThan"":""2026-05-01T20:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""22"",""hourStart"":""2026-05-01T19:00:00Z"",""hourEnd"":""2026-05-01T20:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T19:00:00Z;2026-05-01T20:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 16:00-17:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""16"",""hourStart"":""2026-05-01T13:00:00Z"",""hourEnd"":""2026-05-01T14:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T13%3A00%3A00Z&measurementDate.lessThan=2026-05-01T14%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T13:00:00Z;2026-05-01T14:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T13%3A00%3A00Z&measurementDate.lessThan=2026-05-01T14%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T13:00:00Z"",""measurementDate.lessThan"":""2026-05-01T14:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 21:00-22:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T18:00:00Z"",""measurementDate.lessThan"":""2026-05-01T19:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""21"",""hourStart"":""2026-05-01T18:00:00Z"",""hourEnd"":""2026-05-01T19:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T18:00:00Z;2026-05-01T19:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 20:00-21:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T17:00:00Z"",""measurementDate.lessThan"":""2026-05-01T18:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""20"",""hourStart"":""2026-05-01T17:00:00Z"",""hourEnd"":""2026-05-01T18:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T17:00:00Z;2026-05-01T18:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 15:00-16:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""15"",""hourStart"":""2026-05-01T12:00:00Z"",""hourEnd"":""2026-05-01T13:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T12%3A00%3A00Z&measurementDate.lessThan=2026-05-01T13%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T12:00:00Z;2026-05-01T13:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T12%3A00%3A00Z&measurementDate.lessThan=2026-05-01T13%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T12:00:00Z"",""measurementDate.lessThan"":""2026-05-01T13:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 14:00-15:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""14"",""hourStart"":""2026-05-01T11:00:00Z"",""hourEnd"":""2026-05-01T12:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T11%3A00%3A00Z&measurementDate.lessThan=2026-05-01T12%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T11:00:00Z;2026-05-01T12:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T11%3A00%3A00Z&measurementDate.lessThan=2026-05-01T12%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T11:00:00Z"",""measurementDate.lessThan"":""2026-05-01T12:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 19:00-20:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T16:00:00Z"",""measurementDate.lessThan"":""2026-05-01T17:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""19"",""hourStart"":""2026-05-01T16:00:00Z"",""hourEnd"":""2026-05-01T17:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T16:00:00Z;2026-05-01T17:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 13:00-14:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""13"",""hourStart"":""2026-05-01T10:00:00Z"",""hourEnd"":""2026-05-01T11:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T10%3A00%3A00Z&measurementDate.lessThan=2026-05-01T11%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T10:00:00Z;2026-05-01T11:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T10%3A00%3A00Z&measurementDate.lessThan=2026-05-01T11%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T10:00:00Z"",""measurementDate.lessThan"":""2026-05-01T11:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 18:00-19:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T15:00:00Z"",""measurementDate.lessThan"":""2026-05-01T16:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""18"",""hourStart"":""2026-05-01T15:00:00Z"",""hourEnd"":""2026-05-01T16:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T15%3A00%3A00Z&measurementDate.lessThan=2026-05-01T16%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T15:00:00Z;2026-05-01T16:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T15%3A00%3A00Z&measurementDate.lessThan=2026-05-01T16%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 12:00-13:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""12"",""hourStart"":""2026-05-01T09:00:00Z"",""hourEnd"":""2026-05-01T10:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T09%3A00%3A00Z&measurementDate.lessThan=2026-05-01T10%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T09:00:00Z;2026-05-01T10:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T09%3A00%3A00Z&measurementDate.lessThan=2026-05-01T10%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T09:00:00Z"",""measurementDate.lessThan"":""2026-05-01T10:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 17:00-18:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T14:00:00Z"",""measurementDate.lessThan"":""2026-05-01T15:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""17"",""hourStart"":""2026-05-01T14:00:00Z"",""hourEnd"":""2026-05-01T15:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T14%3A00%3A00Z&measurementDate.lessThan=2026-05-01T15%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T14:00:00Z;2026-05-01T15:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T14%3A00%3A00Z&measurementDate.lessThan=2026-05-01T15%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 11:00-12:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""11"",""hourStart"":""2026-05-01T08:00:00Z"",""hourEnd"":""2026-05-01T09:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T08%3A00%3A00Z&measurementDate.lessThan=2026-05-01T09%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T08:00:00Z;2026-05-01T09:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T08%3A00%3A00Z&measurementDate.lessThan=2026-05-01T09%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T08:00:00Z"",""measurementDate.lessThan"":""2026-05-01T09:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 16:00-17:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T13:00:00Z"",""measurementDate.lessThan"":""2026-05-01T14:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""16"",""hourStart"":""2026-05-01T13:00:00Z"",""hourEnd"":""2026-05-01T14:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T13%3A00%3A00Z&measurementDate.lessThan=2026-05-01T14%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T13:00:00Z;2026-05-01T14:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T13%3A00%3A00Z&measurementDate.lessThan=2026-05-01T14%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 15:00-16:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T12:00:00Z"",""measurementDate.lessThan"":""2026-05-01T13:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""15"",""hourStart"":""2026-05-01T12:00:00Z"",""hourEnd"":""2026-05-01T13:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T12%3A00%3A00Z&measurementDate.lessThan=2026-05-01T13%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T12:00:00Z;2026-05-01T13:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T12%3A00%3A00Z&measurementDate.lessThan=2026-05-01T13%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 14:00-15:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T11:00:00Z"",""measurementDate.lessThan"":""2026-05-01T12:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""14"",""hourStart"":""2026-05-01T11:00:00Z"",""hourEnd"":""2026-05-01T12:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T11%3A00%3A00Z&measurementDate.lessThan=2026-05-01T12%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T11:00:00Z;2026-05-01T12:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T11%3A00%3A00Z&measurementDate.lessThan=2026-05-01T12%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 10:00-11:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""10"",""hourStart"":""2026-05-01T07:00:00Z"",""hourEnd"":""2026-05-01T08:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T07%3A00%3A00Z&measurementDate.lessThan=2026-05-01T08%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T07:00:00Z;2026-05-01T08:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T07%3A00%3A00Z&measurementDate.lessThan=2026-05-01T08%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T07:00:00Z"",""measurementDate.lessThan"":""2026-05-01T08:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 09:00-10:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""9"",""hourStart"":""2026-05-01T06:00:00Z"",""hourEnd"":""2026-05-01T07:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T06%3A00%3A00Z&measurementDate.lessThan=2026-05-01T07%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T06:00:00Z;2026-05-01T07:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T06%3A00%3A00Z&measurementDate.lessThan=2026-05-01T07%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T06:00:00Z"",""measurementDate.lessThan"":""2026-05-01T07:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 08:00-09:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""8"",""hourStart"":""2026-05-01T05:00:00Z"",""hourEnd"":""2026-05-01T06:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T05%3A00%3A00Z&measurementDate.lessThan=2026-05-01T06%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T05:00:00Z;2026-05-01T06:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T05%3A00%3A00Z&measurementDate.lessThan=2026-05-01T06%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T05:00:00Z"",""measurementDate.lessThan"":""2026-05-01T06:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 13:00-14:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T10:00:00Z"",""measurementDate.lessThan"":""2026-05-01T11:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""13"",""hourStart"":""2026-05-01T10:00:00Z"",""hourEnd"":""2026-05-01T11:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T10%3A00%3A00Z&measurementDate.lessThan=2026-05-01T11%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T10:00:00Z;2026-05-01T11:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T10%3A00%3A00Z&measurementDate.lessThan=2026-05-01T11%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 07:00-08:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""7"",""hourStart"":""2026-05-01T04:00:00Z"",""hourEnd"":""2026-05-01T05:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T04%3A00%3A00Z&measurementDate.lessThan=2026-05-01T05%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T04:00:00Z;2026-05-01T05:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T04%3A00%3A00Z&measurementDate.lessThan=2026-05-01T05%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T04:00:00Z"",""measurementDate.lessThan"":""2026-05-01T05:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 12:00-13:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T09:00:00Z"",""measurementDate.lessThan"":""2026-05-01T10:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""12"",""hourStart"":""2026-05-01T09:00:00Z"",""hourEnd"":""2026-05-01T10:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T09%3A00%3A00Z&measurementDate.lessThan=2026-05-01T10%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T09:00:00Z;2026-05-01T10:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T09%3A00%3A00Z&measurementDate.lessThan=2026-05-01T10%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 06:00-07:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""6"",""hourStart"":""2026-05-01T03:00:00Z"",""hourEnd"":""2026-05-01T04:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T03%3A00%3A00Z&measurementDate.lessThan=2026-05-01T04%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T03:00:00Z;2026-05-01T04:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T03%3A00%3A00Z&measurementDate.lessThan=2026-05-01T04%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T03:00:00Z"",""measurementDate.lessThan"":""2026-05-01T04:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 11:00-12:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T08:00:00Z"",""measurementDate.lessThan"":""2026-05-01T09:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""11"",""hourStart"":""2026-05-01T08:00:00Z"",""hourEnd"":""2026-05-01T09:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T08%3A00%3A00Z&measurementDate.lessThan=2026-05-01T09%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T08:00:00Z;2026-05-01T09:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T08%3A00%3A00Z&measurementDate.lessThan=2026-05-01T09%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 05:00-06:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""5"",""hourStart"":""2026-05-01T02:00:00Z"",""hourEnd"":""2026-05-01T03:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T02%3A00%3A00Z&measurementDate.lessThan=2026-05-01T03%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T02:00:00Z;2026-05-01T03:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T02%3A00%3A00Z&measurementDate.lessThan=2026-05-01T03%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T02:00:00Z"",""measurementDate.lessThan"":""2026-05-01T03:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 10:00-11:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T07:00:00Z"",""measurementDate.lessThan"":""2026-05-01T08:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""10"",""hourStart"":""2026-05-01T07:00:00Z"",""hourEnd"":""2026-05-01T08:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T07%3A00%3A00Z&measurementDate.lessThan=2026-05-01T08%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T07:00:00Z;2026-05-01T08:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T07%3A00%3A00Z&measurementDate.lessThan=2026-05-01T08%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 04:00-05:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""4"",""hourStart"":""2026-05-01T01:00:00Z"",""hourEnd"":""2026-05-01T02:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T01%3A00%3A00Z&measurementDate.lessThan=2026-05-01T02%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T01:00:00Z;2026-05-01T02:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T01%3A00%3A00Z&measurementDate.lessThan=2026-05-01T02%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T01:00:00Z"",""measurementDate.lessThan"":""2026-05-01T02:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 09:00-10:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T06:00:00Z"",""measurementDate.lessThan"":""2026-05-01T07:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""9"",""hourStart"":""2026-05-01T06:00:00Z"",""hourEnd"":""2026-05-01T07:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T06%3A00%3A00Z&measurementDate.lessThan=2026-05-01T07%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T06:00:00Z;2026-05-01T07:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T06%3A00%3A00Z&measurementDate.lessThan=2026-05-01T07%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 03:00-04:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""3"",""hourStart"":""2026-05-01T00:00:00Z"",""hourEnd"":""2026-05-01T01:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T00%3A00%3A00Z&measurementDate.lessThan=2026-05-01T01%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T00:00:00Z;2026-05-01T01:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T00%3A00%3A00Z&measurementDate.lessThan=2026-05-01T01%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T00:00:00Z"",""measurementDate.lessThan"":""2026-05-01T01:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 08:00-09:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T05:00:00Z"",""measurementDate.lessThan"":""2026-05-01T06:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""8"",""hourStart"":""2026-05-01T05:00:00Z"",""hourEnd"":""2026-05-01T06:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T05%3A00%3A00Z&measurementDate.lessThan=2026-05-01T06%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T05:00:00Z;2026-05-01T06:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T05%3A00%3A00Z&measurementDate.lessThan=2026-05-01T06%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 02:00-03:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""2"",""hourStart"":""2026-04-30T23:00:00Z"",""hourEnd"":""2026-05-01T00:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T23%3A00%3A00Z&measurementDate.lessThan=2026-05-01T00%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-04-30T23:00:00Z;2026-05-01T00:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T23%3A00%3A00Z&measurementDate.lessThan=2026-05-01T00%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T23:00:00Z"",""measurementDate.lessThan"":""2026-05-01T00:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 07:00-08:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T04:00:00Z"",""measurementDate.lessThan"":""2026-05-01T05:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""7"",""hourStart"":""2026-05-01T04:00:00Z"",""hourEnd"":""2026-05-01T05:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T04%3A00%3A00Z&measurementDate.lessThan=2026-05-01T05%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T04:00:00Z;2026-05-01T05:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T04%3A00%3A00Z&measurementDate.lessThan=2026-05-01T05%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 01:00-02:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""1"",""hourStart"":""2026-04-30T22:00:00Z"",""hourEnd"":""2026-04-30T23:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T22%3A00%3A00Z&measurementDate.lessThan=2026-04-30T23%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-04-30T22:00:00Z;2026-04-30T23:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T22%3A00%3A00Z&measurementDate.lessThan=2026-04-30T23%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T22:00:00Z"",""measurementDate.lessThan"":""2026-04-30T23:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 06:00-07:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T03:00:00Z"",""measurementDate.lessThan"":""2026-05-01T04:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""6"",""hourStart"":""2026-05-01T03:00:00Z"",""hourEnd"":""2026-05-01T04:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T03%3A00%3A00Z&measurementDate.lessThan=2026-05-01T04%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T03:00:00Z;2026-05-01T04:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T03%3A00%3A00Z&measurementDate.lessThan=2026-05-01T04%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 00:00-01:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""0"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T21:00:00Z"",""measurementDate.lessThan"":""2026-04-30T22:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 05:00-06:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T02:00:00Z"",""measurementDate.lessThan"":""2026-05-01T03:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""5"",""hourStart"":""2026-05-01T02:00:00Z"",""hourEnd"":""2026-05-01T03:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T02%3A00%3A00Z&measurementDate.lessThan=2026-05-01T03%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T02:00:00Z;2026-05-01T03:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T02%3A00%3A00Z&measurementDate.lessThan=2026-05-01T03%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 04:00-05:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T01:00:00Z"",""measurementDate.lessThan"":""2026-05-01T02:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""4"",""hourStart"":""2026-05-01T01:00:00Z"",""hourEnd"":""2026-05-01T02:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T01%3A00%3A00Z&measurementDate.lessThan=2026-05-01T02%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T01:00:00Z;2026-05-01T02:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T01%3A00%3A00Z&measurementDate.lessThan=2026-05-01T02%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 03:00-04:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T00:00:00Z"",""measurementDate.lessThan"":""2026-05-01T01:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""3"",""hourStart"":""2026-05-01T00:00:00Z"",""hourEnd"":""2026-05-01T01:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T00%3A00%3A00Z&measurementDate.lessThan=2026-05-01T01%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T00:00:00Z;2026-05-01T01:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T00%3A00%3A00Z&measurementDate.lessThan=2026-05-01T01%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 02:00-03:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T23:00:00Z"",""measurementDate.lessThan"":""2026-05-01T00:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""2"",""hourStart"":""2026-04-30T23:00:00Z"",""hourEnd"":""2026-05-01T00:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T23%3A00%3A00Z&measurementDate.lessThan=2026-05-01T00%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-04-30T23:00:00Z;2026-05-01T00:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T23%3A00%3A00Z&measurementDate.lessThan=2026-05-01T00%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 01:00-02:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T22:00:00Z"",""measurementDate.lessThan"":""2026-04-30T23:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""1"",""hourStart"":""2026-04-30T22:00:00Z"",""hourEnd"":""2026-04-30T23:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T22%3A00%3A00Z&measurementDate.lessThan=2026-04-30T23%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-04-30T22:00:00Z;2026-04-30T23:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T22%3A00%3A00Z&measurementDate.lessThan=2026-04-30T23%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 00:00-01:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T21:00:00Z"",""measurementDate.lessThan"":""2026-04-30T22:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""0"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;2026-05-01: 1 RES/GES ic busbar ID bulundu.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""busbarInternalIds"":[""10933818957""],""localDate"":""2026-05-01""}}";;;;10933818957;;;;;;;;
+1.05.2026 14:44;info;Hazirlik;rgdh-monitor;;;;;RGDH YKS sorgusu hazirlandi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""busbarId"":""5052"",""busbarName"":""GEYCEK RES"",""busbarInternalIds"":[""10933818957""],""internalBusbarId"":""10933818957"",""localDate"":""2026-05-01"",""sourceType"":""WIND"",""resolverMethod"":""targeted-busbarId"",""resolverPageCount"":""1""}}";;WIND;5052;10933818957;;;;;;;;
+1.05.2026 14:44;warn;Job;rgdh-monitor;;;;;YKS cekim isi tamamlandi (58 sn).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""rowCounts"":{""conventionalRows"":""0"",""windRows"":""0"",""domRows"":""0"",""apiRows"":""0""},""transport"":""background-job""}}";;;;;;;;;;;;
+1.05.2026 14:44;error;WIND;rgdh-monitor;;;;;2026-05-01: tum aday RES/GES busbar id degerleri basarisiz: 10933818957, 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""source"":""WIND"",""busbarId"":""5052"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""failedHours"":""24"",""attemptedHours"":""24"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;WIND;5052;10933818957;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;YKS_HOURLY_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01: hibrit RES/GES aday probe basarisiz: 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""source"":""WIND"",""busbarId"":""5052"",""internalBusbarId"":""5052"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""0"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052""}}";;WIND;5052;5052;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;2026-05-01: hibrit RES/GES aday probe sorgulanacak: 5052;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-04-30T21:00:00Z"",""measurementDate.lessThan"":""2026-04-30T22:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""5052""},""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""0"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-04-30T22:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052"",""pageTimeoutMs"":""12000""}}";;;5052;;2026-04-30T21:00:00Z;2026-04-30T22:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=5052;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;"2026-05-01: 10933818957 aday RES/GES busbar id zaman asimina ugradi; display id probe denenecek.";"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01""}}";;;5052;;;;;;YKS_HOURLY_TIMEOUT;;;
+1.05.2026 14:44;success;WIND;rgdh-monitor;;;;;Saatlik toplam 0 kayit alindi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""rowCount"":""0"",""partialErrors"":""1""}}";;;5052;10933818957;;;;;;;0;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;24 RES/GES saatlik YKS istegi zaman asimina ugradi.;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":"""",""errorType"":""YKS_HOURLY_TIMEOUT"",""errorClass"":""YKS_HOURLY_TIMEOUT"",""source"":""WIND"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""localDate"":""2026-05-01"",""hourStart"":""2026-04-30T21:00:00Z"",""hourEnd"":""2026-05-01T21:00:00Z"",""hourRange"":""0-23"",""failedHours"":""24"",""attemptedHours"":""24"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;WIND;10933818957;10933818957;2026-04-30T21:00:00Z;2026-05-01T21:00:00Z;;;YKS_HOURLY_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-04-30T21%3A00%3A00Z&measurementDate.lessThan=2026-04-30T22%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 23:00-00:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""23"",""hourStart"":""2026-05-01T20:00:00Z"",""hourEnd"":""2026-05-01T21:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T20:00:00Z;2026-05-01T21:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T20:00:00Z"",""measurementDate.lessThan"":""2026-05-01T21:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 22:00-23:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""22"",""hourStart"":""2026-05-01T19:00:00Z"",""hourEnd"":""2026-05-01T20:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T19:00:00Z;2026-05-01T20:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T19:00:00Z"",""measurementDate.lessThan"":""2026-05-01T20:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 21:00-22:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""21"",""hourStart"":""2026-05-01T18:00:00Z"",""hourEnd"":""2026-05-01T19:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T18:00:00Z;2026-05-01T19:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T18:00:00Z"",""measurementDate.lessThan"":""2026-05-01T19:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 20:00-21:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""20"",""hourStart"":""2026-05-01T17:00:00Z"",""hourEnd"":""2026-05-01T18:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T17:00:00Z;2026-05-01T18:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T17:00:00Z"",""measurementDate.lessThan"":""2026-05-01T18:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 19:00-20:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""19"",""hourStart"":""2026-05-01T16:00:00Z"",""hourEnd"":""2026-05-01T17:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T16:00:00Z;2026-05-01T17:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T16:00:00Z"",""measurementDate.lessThan"":""2026-05-01T17:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 18:00-19:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""18"",""hourStart"":""2026-05-01T15:00:00Z"",""hourEnd"":""2026-05-01T16:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T15%3A00%3A00Z&measurementDate.lessThan=2026-05-01T16%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T15:00:00Z;2026-05-01T16:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T15%3A00%3A00Z&measurementDate.lessThan=2026-05-01T16%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T15:00:00Z"",""measurementDate.lessThan"":""2026-05-01T16:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 23:00-00:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T20:00:00Z"",""measurementDate.lessThan"":""2026-05-01T21:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""23"",""hourStart"":""2026-05-01T20:00:00Z"",""hourEnd"":""2026-05-01T21:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T20:00:00Z;2026-05-01T21:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T20%3A00%3A00Z&measurementDate.lessThan=2026-05-01T21%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 17:00-18:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""17"",""hourStart"":""2026-05-01T14:00:00Z"",""hourEnd"":""2026-05-01T15:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T14%3A00%3A00Z&measurementDate.lessThan=2026-05-01T15%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T14:00:00Z;2026-05-01T15:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T14%3A00%3A00Z&measurementDate.lessThan=2026-05-01T15%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T14:00:00Z"",""measurementDate.lessThan"":""2026-05-01T15:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 22:00-23:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T19:00:00Z"",""measurementDate.lessThan"":""2026-05-01T20:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""22"",""hourStart"":""2026-05-01T19:00:00Z"",""hourEnd"":""2026-05-01T20:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T19:00:00Z;2026-05-01T20:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T19%3A00%3A00Z&measurementDate.lessThan=2026-05-01T20%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 16:00-17:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""16"",""hourStart"":""2026-05-01T13:00:00Z"",""hourEnd"":""2026-05-01T14:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T13%3A00%3A00Z&measurementDate.lessThan=2026-05-01T14%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T13:00:00Z;2026-05-01T14:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T13%3A00%3A00Z&measurementDate.lessThan=2026-05-01T14%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T13:00:00Z"",""measurementDate.lessThan"":""2026-05-01T14:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 21:00-22:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T18:00:00Z"",""measurementDate.lessThan"":""2026-05-01T19:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""21"",""hourStart"":""2026-05-01T18:00:00Z"",""hourEnd"":""2026-05-01T19:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T18:00:00Z;2026-05-01T19:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T18%3A00%3A00Z&measurementDate.lessThan=2026-05-01T19%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 20:00-21:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T17:00:00Z"",""measurementDate.lessThan"":""2026-05-01T18:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""20"",""hourStart"":""2026-05-01T17:00:00Z"",""hourEnd"":""2026-05-01T18:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T17:00:00Z;2026-05-01T18:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T17%3A00%3A00Z&measurementDate.lessThan=2026-05-01T18%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 15:00-16:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""15"",""hourStart"":""2026-05-01T12:00:00Z"",""hourEnd"":""2026-05-01T13:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T12%3A00%3A00Z&measurementDate.lessThan=2026-05-01T13%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T12:00:00Z;2026-05-01T13:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T12%3A00%3A00Z&measurementDate.lessThan=2026-05-01T13%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T12:00:00Z"",""measurementDate.lessThan"":""2026-05-01T13:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 14:00-15:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""14"",""hourStart"":""2026-05-01T11:00:00Z"",""hourEnd"":""2026-05-01T12:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T11%3A00%3A00Z&measurementDate.lessThan=2026-05-01T12%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T11:00:00Z;2026-05-01T12:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T11%3A00%3A00Z&measurementDate.lessThan=2026-05-01T12%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;error;Page Fetch;rgdh-monitor;;;;;signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""httpStatus"":"""",""errorType"":""PAGE_FETCH_TIMEOUT"",""transport"":""page-context""}}";;;;;;;;;PAGE_FETCH_TIMEOUT;;;
+1.05.2026 14:44;info;Page Fetch;rgdh-monitor;;;;;YKS sayfa context tokenli fetch basladi (chunked).;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T11:00:00Z"",""measurementDate.lessThan"":""2026-05-01T12:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""transport"":""page-context""}}";;;;;;;;;;;;
+1.05.2026 14:44;info;WIND;rgdh-monitor;;;;;RES/GES saatlik endpoint sorgulanacak: 10933818957 (2026-05-01 19:00-20:00);"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""endpoint"":""/api/rgdh-wind-busbar-data"",""params"":{""measurementDate.greaterOrEqualThan"":""2026-05-01T16:00:00Z"",""measurementDate.lessThan"":""2026-05-01T17:00:00Z"",""size"":""60"",""page"":""0"",""sort"":""measurementDate,asc"",""busbarId.equals"":""10933818957""},""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""19"",""hourStart"":""2026-05-01T16:00:00Z"",""hourEnd"":""2026-05-01T17:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957"",""pageTimeoutMs"":""10000"",""concurrency"":""6""}}";;;5052;10933818957;2026-05-01T16:00:00Z;2026-05-01T17:00:00Z;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T16%3A00%3A00Z&measurementDate.lessThan=2026-05-01T17%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+1.05.2026 14:44;warn;WIND;rgdh-monitor;;;;;2026-05-01 13:00-14:00 | 10933818957: signal is aborted without reason;"{""requestHeaders"":{},""responseHeaders"":{},""detail"":{""httpStatus"":""0"",""errorType"":""PAGE_FETCH_TIMEOUT"",""errorClass"":""PAGE_FETCH_TIMEOUT"",""busbarId"":""10933818957"",""internalBusbarId"":""10933818957"",""displayBusbarId"":""5052"",""localDate"":""2026-05-01"",""hour"":""13"",""hourStart"":""2026-05-01T10:00:00Z"",""hourEnd"":""2026-05-01T11:00:00Z"",""requestUrl"":""https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T10%3A00%3A00Z&measurementDate.lessThan=2026-05-01T11%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957""}}";;;5052;10933818957;2026-05-01T10:00:00Z;2026-05-01T11:00:00Z;;;PAGE_FETCH_TIMEOUT;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T10%3A00%3A00Z&measurementDate.lessThan=2026-05-01T11%3A00%3A00Z&size=60&page=0&sort=measurementDate%2Casc&busbarId.equals=10933818957;;
+;;;consolo log ;;;;;https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T08:00:00Z&measurementDate.lessThan=2026-05-01T11:00:00Z&busbarId.equals=10933818957&size=60&sort=measurementDate,asc;;;;;;;;;;;;;
+;;;consolo log ;;;;;"Request URL
+https://yks.teias.gov.tr/api/rgdh-wind-busbar-data?measurementDate.greaterOrEqualThan=2026-05-01T08:00:00Z&measurementDate.lessThan=2026-05-01T11:00:00Z&busbarId.equals=10933818957&size=60&sort=measurementDate,asc
+Request Method
+GET
+Status Code
+200 OK
+Remote Address
+10.200.46.125:443
+Referrer Policy
+strict-origin-when-cross-origin
+cache-control
+no-cache, no-store, max-age=0, must-revalidate
+connection
+keep-alive
+content-encoding
+gzip
+content-type
+application/json;charset=UTF-8
+date
+Fri, 01 May 2026 11:47:39 GMT
+expires
+0
+link
+</rgdh-wind-busbar-data?page=1&size=60>; rel=""next"",</rgdh-wind-busbar-data?page=2&size=60>; rel=""last"",</rgdh-wind-busbar-data?page=0&size=60>; rel=""first""
+pragma
+no-cache
+transfer-encoding
+chunked
+
+x-application-context
+teiasyanh:prod:8080
+x-content-type-options
+nosniff
+x-total-count
+180
+x-xss-protection
+1; mode=block
+accept
+application/json, text/plain, */*
+authorization
+Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJtdXJhdGhhbnllbmljZWxpIiwiYXV0aCI6Ik9BIFlUTSxST0xFX1VTRVIiLCJleHAiOjE3Nzg3NjYxOTZ9.tnH8mbZUAThoPhKWoyQ-8wMRWrxDVXZ0ns10uG3Inr7B5PiVqyIunrd-_gpYDicxxvKfvO6WjWdklgYPo_i0LA
+dnt
+1
+referer
+https://yks.teias.gov.tr/
+sec-ch-ua
+""Google Chrome"";v=""147"", ""Not.A/Brand"";v=""8"", ""Chromium"";v=""147""
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+""Windows""
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.3";;;;;;;;;;;;;
+;;;consolo log ;;;;;"measurementDate.greaterOrEqualThan
+2026-05-01T08:00:00Z
+measurementDate.lessThan
+2026-05-01T11:00:00Z
+busbarId.equals
+10933818957
+size
+60
+sort
+measurementDate,asc";;;;;;;;;;;;;
+;;;consolo log ;;;;;"[{id: 15234117076, measurementDate: ""2026-05-01T08:00:00Z"", busB1B2Name: ""GEYCEK/154"",…},…]
+0
+: 
+{id: 15234117076, measurementDate: ""2026-05-01T08:00:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+1
+: 
+{id: 15234117055, measurementDate: ""2026-05-01T08:01:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+aiAuxiliaryMvarApprove
+: 
+null
+aiMvarApprove
+: 
+null
+approvalStatus
+: 
+null
+approvalStatusAuxiliary
+: 
+null
+auxiliarySource
+: 
+0.53
+auxiliarySourceReactive
+: 
+1.03
+busB1B2Name
+: 
+""GEYCEK/154""
+busB3Names
+: 
+""swTR1""
+busTa1Volt
+: 
+158.96
+busTa1VoltHighlighted
+: 
+false
+busTa1VoltQ0Txt
+: 
+""Actual""
+busTa2Volt
+: 
+null
+busTa2VoltHighlighted
+: 
+false
+busTa2VoltQ0Txt
+: 
+null
+busTa3Volt
+: 
+null
+busTa3VoltHighlighted
+: 
+false
+busTa3VoltQ0Txt
+: 
+null
+busbar
+: 
+{id: 10933818957, busbarType: ""WIND"", busbarId: 5052, busbarName: ""GEYCEK RES"",…}
+auxiliaryConventionalUnitList
+: 
+[]
+auxiliaryWindUnitList
+: 
+[{id: 14356220402, name: ""YARDIMCI KAYNAK GES"", uevcbName: ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",…}]
+0
+: 
+{id: 14356220402, name: ""YARDIMCI KAYNAK GES"", uevcbName: ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",…}
+id
+: 
+14356220402
+isUnitActive
+: 
+true
+name
+: 
+""YARDIMCI KAYNAK GES""
+overExcite
+: 
+22.588
+overExcite2
+: 
+22.585
+pnomUnit
+: 
+46.63
+powerFactor
+: 
+null
+resourceType
+: 
+""GES""
+setNumMvar
+: 
+""2,1,156381""
+setNumMw
+: 
+""2,1,156380""
+speedDrop
+: 
+4
+taMvar
+: 
+""GEYCEK/34.5/Gen-15/Q""
+taMw
+: 
+""GEYCEK/34.5/Gen-15/P""
+teiasAuxiliaryRgdhWindUnitData
+: 
+null
+terminalVoltage
+: 
+null
+uevcbId
+: 
+340575
+uevcbName
+: 
+""AL-YEL ELEKTRİK ÜRETİM A.Ş.""
+underExcite
+: 
+-22.588
+underExcite2
+: 
+-22.585
+unitActive
+: 
+true
+busbarConfig
+: 
+null
+busbarDefinitionOne
+: 
+""GEYCEK/154/swTR1/U""
+busbarDefinitionThree
+: 
+""""
+busbarDefinitionTwo
+: 
+""""
+busbarId
+: 
+5052
+busbarName
+: 
+""GEYCEK RES""
+busbarType
+: 
+""WIND""
+city
+: 
+""KIRŞEHİR""
+conventionalUnitList
+: 
+[]
+distributionCenter
+: 
+""OA_YTM""
+id
+: 
+10933818957
+isBusbarActive
+: 
+true
+plantId
+: 
+6740
+plantName
+: 
+""GEYCEK RES""
+rgdhBusbarParticipants
+: 
+null
+rgdhConventionalBusbarData
+: 
+null
+rgdhWindBusbarData
+: 
+null
+rgkType
+: 
+""WIND_AFTER_2013_RES_KV""
+selected
+: 
+false
+setNumBusbarOne
+: 
+""2,1,160964""
+setNumBusbarThree
+: 
+""""
+setNumBusbarTwo
+: 
+""""
+synchronousCompensatorList
+: 
+[]
+teiasAuxiliaryRgdhConvUnitData
+: 
+null
+voltageLevel
+: 
+154
+windUnitList
+: 
+[{id: 10997878253, name: ""Ünite 1-70"", uevcbName: ""AL-YEL ELEKTRİK ÜRETİM A.Ş."", uevcbId: 340575,…}]
+0
+: 
+{id: 10997878253, name: ""Ünite 1-70"", uevcbName: ""AL-YEL ELEKTRİK ÜRETİM A.Ş."", uevcbId: 340575,…}
+id
+: 
+10997878253
+isUnitActive
+: 
+true
+name
+: 
+""Ünite 1-70""
+overExcite
+: 
+55.22
+overExcite2
+: 
+56.599
+pmkudUnit
+: 
+null
+pnomUnit
+: 
+172.2
+powerFactor
+: 
+null
+resourceType
+: 
+""WIND""
+rgdhWindUnitDataList
+: 
+null
+setNumMvar
+: 
+""2,1,160175""
+setNumMw
+: 
+""2,1,160174""
+speedDrop
+: 
+4
+taMvar
+: 
+""GEYCEK/154/RGKTOP/Q""
+taMw
+: 
+""GEYCEK/154/RGKTOP/P""
+terminalVoltage
+: 
+null
+uevcbId
+: 
+340575
+uevcbName
+: 
+""AL-YEL ELEKTRİK ÜRETİM A.Ş.""
+underExcite
+: 
+-55.22
+underExcite2
+: 
+-56.599
+diAuxiliaryMvarApprove
+: 
+null
+diMvarApprove
+: 
+null
+id
+: 
+15234117055
+mainBusbarVoltage
+: 
+158.96
+measurementDate
+: 
+""2026-05-01T08:01:00Z""
+noObligationStatus
+: 
+1
+pgenHighlighted
+: 
+false
+pnom
+: 
+null
+rgdhOffBoardStatus
+: 
+0
+sumAIMvarLimit
+: 
+null
+sumAuxiliaryAIMvarLimit
+: 
+null
+sumAuxiliaryDIMvarLimit
+: 
+null
+sumDIMvarLimit
+: 
+null
+sumPgenActive
+: 
+0.07
+sumPgenActiveHighlighted
+: 
+false
+sumPgenReactive
+: 
+5.16
+sumPgenReactiveHighlighted
+: 
+false
+sumPmukd
+: 
+17.22
+tpysBusVoltDrop
+: 
+2
+tpysBusVoltSet
+: 
+158
+typsService
+: 
+true
+unitsInSupply
+: 
+""swTR-A""
+windUnit
+: 
+null
+2
+: 
+{id: 15234117027, measurementDate: ""2026-05-01T08:02:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+3
+: 
+{id: 15234117051, measurementDate: ""2026-05-01T08:03:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+4
+: 
+{id: 15234117023, measurementDate: ""2026-05-01T08:04:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+5
+: 
+{id: 15234117063, measurementDate: ""2026-05-01T08:05:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+6
+: 
+{id: 15234117035, measurementDate: ""2026-05-01T08:06:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+7
+: 
+{id: 15234117059, measurementDate: ""2026-05-01T08:07:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+8
+: 
+{id: 15234117031, measurementDate: ""2026-05-01T08:08:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+9
+: 
+{id: 15234117070, measurementDate: ""2026-05-01T08:09:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+10
+: 
+{id: 15234117043, measurementDate: ""2026-05-01T08:10:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+11
+: 
+{id: 15234117067, measurementDate: ""2026-05-01T08:11:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+12
+: 
+{id: 15234117039, measurementDate: ""2026-05-01T08:12:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+13
+: 
+{id: 15234117078, measurementDate: ""2026-05-01T08:13:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+14
+: 
+{id: 15234117049, measurementDate: ""2026-05-01T08:14:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+15
+: 
+{id: 15234117074, measurementDate: ""2026-05-01T08:15:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+16
+: 
+{id: 15234117046, measurementDate: ""2026-05-01T08:16:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+17
+: 
+{id: 15234117025, measurementDate: ""2026-05-01T08:17:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+18
+: 
+{id: 15234117057, measurementDate: ""2026-05-01T08:18:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+19
+: 
+{id: 15234117021, measurementDate: ""2026-05-01T08:19:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+20
+: 
+{id: 15234117053, measurementDate: ""2026-05-01T08:20:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+21
+: 
+{id: 15234117033, measurementDate: ""2026-05-01T08:21:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+22
+: 
+{id: 15234117065, measurementDate: ""2026-05-01T08:22:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+23
+: 
+{id: 15234117029, measurementDate: ""2026-05-01T08:23:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+24
+: 
+{id: 15234117061, measurementDate: ""2026-05-01T08:24:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+25
+: 
+{id: 15234117041, measurementDate: ""2026-05-01T08:25:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+26
+: 
+{id: 15234117072, measurementDate: ""2026-05-01T08:26:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+27
+: 
+{id: 15234117037, measurementDate: ""2026-05-01T08:27:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+28
+: 
+{id: 15234117069, measurementDate: ""2026-05-01T08:28:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+29
+: 
+{id: 15234117048, measurementDate: ""2026-05-01T08:29:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+30
+: 
+{id: 15234117080, measurementDate: ""2026-05-01T08:30:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+31
+: 
+{id: 15234117045, measurementDate: ""2026-05-01T08:31:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+32
+: 
+{id: 15234117077, measurementDate: ""2026-05-01T08:32:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+33
+: 
+{id: 15234117056, measurementDate: ""2026-05-01T08:33:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+34
+: 
+{id: 15234117028, measurementDate: ""2026-05-01T08:34:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+35
+: 
+{id: 15234117052, measurementDate: ""2026-05-01T08:35:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+36
+: 
+{id: 15234117024, measurementDate: ""2026-05-01T08:36:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+37
+: 
+{id: 15234117064, measurementDate: ""2026-05-01T08:37:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+38
+: 
+{id: 15234117036, measurementDate: ""2026-05-01T08:38:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+39
+: 
+{id: 15234117060, measurementDate: ""2026-05-01T08:39:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+40
+: 
+{id: 15234117032, measurementDate: ""2026-05-01T08:40:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+41
+: 
+{id: 15234117071, measurementDate: ""2026-05-01T08:41:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+42
+: 
+{id: 15234117044, measurementDate: ""2026-05-01T08:42:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+43
+: 
+{id: 15234117068, measurementDate: ""2026-05-01T08:43:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+44
+: 
+{id: 15234117040, measurementDate: ""2026-05-01T08:44:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+45
+: 
+{id: 15234117079, measurementDate: ""2026-05-01T08:45:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+46
+: 
+{id: 15234117050, measurementDate: ""2026-05-01T08:46:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+47
+: 
+{id: 15234117075, measurementDate: ""2026-05-01T08:47:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+48
+: 
+{id: 15234117047, measurementDate: ""2026-05-01T08:48:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+49
+: 
+{id: 15234117026, measurementDate: ""2026-05-01T08:49:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+50
+: 
+{id: 15234117058, measurementDate: ""2026-05-01T08:50:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+51
+: 
+{id: 15234117022, measurementDate: ""2026-05-01T08:51:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+52
+: 
+{id: 15234117054, measurementDate: ""2026-05-01T08:52:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+53
+: 
+{id: 15234117034, measurementDate: ""2026-05-01T08:53:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+54
+: 
+{id: 15234117066, measurementDate: ""2026-05-01T08:54:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+55
+: 
+{id: 15234117030, measurementDate: ""2026-05-01T08:55:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+56
+: 
+{id: 15234117062, measurementDate: ""2026-05-01T08:56:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+57
+: 
+{id: 15234117042, measurementDate: ""2026-05-01T08:57:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+58
+: 
+{id: 15234117073, measurementDate: ""2026-05-01T08:58:00Z"", busB1B2Name: ""GEYCEK/154"",…}
+59
+: 
+{id: 15234117038, measurementDate: ""2026-05-01T08:59:00Z"", busB1B2Name: ""GEYCEK/154"",…}";;;;;;;;;;;;;
+;;;consolo log ;;;;;"[
+    {
+        ""id"": 15234117076,
+        ""measurementDate"": ""2026-05-01T08:00:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 159.93,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 159.93,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+                    ""taMvar"": ""GEYCEK/34.5/Gen-15/Q"",
+                    ""setNumMvar"": ""2,1,156381"",
+                    ""pnomUnit"": 46.63,
+                    ""speedDrop"": 4.0,
+                    ""underExcite"": -22.588,
+                    ""overExcite"": 22.588,
+                    ""underExcite2"": -22.585,
+                    ""overExcite2"": 22.585,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""teiasAuxiliaryRgdhWindUnitData"": null,
+                    ""unitActive"": true
+                }
+            ],
+            ""windUnitList"": [
+                {
+                    ""id"": 10997878253,
+                    ""name"": ""Ünite 1-70"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""WIND"",
+                    ""taMw"": ""GEYCEK/154/RGKTOP/P"",
+                    ""setNumMw"": ""2,1,160174"",
+                    ""taMvar"": ""GEYCEK/154/RGKTOP/Q"",
+                    ""setNumMvar"": ""2,1,160175"",
+                    ""pnomUnit"": 172.2,
+                    ""pmkudUnit"": null,
+                    ""underExcite"": -55.22,
+                    ""overExcite"": 55.22,
+                    ""underExcite2"": -56.599,
+                    ""overExcite2"": 56.599,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""speedDrop"": 4.0,
+                    ""rgdhWindUnitDataList"": null
+                }
+            ],
+            ""synchronousCompensatorList"": [],
+            ""rgdhConventionalBusbarData"": null,
+            ""rgdhWindBusbarData"": null,
+            ""rgdhBusbarParticipants"": null,
+            ""teiasAuxiliaryRgdhConvUnitData"": null
+        },
+        ""windUnit"": null,
+        ""auxiliarySource"": 0.53,
+        ""auxiliarySourceReactive"": 1.04,
+        ""sumAuxiliaryDIMvarLimit"": null,
+        ""sumAuxiliaryAIMvarLimit"": null,
+        ""diAuxiliaryMvarApprove"": null,
+        ""aiAuxiliaryMvarApprove"": null,
+        ""approvalStatusAuxiliary"": null,
+        ""sumPgenActive"": 0.07,
+        ""sumDIMvarLimit"": null,
+        ""sumAIMvarLimit"": null,
+        ""sumPgenReactive"": 5.32,
+        ""diMvarApprove"": null,
+        ""aiMvarApprove"": null,
+        ""approvalStatus"": null,
+        ""noObligationStatus"": 1,
+        ""rgdhOffBoardStatus"": 0,
+        ""sumPmukd"": 17.22,
+        ""pnom"": null,
+        ""sumPgenActiveHighlighted"": false,
+        ""sumPgenReactiveHighlighted"": false,
+        ""pgenHighlighted"": false,
+        ""busTa2VoltHighlighted"": false,
+        ""busTa3VoltHighlighted"": false,
+        ""busTa1VoltHighlighted"": false,
+        ""typsService"": true
+    },
+    {
+        ""id"": 15234117055,
+        ""measurementDate"": ""2026-05-01T08:01:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 158.96,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 158.96,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+                    ""taMvar"": ""GEYCEK/34.5/Gen-15/Q"",
+                    ""setNumMvar"": ""2,1,156381"",
+                    ""pnomUnit"": 46.63,
+                    ""speedDrop"": 4.0,
+                    ""underExcite"": -22.588,
+                    ""overExcite"": 22.588,
+                    ""underExcite2"": -22.585,
+                    ""overExcite2"": 22.585,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""teiasAuxiliaryRgdhWindUnitData"": null,
+                    ""unitActive"": true
+                }
+            ],
+            ""windUnitList"": [
+                {
+                    ""id"": 10997878253,
+                    ""name"": ""Ünite 1-70"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""WIND"",
+                    ""taMw"": ""GEYCEK/154/RGKTOP/P"",
+                    ""setNumMw"": ""2,1,160174"",
+                    ""taMvar"": ""GEYCEK/154/RGKTOP/Q"",
+                    ""setNumMvar"": ""2,1,160175"",
+                    ""pnomUnit"": 172.2,
+                    ""pmkudUnit"": null,
+                    ""underExcite"": -55.22,
+                    ""overExcite"": 55.22,
+                    ""underExcite2"": -56.599,
+                    ""overExcite2"": 56.599,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""speedDrop"": 4.0,
+                    ""rgdhWindUnitDataList"": null
+                }
+            ],
+            ""synchronousCompensatorList"": [],
+            ""rgdhConventionalBusbarData"": null,
+            ""rgdhWindBusbarData"": null,
+            ""rgdhBusbarParticipants"": null,
+            ""teiasAuxiliaryRgdhConvUnitData"": null
+        },
+        ""windUnit"": null,
+        ""auxiliarySource"": 0.53,
+        ""auxiliarySourceReactive"": 1.03,
+        ""sumAuxiliaryDIMvarLimit"": null,
+        ""sumAuxiliaryAIMvarLimit"": null,
+        ""diAuxiliaryMvarApprove"": null,
+        ""aiAuxiliaryMvarApprove"": null,
+        ""approvalStatusAuxiliary"": null,
+        ""sumPgenActive"": 0.07,
+        ""sumDIMvarLimit"": null,
+        ""sumAIMvarLimit"": null,
+        ""sumPgenReactive"": 5.16,
+        ""diMvarApprove"": null,
+        ""aiMvarApprove"": null,
+        ""approvalStatus"": null,
+        ""noObligationStatus"": 1,
+        ""rgdhOffBoardStatus"": 0,
+        ""sumPmukd"": 17.22,
+        ""pnom"": null,
+        ""sumPgenActiveHighlighted"": false,
+        ""sumPgenReactiveHighlighted"": false,
+        ""pgenHighlighted"": false,
+        ""busTa2VoltHighlighted"": false,
+        ""busTa3VoltHighlighted"": false,
+        ""busTa1VoltHighlighted"": false,
+        ""typsService"": true
+    },
+    {
+        ""id"": 15234117027,
+        ""measurementDate"": ""2026-05-01T08:02:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 158.95,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 158.95,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+                    ""taMvar"": ""GEYCEK/34.5/Gen-15/Q"",
+                    ""setNumMvar"": ""2,1,156381"",
+                    ""pnomUnit"": 46.63,
+                    ""speedDrop"": 4.0,
+                    ""underExcite"": -22.588,
+                    ""overExcite"": 22.588,
+                    ""underExcite2"": -22.585,
+                    ""overExcite2"": 22.585,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""teiasAuxiliaryRgdhWindUnitData"": null,
+                    ""unitActive"": true
+                }
+            ],
+            ""windUnitList"": [
+                {
+                    ""id"": 10997878253,
+                    ""name"": ""Ünite 1-70"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""WIND"",
+                    ""taMw"": ""GEYCEK/154/RGKTOP/P"",
+                    ""setNumMw"": ""2,1,160174"",
+                    ""taMvar"": ""GEYCEK/154/RGKTOP/Q"",
+                    ""setNumMvar"": ""2,1,160175"",
+                    ""pnomUnit"": 172.2,
+                    ""pmkudUnit"": null,
+                    ""underExcite"": -55.22,
+                    ""overExcite"": 55.22,
+                    ""underExcite2"": -56.599,
+                    ""overExcite2"": 56.599,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""speedDrop"": 4.0,
+                    ""rgdhWindUnitDataList"": null
+                }
+            ],
+            ""synchronousCompensatorList"": [],
+            ""rgdhConventionalBusbarData"": null,
+            ""rgdhWindBusbarData"": null,
+            ""rgdhBusbarParticipants"": null,
+            ""teiasAuxiliaryRgdhConvUnitData"": null
+        },
+        ""windUnit"": null,
+        ""auxiliarySource"": 0.53,
+        ""auxiliarySourceReactive"": 1.03,
+        ""sumAuxiliaryDIMvarLimit"": null,
+        ""sumAuxiliaryAIMvarLimit"": null,
+        ""diAuxiliaryMvarApprove"": null,
+        ""aiAuxiliaryMvarApprove"": null,
+        ""approvalStatusAuxiliary"": null,
+        ""sumPgenActive"": 0.15,
+        ""sumDIMvarLimit"": null,
+        ""sumAIMvarLimit"": null,
+        ""sumPgenReactive"": 5.16,
+        ""diMvarApprove"": null,
+        ""aiMvarApprove"": null,
+        ""approvalStatus"": null,
+        ""noObligationStatus"": 1,
+        ""rgdhOffBoardStatus"": 0,
+        ""sumPmukd"": 17.22,
+        ""pnom"": null,
+        ""sumPgenActiveHighlighted"": false,
+        ""sumPgenReactiveHighlighted"": false,
+        ""pgenHighlighted"": false,
+        ""busTa2VoltHighlighted"": false,
+        ""busTa3VoltHighlighted"": false,
+        ""busTa1VoltHighlighted"": false,
+        ""typsService"": true
+    },
+    {
+        ""id"": 15234117051,
+        ""measurementDate"": ""2026-05-01T08:03:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 159.12,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 159.12,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+                    ""taMvar"": ""GEYCEK/34.5/Gen-15/Q"",
+                    ""setNumMvar"": ""2,1,156381"",
+                    ""pnomUnit"": 46.63,
+                    ""speedDrop"": 4.0,
+                    ""underExcite"": -22.588,
+                    ""overExcite"": 22.588,
+                    ""underExcite2"": -22.585,
+                    ""overExcite2"": 22.585,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""teiasAuxiliaryRgdhWindUnitData"": null,
+                    ""unitActive"": true
+                }
+            ],
+            ""windUnitList"": [
+                {
+                    ""id"": 10997878253,
+                    ""name"": ""Ünite 1-70"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""WIND"",
+                    ""taMw"": ""GEYCEK/154/RGKTOP/P"",
+                    ""setNumMw"": ""2,1,160174"",
+                    ""taMvar"": ""GEYCEK/154/RGKTOP/Q"",
+                    ""setNumMvar"": ""2,1,160175"",
+                    ""pnomUnit"": 172.2,
+                    ""pmkudUnit"": null,
+                    ""underExcite"": -55.22,
+                    ""overExcite"": 55.22,
+                    ""underExcite2"": -56.599,
+                    ""overExcite2"": 56.599,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""speedDrop"": 4.0,
+                    ""rgdhWindUnitDataList"": null
+                }
+            ],
+            ""synchronousCompensatorList"": [],
+            ""rgdhConventionalBusbarData"": null,
+            ""rgdhWindBusbarData"": null,
+            ""rgdhBusbarParticipants"": null,
+            ""teiasAuxiliaryRgdhConvUnitData"": null
+        },
+        ""windUnit"": null,
+        ""auxiliarySource"": 0.53,
+        ""auxiliarySourceReactive"": 1.03,
+        ""sumAuxiliaryDIMvarLimit"": null,
+        ""sumAuxiliaryAIMvarLimit"": null,
+        ""diAuxiliaryMvarApprove"": null,
+        ""aiAuxiliaryMvarApprove"": null,
+        ""approvalStatusAuxiliary"": null,
+        ""sumPgenActive"": 0.15,
+        ""sumDIMvarLimit"": null,
+        ""sumAIMvarLimit"": null,
+        ""sumPgenReactive"": 5.09,
+        ""diMvarApprove"": null,
+        ""aiMvarApprove"": null,
+        ""approvalStatus"": null,
+        ""noObligationStatus"": 1,
+        ""rgdhOffBoardStatus"": 0,
+        ""sumPmukd"": 17.22,
+        ""pnom"": null,
+        ""sumPgenActiveHighlighted"": false,
+        ""sumPgenReactiveHighlighted"": false,
+        ""pgenHighlighted"": false,
+        ""busTa2VoltHighlighted"": false,
+        ""busTa3VoltHighlighted"": false,
+        ""busTa1VoltHighlighted"": false,
+        ""typsService"": true
+    },
+    {
+        ""id"": 15234117023,
+        ""measurementDate"": ""2026-05-01T08:04:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 159.78,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 159.78,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+                    ""taMvar"": ""GEYCEK/34.5/Gen-15/Q"",
+                    ""setNumMvar"": ""2,1,156381"",
+                    ""pnomUnit"": 46.63,
+                    ""speedDrop"": 4.0,
+                    ""underExcite"": -22.588,
+                    ""overExcite"": 22.588,
+                    ""underExcite2"": -22.585,
+                    ""overExcite2"": 22.585,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""teiasAuxiliaryRgdhWindUnitData"": null,
+                    ""unitActive"": true
+                }
+            ],
+            ""windUnitList"": [
+                {
+                    ""id"": 10997878253,
+                    ""name"": ""Ünite 1-70"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""WIND"",
+                    ""taMw"": ""GEYCEK/154/RGKTOP/P"",
+                    ""setNumMw"": ""2,1,160174"",
+                    ""taMvar"": ""GEYCEK/154/RGKTOP/Q"",
+                    ""setNumMvar"": ""2,1,160175"",
+                    ""pnomUnit"": 172.2,
+                    ""pmkudUnit"": null,
+                    ""underExcite"": -55.22,
+                    ""overExcite"": 55.22,
+                    ""underExcite2"": -56.599,
+                    ""overExcite2"": 56.599,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""speedDrop"": 4.0,
+                    ""rgdhWindUnitDataList"": null
+                }
+            ],
+            ""synchronousCompensatorList"": [],
+            ""rgdhConventionalBusbarData"": null,
+            ""rgdhWindBusbarData"": null,
+            ""rgdhBusbarParticipants"": null,
+            ""teiasAuxiliaryRgdhConvUnitData"": null
+        },
+        ""windUnit"": null,
+        ""auxiliarySource"": 0.53,
+        ""auxiliarySourceReactive"": 1.04,
+        ""sumAuxiliaryDIMvarLimit"": null,
+        ""sumAuxiliaryAIMvarLimit"": null,
+        ""diAuxiliaryMvarApprove"": null,
+        ""aiAuxiliaryMvarApprove"": null,
+        ""approvalStatusAuxiliary"": null,
+        ""sumPgenActive"": 0.07,
+        ""sumDIMvarLimit"": null,
+        ""sumAIMvarLimit"": null,
+        ""sumPgenReactive"": 5.25,
+        ""diMvarApprove"": null,
+        ""aiMvarApprove"": null,
+        ""approvalStatus"": null,
+        ""noObligationStatus"": 1,
+        ""rgdhOffBoardStatus"": 0,
+        ""sumPmukd"": 17.22,
+        ""pnom"": null,
+        ""sumPgenActiveHighlighted"": false,
+        ""sumPgenReactiveHighlighted"": false,
+        ""pgenHighlighted"": false,
+        ""busTa2VoltHighlighted"": false,
+        ""busTa3VoltHighlighted"": false,
+        ""busTa1VoltHighlighted"": false,
+        ""typsService"": true
+    },
+    {
+        ""id"": 15234117063,
+        ""measurementDate"": ""2026-05-01T08:05:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 159.34,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 159.34,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+                    ""taMvar"": ""GEYCEK/34.5/Gen-15/Q"",
+                    ""setNumMvar"": ""2,1,156381"",
+                    ""pnomUnit"": 46.63,
+                    ""speedDrop"": 4.0,
+                    ""underExcite"": -22.588,
+                    ""overExcite"": 22.588,
+                    ""underExcite2"": -22.585,
+                    ""overExcite2"": 22.585,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""teiasAuxiliaryRgdhWindUnitData"": null,
+                    ""unitActive"": true
+                }
+            ],
+            ""windUnitList"": [
+                {
+                    ""id"": 10997878253,
+                    ""name"": ""Ünite 1-70"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""WIND"",
+                    ""taMw"": ""GEYCEK/154/RGKTOP/P"",
+                    ""setNumMw"": ""2,1,160174"",
+                    ""taMvar"": ""GEYCEK/154/RGKTOP/Q"",
+                    ""setNumMvar"": ""2,1,160175"",
+                    ""pnomUnit"": 172.2,
+                    ""pmkudUnit"": null,
+                    ""underExcite"": -55.22,
+                    ""overExcite"": 55.22,
+                    ""underExcite2"": -56.599,
+                    ""overExcite2"": 56.599,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""speedDrop"": 4.0,
+                    ""rgdhWindUnitDataList"": null
+                }
+            ],
+            ""synchronousCompensatorList"": [],
+            ""rgdhConventionalBusbarData"": null,
+            ""rgdhWindBusbarData"": null,
+            ""rgdhBusbarParticipants"": null,
+            ""teiasAuxiliaryRgdhConvUnitData"": null
+        },
+        ""windUnit"": null,
+        ""auxiliarySource"": 0.53,
+        ""auxiliarySourceReactive"": 1.04,
+        ""sumAuxiliaryDIMvarLimit"": null,
+        ""sumAuxiliaryAIMvarLimit"": null,
+        ""diAuxiliaryMvarApprove"": null,
+        ""aiAuxiliaryMvarApprove"": null,
+        ""approvalStatusAuxiliary"": null,
+        ""sumPgenActive"": 0.07,
+        ""sumDIMvarLimit"": null,
+        ""sumAIMvarLimit"": null,
+        ""sumPgenReactive"": 5.09,
+        ""diMvarApprove"": null,
+        ""aiMvarApprove"": null,
+        ""approvalStatus"": null,
+        ""noObligationStatus"": 1,
+        ""rgdhOffBoardStatus"": 0,
+        ""sumPmukd"": 17.22,
+        ""pnom"": null,
+        ""sumPgenActiveHighlighted"": false,
+        ""sumPgenReactiveHighlighted"": false,
+        ""pgenHighlighted"": false,
+        ""busTa2VoltHighlighted"": false,
+        ""busTa3VoltHighlighted"": false,
+        ""busTa1VoltHighlighted"": false,
+        ""typsService"": true
+    },
+    {
+        ""id"": 15234117035,
+        ""measurementDate"": ""2026-05-01T08:06:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 159.34,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 159.34,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+                    ""taMvar"": ""GEYCEK/34.5/Gen-15/Q"",
+                    ""setNumMvar"": ""2,1,156381"",
+                    ""pnomUnit"": 46.63,
+                    ""speedDrop"": 4.0,
+                    ""underExcite"": -22.588,
+                    ""overExcite"": 22.588,
+                    ""underExcite2"": -22.585,
+                    ""overExcite2"": 22.585,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""teiasAuxiliaryRgdhWindUnitData"": null,
+                    ""unitActive"": true
+                }
+            ],
+            ""windUnitList"": [
+                {
+                    ""id"": 10997878253,
+                    ""name"": ""Ünite 1-70"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""WIND"",
+                    ""taMw"": ""GEYCEK/154/RGKTOP/P"",
+                    ""setNumMw"": ""2,1,160174"",
+                    ""taMvar"": ""GEYCEK/154/RGKTOP/Q"",
+                    ""setNumMvar"": ""2,1,160175"",
+                    ""pnomUnit"": 172.2,
+                    ""pmkudUnit"": null,
+                    ""underExcite"": -55.22,
+                    ""overExcite"": 55.22,
+                    ""underExcite2"": -56.599,
+                    ""overExcite2"": 56.599,
+                    ""powerFactor"": null,
+                    ""terminalVoltage"": null,
+                    ""isUnitActive"": true,
+                    ""speedDrop"": 4.0,
+                    ""rgdhWindUnitDataList"": null
+                }
+            ],
+            ""synchronousCompensatorList"": [],
+            ""rgdhConventionalBusbarData"": null,
+            ""rgdhWindBusbarData"": null,
+            ""rgdhBusbarParticipants"": null,
+            ""teiasAuxiliaryRgdhConvUnitData"": null
+        },
+        ""windUnit"": null,
+        ""auxiliarySource"": 0.53,
+        ""auxiliarySourceReactive"": 1.04,
+        ""sumAuxiliaryDIMvarLimit"": null,
+        ""sumAuxiliaryAIMvarLimit"": null,
+        ""diAuxiliaryMvarApprove"": null,
+        ""aiAuxiliaryMvarApprove"": null,
+        ""approvalStatusAuxiliary"": null,
+        ""sumPgenActive"": 0.07,
+        ""sumDIMvarLimit"": null,
+        ""sumAIMvarLimit"": null,
+        ""sumPgenReactive"": 5.25,
+        ""diMvarApprove"": null,
+        ""aiMvarApprove"": null,
+        ""approvalStatus"": null,
+        ""noObligationStatus"": 1,
+        ""rgdhOffBoardStatus"": 0,
+        ""sumPmukd"": 17.22,
+        ""pnom"": null,
+        ""sumPgenActiveHighlighted"": false,
+        ""sumPgenReactiveHighlighted"": false,
+        ""pgenHighlighted"": false,
+        ""busTa2VoltHighlighted"": false,
+        ""busTa3VoltHighlighted"": false,
+        ""busTa1VoltHighlighted"": false,
+        ""typsService"": true
+    },
+    {
+        ""id"": 15234117059,
+        ""measurementDate"": ""2026-05-01T08:07:00Z"",
+        ""busB1B2Name"": ""GEYCEK/154"",
+        ""busB3Names"": ""swTR1"",
+        ""tpysBusVoltSet"": 158.0,
+        ""tpysBusVoltDrop"": 2.0,
+        ""busTa1Volt"": 159.09,
+        ""busTa1VoltQ0Txt"": ""Actual"",
+        ""busTa2Volt"": null,
+        ""busTa2VoltQ0Txt"": null,
+        ""busTa3Volt"": null,
+        ""busTa3VoltQ0Txt"": null,
+        ""unitsInSupply"": ""swTR-A"",
+        ""mainBusbarVoltage"": 159.09,
+        ""busbar"": {
+            ""id"": 10933818957,
+            ""busbarType"": ""WIND"",
+            ""busbarId"": 5052,
+            ""busbarName"": ""GEYCEK RES"",
+            ""rgkType"": ""WIND_AFTER_2013_RES_KV"",
+            ""voltageLevel"": 154.0,
+            ""distributionCenter"": ""OA_YTM"",
+            ""city"": ""KIRŞEHİR"",
+            ""plantId"": 6740,
+            ""plantName"": ""GEYCEK RES"",
+            ""busbarDefinitionOne"": ""GEYCEK/154/swTR1/U"",
+            ""busbarDefinitionTwo"": """",
+            ""busbarDefinitionThree"": """",
+            ""setNumBusbarOne"": ""2,1,160964"",
+            ""setNumBusbarTwo"": """",
+            ""setNumBusbarThree"": """",
+            ""busbarConfig"": null,
+            ""isBusbarActive"": true,
+            ""selected"": false,
+            ""conventionalUnitList"": [],
+            ""auxiliaryConventionalUnitList"": [],
+            ""auxiliaryWindUnitList"": [
+                {
+                    ""id"": 14356220402,
+                    ""name"": ""YARDIMCI KAYNAK GES"",
+                    ""uevcbName"": ""AL-YEL ELEKTRİK ÜRETİM A.Ş."",
+                    ""uevcbId"": 340575,
+                    ""resourceType"": ""GES"",
+                    ""taMw"": ""GEYCEK/34.5/Gen-15/P"",
+                    ""setNumMw"": ""2,1,156380"",
+   ";;;;;;;;;;;;;

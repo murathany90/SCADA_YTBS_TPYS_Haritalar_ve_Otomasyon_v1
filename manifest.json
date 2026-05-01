@@ -21,12 +21,29 @@
     "default_title": "SCADA/YTBS/TPYS/ Haritalar ve Otomasyon",
     "default_popup": "popup.html"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/*", "rgdh-catalog-data.js", "rgdh-auxiliary-catalog.js", "yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_scripts": [
+    {
+      "matches": [
+        "https://yks.teias.gov.tr/*"
+      ],
+      "js": [
+        "yks-rgdh-instrumentation.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "<all_urls>"
       ],
       "js": [
+        "rgdh-diagnostics.js",
         "content-script.js"
       ],
       "run_at": "document_idle"

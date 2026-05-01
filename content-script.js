@@ -31,6 +31,14 @@
           sendResponse(await runBulkCsvDownloads(message.payload || {}));
           return;
         }
+        if (message.type === 'RGDH_DOM_SCRAPE') {
+          sendResponse(await scrapeRgdhDom(message.payload || {}));
+          return;
+        }
+        if (message.type === 'RGDH_PAGE_FETCH') {
+          sendResponse(await fetchRgdhFromContentContext(message.payload || {}));
+          return;
+        }
         sendResponse({ ok: false, reason: 'UNKNOWN_MESSAGE' });
       } catch (error) {
         console.error('[TPYS Reactive Extension]', error);
@@ -39,6 +47,21 @@
     })();
     return true;
   });
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    if (event.origin !== window.location.origin) return;
+    if (event.data?.source !== 'RGDH_YKS_DIAGNOSTIC') return;
+    const diagnostics = window.RGDH_DIAGNOSTICS;
+    const payload = diagnostics?.sanitizeDiagnosticEvent
+      ? diagnostics.sanitizeDiagnosticEvent(event.data.event || {})
+      : (event.data.event || {});
+    try {
+      chrome.runtime.sendMessage({ type: 'RGDH_DIAG_EVENT', payload }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch {}
+  }, true);
 
   async function getPageContext() {
     return {
@@ -700,6 +723,147 @@
 
 
   let csvRunLock = false;
+
+  const RGDH_ALLOWED_PATHS = [
+    '/api/rgdh-conventional-busbar-data',
+    '/api/rgdh-wind-busbar-data',
+    '/api/general-parameter-by-name',
+    '/api/busbars'
+  ];
+
+  async function fetchRgdhFromContentContext(payload) {
+    const endpoint = String(payload?.endpoint || '');
+    if (!RGDH_ALLOWED_PATHS.includes(endpoint)) {
+      return { ok: false, error: 'RGDH endpoint whitelist disinda.', errorType: 'VALIDATION_ERROR' };
+    }
+    try {
+      const url = new URL(endpoint, 'https://yks.teias.gov.tr');
+      Object.entries(payload.params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+      });
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+        redirect: 'follow'
+      });
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: `RGDH content fetch basarisiz (${response.status}).`,
+          errorType: response.status === 401 || response.status === 403 ? 'AUTH_REQUIRED' : 'NETWORK_ERROR',
+          httpStatus: response.status
+        };
+      }
+      const json = await response.json();
+      return { ok: true, rows: Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []), httpStatus: response.status };
+    } catch (error) {
+      return { ok: false, error: error.message || String(error), errorType: 'CONTENT_FETCH_ERROR' };
+    }
+  }
+
+  async function scrapeRgdhDom(payload = {}) {
+    const rows = payload.discoverOnly ? [] : collectRgdhVisibleRows();
+    const busbarInternalIds = discoverRgdhBusbarInternalIds();
+    return {
+      ok: true,
+      sourceOrigin: 'DOM',
+      partial: true,
+      rows,
+      busbarInternalIds,
+      warning: rows.length
+        ? 'DOM verisi kismi olabilir; API veya CSV ile dogrulama onerilir.'
+        : ''
+    };
+  }
+
+  function discoverRgdhBusbarInternalIds() {
+    const ids = new Set();
+    Array.from(document.querySelectorAll('input[type="hidden"], option[value]')).forEach((node) => {
+      const value = String(node.value || node.getAttribute('value') || '').trim();
+      if (/^\d{6,}$/.test(value)) ids.add(value);
+    });
+
+    const Ext = window.Ext;
+    if (Ext) {
+      collectExtComponents(Ext).forEach((component) => {
+        const store = component?.store || component?.getStore?.();
+        const count = typeof store?.getCount === 'function' ? store.getCount() : 0;
+        const valueField = component?.valueField || 'id';
+        for (let i = 0; i < count; i += 1) {
+          const rec = store.getAt(i);
+          const value = rec?.get ? rec.get(valueField) : rec?.data?.[valueField];
+          if (/^\d{6,}$/.test(String(value || '').trim())) ids.add(String(value).trim());
+        }
+        const current = component?.getValue?.() || component?.value || component?.hiddenField?.value;
+        if (/^\d{6,}$/.test(String(current || '').trim())) ids.add(String(current).trim());
+      });
+    }
+
+    return [...ids];
+  }
+
+  function collectRgdhVisibleRows() {
+    const tableRows = collectRgdhRowsFromTables();
+    if (tableRows.length) return tableRows;
+    return collectRgdhRowsFromExtGrid();
+  }
+
+  function collectRgdhRowsFromTables() {
+    const rows = [];
+    Array.from(document.querySelectorAll('table')).forEach((table) => {
+      const headers = Array.from(table.querySelectorAll('thead th, thead td')).map((cell) => (cell.textContent || '').trim());
+      if (!headers.length || !headers.some((header) => /bara/i.test(normalizeText(header)))) return;
+      Array.from(table.querySelectorAll('tbody tr')).forEach((tr) => {
+        const cells = Array.from(tr.children).map((cell) => (cell.textContent || '').trim());
+        const object = {};
+        headers.forEach((header, index) => { object[header] = cells[index] || ''; });
+        const row = normalizeRgdhDomObject(object);
+        if (row.busbarId || row.busbarName) rows.push(row);
+      });
+    });
+    return rows;
+  }
+
+  function collectRgdhRowsFromExtGrid() {
+    const rows = [];
+    const lockedRows = Array.from(document.querySelectorAll('.x-grid3-locked .x-grid3-body .x-grid3-row'));
+    const bodyRows = Array.from(document.querySelectorAll('.x-grid3-viewport .x-grid3-body .x-grid3-row, .x-grid3-unlocked .x-grid3-body .x-grid3-row'));
+    const count = Math.max(lockedRows.length, bodyRows.length);
+    for (let index = 0; index < count; index += 1) {
+      const text = `${lockedRows[index]?.textContent || ''} ${bodyRows[index]?.textContent || ''}`.trim();
+      if (!text || !/bara|res|ges|hes|tm/i.test(normalizeText(text))) continue;
+      const idMatch = text.match(/\b(\d{3,6})\b/);
+      rows.push({
+        sourceOrigin: 'DOM',
+        sourceType: /res|ges|ruzgar|rüzgar/i.test(normalizeText(text)) ? 'WIND' : 'CONVENTIONAL',
+        busbarId: idMatch ? Number(idMatch[1]) : null,
+        busbarName: text.slice(0, 120),
+        flags: { partialSource: true },
+        raw: { text }
+      });
+    }
+    return rows;
+  }
+
+  function normalizeRgdhDomObject(object) {
+    const get = (patterns) => {
+      const entry = Object.entries(object).find(([key]) => patterns.some((pattern) => pattern.test(normalizeText(key))));
+      return entry ? entry[1] : '';
+    };
+    const busbarIdRaw = get([/bara id/]);
+    const busbarName = get([/bara adi/, /bara ad/]);
+    const sourceType = /res|ges|ruzgar|rüzgar/i.test(normalizeText(busbarName)) ? 'WIND' : 'CONVENTIONAL';
+    return {
+      sourceOrigin: 'DOM',
+      sourceType,
+      ytm: get([/bytm/, /ytm/]),
+      busbarId: /^\d+$/.test(busbarIdRaw) ? Number(busbarIdRaw) : null,
+      busbarName,
+      flags: { partialSource: true },
+      raw: object
+    };
+  }
 
   function initializeExtensionEnhancements() {
     // TPYS sayfasına ekstra buton enjekte edilmiyor.

@@ -1,0 +1,26 @@
+[
+  {
+    "measurementDate": "2026-03-31T21:00:00Z",
+    "busbar": {
+      "id": 9333006401,
+      "busbarId": 5532,
+      "busbarName": "ACWA KIRIKKALE DGKC",
+      "plantName": "ACWA KIRIKKALE",
+      "busbarType": "CONVENTIONAL",
+      "city": "KIRIKKALE",
+      "distributionCenter": "OA_YTM",
+      "voltageLevel": 400
+    },
+    "mainBusbarVoltage": 409.51,
+    "tpysNomBusVolt": 404,
+    "pnom": 927.4,
+    "sumPmukd": 460,
+    "minMkud": 217,
+    "sumPgenActive": 0.42,
+    "sumPgenReactive": -0.51,
+    "rgdhOffBoardStatus": 0,
+    "noObligationStatus": 0,
+    "busbarSetToleranceApprove": 1,
+    "approvalStatus": 1
+  }
+]

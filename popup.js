@@ -35,6 +35,7 @@ const el = {
   btnApply: document.getElementById('btnApply'),
   btnCommit: document.getElementById('btnCommit'),
   btnOpenMap: document.getElementById('btnOpenMap'),
+  btnOpenRgdhMonitor: document.getElementById('btnOpenRgdhMonitor'),
   btnToggleSimplify: document.getElementById('btnToggleSimplify'),
   pageDate: document.getElementById('pageDate'),
   pageBaraCount: document.getElementById('pageBaraCount'),
@@ -79,6 +80,11 @@ function bindEvents() {
   el.btnApply.addEventListener('click', applyToCurrentTab);
   el.btnCommit.addEventListener('click', commitCurrentTab);
   el.btnOpenMap.addEventListener('click', openMapPage);
+  if (el.btnOpenRgdhMonitor) {
+    el.btnOpenRgdhMonitor.addEventListener('click', openRgdhMonitorPage);
+  } else {
+    console.warn('[RGDH] Popup RGDH Izleme butonu bulunamadi.');
+  }
   el.btnToggleSimplify.addEventListener('click', toggleApprovalSimplifyOnCurrentTab);
   el.btnAnalyzeDownloadPage.addEventListener('click', analyzeDownloadPage);
   el.btnDownloadAllCsvs.addEventListener('click', downloadAllCsvs);
@@ -302,6 +308,14 @@ async function downloadAllCsvs() {
 
 async function openMapPage() {
   await chrome.tabs.create({ url: chrome.runtime.getURL('map-modern.html') });
+}
+
+async function openRgdhMonitorPage() {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('rgdh-monitor.html') });
+  } catch (error) {
+    log(`RGDH Izleme acilamadi: ${error.message}`);
+  }
 }
 
 
