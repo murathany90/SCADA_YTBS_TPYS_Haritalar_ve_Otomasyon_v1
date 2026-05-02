@@ -366,12 +366,28 @@ button.ghost {
   text-align: left;
 }
 
-#compareTable .rgdh-compare-col-date { width: 5.5%; }
-#compareTable .rgdh-compare-col-hour { width: 3.7%; }
+#compareTable .rgdh-compare-col-date { width: 4.4%; }
+#compareTable .rgdh-compare-col-hour { width: 3%; }
 #compareTable .rgdh-compare-col-minutes { width: 3.6%; }
-#compareTable .rgdh-compare-col-eval { width: 9%; }
+#compareTable .rgdh-compare-col-eval { width: 9.9%; }
 #compareTable .rgdh-compare-col-percent { width: 4.2%; }
 #compareTable .rgdh-compare-col-metric { width: 3.4%; }
+
+#compareTable .rgdh-compare-title-row th {
+  background: #e8f1fb;
+  border-top: 2px solid #9aa9bb;
+  border-bottom: 2px solid #9aa9bb;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+#compareTable .rgdh-compare-group-start {
+  border-left: 2px solid #9aa9bb;
+}
+
+#compareTable .rgdh-compare-group-end {
+  border-right: 2px solid #9aa9bb;
+}
 
 .rgdh-table-link {
   min-height: 0;
@@ -469,6 +485,43 @@ button.ghost {
 .compare-data-bar-value {
   position: relative;
   z-index: 1;
+}
+
+.compare-delta-bar-cell {
+  padding: 0 !important;
+}
+
+.compare-delta-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 17px;
+  padding: 2px 3px;
+  overflow: hidden;
+}
+
+.compare-delta-bar::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 2px;
+  bottom: 2px;
+  width: var(--bar-pct, 0%);
+  border-radius: 2px;
+  background: rgba(37, 99, 235, 0.28);
+}
+
+.rgdh-compare-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 0 0;
+}
+
+.rgdh-compare-actions button {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .rgdh-name-with-marker {

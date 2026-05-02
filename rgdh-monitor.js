@@ -13,6 +13,7 @@
     activeTab: 'raw',
     chartSelection: { busbarId: null, hour: null, date: null },
     compareSelection: { busbarId: '', ytm: '', hourMode: 'all', hourStart: null, hourEnd: null, hour: null, date: null },
+    compareHourRows: [],
     selectedTestBusbarKey: '',
     errors: [],
     fetchLogs: [],
@@ -952,12 +953,57 @@
     };
   }
 
-  function compareCellHtml(cell) {
+  function formatCompareDeltaBarCell(cell, value, maxValue) {
+    if (!cell || typeof cell !== 'object' || !String(cell.className || '').includes('compare-delta-blue')) {
+      return cell;
+    }
+    const numeric = Number(value);
+    const maxNumeric = Number(maxValue);
+    if (!Number.isFinite(numeric) || !Number.isFinite(maxNumeric) || maxNumeric <= 0) return cell;
+    const pct = Math.max(0, Math.min(100, (Math.abs(numeric) / maxNumeric) * 100));
+    return {
+      html: `<span class="compare-delta-bar" style="--bar-pct: ${pct.toFixed(2)}%;"><span class="compare-data-bar-value">${cell.html}</span></span>`,
+      className: `${cell.className} compare-delta-bar-cell`
+    };
+  }
+
+  function compareCellHtml(cell, column = {}) {
+    const columnClass = compareColumnClass(column);
     if (cell && typeof cell === 'object' && Object.prototype.hasOwnProperty.call(cell, 'html')) {
-      const className = cell.className ? ` class="${escapeHtml(cell.className)}"` : '';
+      const classes = [columnClass, cell.className].filter(Boolean).join(' ');
+      const className = classes ? ` class="${escapeHtml(classes)}"` : '';
       return `<td${className}>${cell.html}</td>`;
     }
-    return `<td>${cell}</td>`;
+    const className = columnClass ? ` class="${escapeHtml(columnClass)}"` : '';
+    return `<td${className}>${cell}</td>`;
+  }
+
+  function compareColumnClass(column = {}) {
+    return [
+      column.groupStart ? 'rgdh-compare-group-start' : '',
+      column.groupEnd ? 'rgdh-compare-group-end' : '',
+      column.cls ? `rgdh-compare-cell-${column.cls}` : ''
+    ].filter(Boolean).join(' ');
+  }
+
+  function buildCompareHeaderHtml(columns) {
+    const groupCells = [];
+    let index = 0;
+    while (index < columns.length) {
+      const groupName = columns[index].group || '';
+      let span = 1;
+      while (index + span < columns.length && (columns[index + span].group || '') === groupName) span += 1;
+      const groupColumn = {
+        groupStart: columns[index].groupStart,
+        groupEnd: columns[index + span - 1].groupEnd
+      };
+      groupCells.push(`<th colspan="${span}" class="${escapeHtml(compareColumnClass(groupColumn))}">${escapeHtml(groupName)}</th>`);
+      index += span;
+    }
+    return [
+      `<thead><tr class="rgdh-compare-title-row">${groupCells.join('')}</tr>`,
+      `<tr>${columns.map((column) => `<th class="${escapeHtml(compareColumnClass(column))}">${column.html}</th>`).join('')}</tr></thead>`
+    ].join('');
   }
 
   function compareHybridDuty(ekc, platform) {
@@ -1253,6 +1299,7 @@
         }
       });
     }
+    state.compareHourRows = dayHourRows;
     renderCompareTable(dayHourRows);
   }
 
@@ -1265,33 +1312,33 @@
       'YKS Q', 'EK-C Q', 'Ort dQ', 'Max dQ'
     ];
     const compareHeaders = [
-      { html: 'Tarih', cls: 'date' },
-      { html: 'Saat', cls: 'hour' },
-      { html: 'Eslesen<br>DK', cls: 'minutes' },
-      { html: 'Ek-C<br>Deg.', cls: 'eval' },
-      { html: 'YKS<br>Deg.', cls: 'eval' },
-      { html: 'Ek-C<br>K.Y (%)', cls: 'percent' },
-      { html: 'YKS<br>K.Y (%)', cls: 'percent' },
-      { html: 'YKS<br>V Ort', cls: 'metric' },
-      { html: 'EK-C<br>V Ort', cls: 'metric' },
-      { html: 'Fark<br>dV', cls: 'metric' },
-      { html: 'Max<br>dV', cls: 'metric' },
-      { html: 'YKS<br>P Ort', cls: 'metric' },
-      { html: 'EK-C<br>P Ort', cls: 'metric' },
-      { html: 'Fark<br>dP', cls: 'metric' },
-      { html: 'Max<br>dP', cls: 'metric' },
-      { html: 'YKS<br>Q Ort', cls: 'metric' },
-      { html: 'EK-C<br>Q Ort', cls: 'metric' },
-      { html: 'Fark<br>dQ', cls: 'metric' },
-      { html: 'Max<br>dQ', cls: 'metric' },
-      { html: 'YKS<br>Hibrit P', cls: 'metric' },
-      { html: 'EK-C<br>Hibrit P', cls: 'metric' },
-      { html: 'Fark<br>dHP', cls: 'metric' },
-      { html: 'Max<br>dHP', cls: 'metric' }
+      { html: 'Tarih', cls: 'date', group: 'Kimlik / Sonuc', groupStart: true },
+      { html: 'Saat', cls: 'hour', group: 'Kimlik / Sonuc' },
+      { html: 'Eslesen<br>DK', cls: 'minutes', group: 'Kimlik / Sonuc' },
+      { html: 'Ek-C<br>Deg.', cls: 'eval', group: 'Kimlik / Sonuc' },
+      { html: 'YKS<br>Deg.', cls: 'eval', group: 'Kimlik / Sonuc', groupEnd: true },
+      { html: 'Ek-C<br>K.Y (%)', cls: 'percent', group: 'Katilim', groupStart: true },
+      { html: 'YKS<br>K.Y (%)', cls: 'percent', group: 'Katilim', groupEnd: true },
+      { html: 'YKS<br>V Ort', cls: 'metric', group: 'Gerilim Karsilastirma', groupStart: true },
+      { html: 'EK-C<br>V Ort', cls: 'metric', group: 'Gerilim Karsilastirma' },
+      { html: 'Fark<br>dV', cls: 'metric', group: 'Gerilim Karsilastirma' },
+      { html: 'Max<br>dV', cls: 'metric', group: 'Gerilim Karsilastirma', groupEnd: true },
+      { html: 'YKS<br>P Ort', cls: 'metric', group: 'Aktif Guc Karsilastirma', groupStart: true },
+      { html: 'EK-C<br>P Ort', cls: 'metric', group: 'Aktif Guc Karsilastirma' },
+      { html: 'Fark<br>dP', cls: 'metric', group: 'Aktif Guc Karsilastirma' },
+      { html: 'Max<br>dP', cls: 'metric', group: 'Aktif Guc Karsilastirma', groupEnd: true },
+      { html: 'YKS<br>Q Ort', cls: 'metric', group: 'Reaktif Guc Karsilastirma', groupStart: true },
+      { html: 'EK-C<br>Q Ort', cls: 'metric', group: 'Reaktif Guc Karsilastirma' },
+      { html: 'Fark<br>dQ', cls: 'metric', group: 'Reaktif Guc Karsilastirma' },
+      { html: 'Max<br>dQ', cls: 'metric', group: 'Reaktif Guc Karsilastirma', groupEnd: true },
+      { html: 'YKS<br>Hibrit P', cls: 'metric', group: 'Hibrit P Karsilastirma', groupStart: true },
+      { html: 'EK-C<br>Hibrit P', cls: 'metric', group: 'Hibrit P Karsilastirma' },
+      { html: 'Fark<br>dHP', cls: 'metric', group: 'Hibrit P Karsilastirma' },
+      { html: 'Max<br>dHP', cls: 'metric', group: 'Hibrit P Karsilastirma', groupEnd: true }
     ];
     el.compareTable.innerHTML = [
       `<colgroup>${compareHeaders.map((header) => `<col class="rgdh-compare-col-${escapeHtml(header.cls)}">`).join('')}</colgroup>`,
-      `<thead><tr>${compareHeaders.map((header) => `<th>${header.html}</th>`).join('')}</tr></thead>`
+      buildCompareHeaderHtml(compareHeaders)
     ].join('');
     const tbody = document.createElement('tbody');
     if (state.comparison?.diagnosis && !(state.comparison.summary?.both)) {
@@ -1307,9 +1354,27 @@
       row.avgYksHybridP,
       row.avgEkcHybridP
     ]));
+    const deltaBarMax = {
+      avg: {
+        dV: maxAbs(visibleRows.map((row) => row.avgDeltaV)),
+        dP: maxAbs(visibleRows.map((row) => row.avgDeltaP)),
+        dQ: maxAbs(visibleRows.map((row) => row.avgDeltaQ))
+      },
+      max: {
+        dV: maxAbs(visibleRows.map((row) => row.maxDeltaV)),
+        dP: maxAbs(visibleRows.map((row) => row.maxDeltaP)),
+        dQ: maxAbs(visibleRows.map((row) => row.maxDeltaQ))
+      }
+    };
     visibleRows.forEach((row) => {
       const tr = document.createElement('tr');
       const hourLabel = `${String(row.hour).padStart(2, '0')}:00`;
+      const avgDeltaVCell = formatCompareDeltaCell(row.avgDeltaV, 'dV', 'avg');
+      const maxDeltaVCell = formatCompareDeltaCell(row.maxDeltaV, 'dV', 'max');
+      const avgDeltaPCell = formatCompareDeltaCell(row.avgDeltaP, 'dP', 'avg');
+      const maxDeltaPCell = formatCompareDeltaCell(row.maxDeltaP, 'dP', 'max');
+      const avgDeltaQCell = formatCompareDeltaCell(row.avgDeltaQ, 'dQ', 'avg');
+      const maxDeltaQCell = formatCompareDeltaCell(row.maxDeltaQ, 'dQ', 'max');
       tr.innerHTML = [
         escapeHtml(row.localDate || '-'),
         `<button class="rgdh-table-link" type="button" data-compare-date="${escapeHtml(row.localDate || '')}" data-compare-hour="${escapeHtml(row.hour)}">${escapeHtml(hourLabel)}</button>`,
@@ -1320,21 +1385,21 @@
         formatCompareParticipationCell(row.platformStat),
         formatFixedNumber(row.avgYksV),
         formatFixedNumber(row.avgEkcV),
-        formatCompareDeltaCell(row.avgDeltaV, 'dV', 'avg'),
-        formatCompareDeltaCell(row.maxDeltaV, 'dV', 'max'),
+        formatCompareDeltaBarCell(avgDeltaVCell, row.avgDeltaV, deltaBarMax.avg.dV),
+        formatCompareDeltaBarCell(maxDeltaVCell, row.maxDeltaV, deltaBarMax.max.dV),
         formatCompareDataBarCell(row.avgYksP, pDataBarMax),
         formatCompareDataBarCell(row.avgEkcP, pDataBarMax),
-        formatCompareDeltaCell(row.avgDeltaP, 'dP', 'avg'),
-        formatCompareDeltaCell(row.maxDeltaP, 'dP', 'max'),
+        formatCompareDeltaBarCell(avgDeltaPCell, row.avgDeltaP, deltaBarMax.avg.dP),
+        formatCompareDeltaBarCell(maxDeltaPCell, row.maxDeltaP, deltaBarMax.max.dP),
         formatFixedNumber(row.avgYksQ),
         formatFixedNumber(row.avgEkcQ),
-        formatCompareDeltaCell(row.avgDeltaQ, 'dQ', 'avg'),
-        formatCompareDeltaCell(row.maxDeltaQ, 'dQ', 'max'),
+        formatCompareDeltaBarCell(avgDeltaQCell, row.avgDeltaQ, deltaBarMax.avg.dQ),
+        formatCompareDeltaBarCell(maxDeltaQCell, row.maxDeltaQ, deltaBarMax.max.dQ),
         formatCompareDataBarCell(row.avgYksHybridP, pDataBarMax),
         formatCompareDataBarCell(row.avgEkcHybridP, pDataBarMax),
         formatFixedNumber(row.avgDeltaHybridP),
         formatFixedNumber(row.maxDeltaHybridP)
-      ].map(compareCellHtml).join('');
+      ].map((cell, index) => compareCellHtml(cell, compareHeaders[index])).join('');
       const hourButton = tr.querySelector('[data-compare-hour]');
       hourButton?.addEventListener('click', () => selectCompareHour(row));
       hourButton?.addEventListener('keydown', (event) => {
@@ -1351,6 +1416,39 @@
       tbody.appendChild(tr);
     }
     el.compareTable.appendChild(tbody);
+    renderCompareTableActions(visibleRows);
+  }
+
+  function renderCompareTableActions(rows) {
+    const wrap = el.compareTable?.closest('.rgdh-table-wrap');
+    if (!wrap) return;
+    let actions = wrap.querySelector('.rgdh-compare-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'rgdh-compare-actions';
+      const button = document.createElement('button');
+      button.id = 'btnExportCompareCsv';
+      button.type = 'button';
+      button.className = 'secondary';
+      button.textContent = 'CSV Indir';
+      actions.appendChild(button);
+      wrap.appendChild(actions);
+    }
+    const button = actions.querySelector('#btnExportCompareCsv');
+    if (!button) return;
+    const exportRows = rows?.length ? rows : (state.compareHourRows || []);
+    button.disabled = !exportRows.length;
+    button.onclick = () => exportCompareCsv(exportRows);
+  }
+
+  function exportCompareCsv(rows = state.compareHourRows || []) {
+    if (!RGDH_CSV.buildCompareExportCsv) {
+      setStatus('Karsilastirma CSV cikti yardimcisi bulunamadi.');
+      return;
+    }
+    const text = RGDH_CSV.buildCompareExportCsv(rows || []);
+    const datePart = (rows || []).find((row) => row?.localDate)?.localDate || readFilters().date || 'karsilastirma';
+    downloadText(`EKC_YKS_KARSILASTIRMA_${datePart}.csv`, text, 'text/csv;charset=utf-8');
   }
 
   function normalizeCompareSelection(rows, selection = {}) {

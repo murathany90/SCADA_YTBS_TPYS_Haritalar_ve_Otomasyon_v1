@@ -433,14 +433,14 @@
   function parseEkcCsvText(text, options = {}) {
     const normalized = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     const lines = normalized.split('\n').filter((line) => cleanCell(line) !== '');
-    const headerIndex = lines.findIndex((line) => {
-      const cells = splitSemicolonLine(line).map(normalizeCsvHeader);
-      return cells.includes('tarih') && cells.includes('saat');
-    });
-    if (headerIndex < 0) throw new Error(`${options.filename || 'EK-C'}: EK-C TARIH/SAAT basligi bulunamadi.`);
+    const headerInfo = findEkcHeaderLine(lines);
+    if (!headerInfo) throw new Error(`${options.filename || 'EK-C'}: EK-C TARIH/SAAT basligi bulunamadi.`);
 
-    const meta = parseEkcMeta(lines.slice(0, headerIndex), options);
-    const parsed = parseSemicolonCsv(lines.slice(headerIndex).join('\n'));
+    const meta = parseEkcMeta(lines.slice(0, headerInfo.index), options);
+    const repairedText = [headerInfo.headers.join(';'), ...lines.slice(headerInfo.index + 1)].join('\n');
+    const parsed = parseSemicolonCsv(repairedText);
+    meta.headerWarnings = headerInfo.warnings;
+    meta.columnMap = resolveEkcColumnMap(parsed.headers);
     const templateFamily = detectEkcTemplateFamily(parsed.headers, meta, options);
     const rows = parsed.rows
       .map((row, index) => normalizeEkcCsvRow(row, meta, templateFamily, options, index))
@@ -455,6 +455,74 @@
       templateFamily,
       fileName: options.filename || options.fileName || ''
     };
+  }
+
+  function findEkcHeaderLine(lines) {
+    for (let index = 0; index < (lines || []).length; index += 1) {
+      const cells = splitSemicolonLine(lines[index]);
+      const nextCells = splitSemicolonLine(lines[index + 1] || '');
+      const repaired = repairEkcHeaders(cells, nextCells);
+      if (repaired) return { index, ...repaired };
+    }
+    return null;
+  }
+
+  function repairEkcHeaders(cells, nextCells = []) {
+    const normalized = (cells || []).map(normalizeCsvHeader);
+    const hasDate = normalized.includes('tarih');
+    if (!hasDate) return null;
+
+    const warnings = [];
+    const meaningfulHeaders = normalized.filter(Boolean);
+    const nextLooksLikeData = looksLikeEkcDate(nextCells[0]) && looksLikeEkcTime(nextCells[1]);
+    if (meaningfulHeaders.length <= 1 && nextLooksLikeData) {
+      warnings.push('EK-C basligi yalniz TARIH iceriyor; sentetik kolon basliklari kullanildi.');
+      return {
+        headers: buildSyntheticEkcHeaders(Math.max(cells.length, nextCells.length)),
+        warnings
+      };
+    }
+
+    const headers = (cells || []).map((cell) => cleanCell(cell));
+    if (!normalized.includes('saat') && nextLooksLikeData && !normalizeCsvHeader(headers[1])) {
+      headers[1] = 'SAAT';
+      warnings.push('Eksik SAAT basligi ikinci kolondan onarildi.');
+    }
+    if (!headers.map(normalizeCsvHeader).includes('saat')) return null;
+    return { headers: ensureUniqueEkcHeaders(headers), warnings };
+  }
+
+  function buildSyntheticEkcHeaders(columnCount) {
+    const base = [
+      'TARIH',
+      'SAAT',
+      'SIRA_NO',
+      'BARA_GER_KV',
+      'BARA_GER_SET_DEG_KV',
+      'TOP_AKT_CIK_GUCU_MW',
+      'TOP_REAKT_CIK_GUCU_MVAR'
+    ];
+    const count = Math.max(columnCount || 0, base.length);
+    return Array.from({ length: count }, (_, index) => base[index] || `EKC_EXTRA_${index + 1}`);
+  }
+
+  function ensureUniqueEkcHeaders(headers) {
+    const seen = new Map();
+    return (headers || []).map((header, index) => {
+      const base = cleanCell(header) || `EKC_EXTRA_${index + 1}`;
+      const key = normalizeCsvHeader(base) || `ekc extra ${index + 1}`;
+      const count = seen.get(key) || 0;
+      seen.set(key, count + 1);
+      return count ? `${base}_${count + 1}` : base;
+    });
+  }
+
+  function looksLikeEkcDate(value) {
+    return /^\d{1,2}[./-]\d{1,2}[./-]\d{4}$/.test(cleanCell(value));
+  }
+
+  function looksLikeEkcTime(value) {
+    return /^\d{1,2}:\d{2}(?::\d{2})?$/.test(cleanCell(value));
   }
 
   function splitSemicolonLine(line) {
@@ -564,14 +632,123 @@
     return negatives.length ? negatives.reduce((sum, value) => sum + value, 0) : fallback;
   }
 
+  const EKC_COLUMN_SPECS = {
+    tarih: { aliases: ['TARIH', 'Tarih', 'TARİH'] },
+    saat: { aliases: ['SAAT', 'Saat'] },
+    siraNo: { aliases: ['SIRA_NO', 'Sira No', 'SIRA'] },
+    vBara: {
+      aliases: ['BARA_GER_kV', 'BARA_GER_KV', 'BARA_GERILIMI_KV', 'BARA_GERILIMI_kV', 'HAT_GER_kV', 'HAT_GER_KV', 'HAT_GERILIMI_KV'],
+      patterns: [/^bara ger(?:ilim i)? kv$/, /^hat ger(?:ilim i)? kv$/]
+    },
+    vSet: {
+      aliases: ['BARA_GER_SET_DEG_kV', 'BARA_GER_SET_DEG_KV', 'HAT_GER_SET_DEG_kV', 'REAKT_GUC_SET_DEG_MVAr'],
+      patterns: [/^(bara|hat) ger set deg kv$/]
+    },
+    pTotal: {
+      aliases: ['TOP_AKT_CIK_GUCU_MW', 'TOP_AKT_CIKIS_GUCU_MW', 'TOP_AKT_CIKIC_GUCU_MW', 'TOPLAM_AKTIF_GUC_MW'],
+      patterns: [/^top akt (cik|cikis|cikic) gucu mw$/, /^toplam aktif guc mw$/]
+    },
+    pMain: {
+      aliases: ['TOP_ANAKAYNAK_AKT_CIK_GUCU_MW', 'TOP_ANA_KAYNAK_AKT_CIK_GUCU_MW'],
+      patterns: [/^top ana ?kaynak akt (cik|cikis|cikic) gucu mw$/]
+    },
+    pAux: {
+      aliases: ['TOP_YRDKAYNAK_AKT_CIK_GUCU_MW', 'TOP_YARDIMCI_KAYNAK_AKT_CIK_GUCU_MW'],
+      patterns: [/^top (yrd|yardimci) ?kaynak akt (cik|cikis|cikic) gucu mw$/]
+    },
+    qMeas: {
+      aliases: [
+        'TOP_REAKT_CIK_GUCU_MVAr',
+        'TOP_REAKT_CIKIS_GUCU_MVAr',
+        'TOP_REAKT_CIKIC_GUCU_MVAr',
+        'TOP_REAKT_CIK_GUCU_MVAR',
+        'TOP_REAKT_CIKIS_GUCU_MVAR',
+        'TOP_REAKT_CIKIC_GUCU_MVAR',
+        'TOP_REAKTIF_CIK_GUCU_MVAr',
+        'TOP_REAKTIF_CIKIS_GUCU_MVAr',
+        'TOP_REAKTIF_CIKIC_GUCU_MVAr'
+      ],
+      patterns: [/^top reakt(?:if)? (cik|cikis|cikic) gucu mvar$/]
+    },
+    qSet: {
+      aliases: ['REAKT_GUC_SET_DEG_MVAr', 'REAKTIF_GUC_SET_DEG_MVAr'],
+      patterns: [/^reakt(?:if)? guc set deg mvar$/]
+    },
+    pfSet: {
+      aliases: ['GUC_FKTR_SET_COSFI', 'GUC_FAKTORU_SET_COSFI'],
+      patterns: [/^guc (fktr|faktoru) set cosfi$/]
+    }
+  };
+
+  function resolveEkcColumnMap(headers) {
+    const map = {};
+    Object.entries(EKC_COLUMN_SPECS).forEach(([field, spec]) => {
+      const header = resolveEkcColumnName(headers, spec);
+      if (header) map[field] = header;
+    });
+    return map;
+  }
+
+  function resolveEkcColumnName(headers, spec = {}) {
+    const normalizedHeaders = (headers || [])
+      .map((header) => ({ header, normalized: normalizeCsvHeader(header), compact: normalizeHeaderCompact(header) }))
+      .filter((entry) => entry.normalized);
+    const aliases = spec.aliases || [];
+    const normalizedAliases = aliases.map(normalizeCsvHeader);
+    const compactAliases = aliases.map(normalizeHeaderCompact);
+
+    for (const alias of normalizedAliases) {
+      const exact = normalizedHeaders.find((entry) => entry.normalized === alias);
+      if (exact) return exact.header;
+    }
+    for (const pattern of spec.patterns || []) {
+      const matched = normalizedHeaders.find((entry) => pattern.test(entry.normalized));
+      if (matched) return matched.header;
+    }
+    let best = null;
+    normalizedHeaders.forEach((entry) => {
+      compactAliases.forEach((alias) => {
+        if (!alias || Math.min(alias.length, entry.compact.length) < 8) return;
+        const distance = levenshteinDistance(entry.compact, alias);
+        const ratio = distance / Math.max(entry.compact.length, alias.length);
+        if (ratio <= 0.12 && (!best || ratio < best.ratio)) {
+          best = { header: entry.header, ratio };
+        }
+      });
+    });
+    return best?.header || '';
+  }
+
+  function normalizeHeaderCompact(value) {
+    return normalizeCsvHeader(value).replace(/[^a-z0-9]+/g, '');
+  }
+
+  function levenshteinDistance(a, b) {
+    const left = String(a || '');
+    const right = String(b || '');
+    const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let i = 0; i < left.length; i += 1) {
+      let last = i;
+      previous[0] = i + 1;
+      for (let j = 0; j < right.length; j += 1) {
+        const old = previous[j + 1];
+        previous[j + 1] = left[i] === right[j]
+          ? last
+          : Math.min(last + 1, previous[j] + 1, previous[j + 1] + 1);
+        last = old;
+      }
+    }
+    return previous[right.length];
+  }
+
   function normalizeEkcCsvRow(row, meta, templateFamily, options, index) {
-    const tarih = pick(row, ['TARIH', 'Tarih']);
-    const saat = pick(row, ['SAAT', 'Saat']);
+    const tarih = pickEkc(row, meta, 'tarih', ['TARIH', 'Tarih']);
+    const saat = pickEkc(row, meta, 'saat', ['SAAT', 'Saat']);
     const dateInfo = parseTurkishDateTime(`${tarih} ${saat}`.trim());
-    const pTotal = firstNumber(row, ['TOP_AKT_CIK_GUCU_MW', 'TOP_AKT_CIKIS_GUCU_MW', 'TOP_AKT_CIKIC_GUCU_MW', 'TOPLAM_AKTIF_GUC_MW']) ?? sumByHeaderPattern(row, /akt.*(cik|cikis|cikic).*mw|_mw$/i);
-    const pMain = firstNumber(row, ['TOP_ANAKAYNAK_AKT_CIK_GUCU_MW', 'TOP_ANA_KAYNAK_AKT_CIK_GUCU_MW']);
-    const pAux = firstNumber(row, ['TOP_YRDKAYNAK_AKT_CIK_GUCU_MW', 'TOP_YARDIMCI_KAYNAK_AKT_CIK_GUCU_MW']);
-    const qMeas = firstNumber(row, [
+    const pTotal = firstNumberEkc(row, meta, 'pTotal', ['TOP_AKT_CIK_GUCU_MW', 'TOP_AKT_CIKIS_GUCU_MW', 'TOP_AKT_CIKIC_GUCU_MW', 'TOPLAM_AKTIF_GUC_MW']) ?? sumByHeaderPattern(row, /akt.*(cik|cikis|cikic).*mw|_mw$/i);
+    const pMain = firstNumberEkc(row, meta, 'pMain', ['TOP_ANAKAYNAK_AKT_CIK_GUCU_MW', 'TOP_ANA_KAYNAK_AKT_CIK_GUCU_MW']);
+    const pAux = firstNumberEkc(row, meta, 'pAux', ['TOP_YRDKAYNAK_AKT_CIK_GUCU_MW', 'TOP_YARDIMCI_KAYNAK_AKT_CIK_GUCU_MW']);
+    const qMeas = firstNumberEkc(row, meta, 'qMeas', [
       'TOP_REAKT_CIK_GUCU_MVAr',
       'TOP_REAKT_CIKIS_GUCU_MVAr',
       'TOP_REAKT_CIKIC_GUCU_MVAr',
@@ -595,15 +772,15 @@
       ...dateInfo,
       dakikaIndex: Number(dateInfo.localHour) * 60 + Number(dateInfo.localMinute),
       hour: Number(dateInfo.localHour),
-      siraNo: parseInteger(pick(row, ['SIRA_NO', 'Sira No', 'SIRA'])),
-      vBara: firstNumber(row, ['BARA_GER_kV', 'BARA_GER_KV', 'BARA_GERILIMI_KV', 'BARA_GERILIMI_kV', 'HAT_GER_kV', 'HAT_GER_KV', 'HAT_GERILIMI_KV']),
-      vSet: firstNumber(row, ['BARA_GER_SET_DEG_kV', 'BARA_GER_SET_DEG_KV', 'HAT_GER_SET_DEG_kV', 'REAKT_GUC_SET_DEG_MVAr']),
+      siraNo: parseInteger(pickEkc(row, meta, 'siraNo', ['SIRA_NO', 'Sira No', 'SIRA'])),
+      vBara: firstNumberEkc(row, meta, 'vBara', ['BARA_GER_kV', 'BARA_GER_KV', 'BARA_GERILIMI_KV', 'BARA_GERILIMI_kV', 'HAT_GER_kV', 'HAT_GER_KV', 'HAT_GERILIMI_KV']),
+      vSet: firstNumberEkc(row, meta, 'vSet', ['BARA_GER_SET_DEG_kV', 'BARA_GER_SET_DEG_KV', 'HAT_GER_SET_DEG_kV', 'REAKT_GUC_SET_DEG_MVAr']),
       pTotal,
       pMain,
       pAux,
       qMeas,
-      qSet: firstNumber(row, ['REAKT_GUC_SET_DEG_MVAr', 'REAKTIF_GUC_SET_DEG_MVAr']),
-      pfSet: firstNumber(row, ['GUC_FKTR_SET_COSFI', 'GUC_FAKTORU_SET_COSFI']),
+      qSet: firstNumberEkc(row, meta, 'qSet', ['REAKT_GUC_SET_DEG_MVAr', 'REAKTIF_GUC_SET_DEG_MVAr']),
+      pfSet: firstNumberEkc(row, meta, 'pfSet', ['GUC_FKTR_SET_COSFI', 'GUC_FAKTORU_SET_COSFI']),
       pnomMw: meta.pnomMw ?? ((meta.pnomMainMw || 0) + (meta.pnomAuxMw || 0) || null),
       pnomMainMw: meta.pnomMainMw,
       pnomAuxMw: meta.pnomAuxMw,
@@ -620,6 +797,18 @@
     base.localMinute = Number(dateInfo.localMinute);
     base.minuteStat = deriveEkcMinuteStat(base, meta, index);
     return base;
+  }
+
+  function pickEkc(row, meta, field, names) {
+    const mapped = meta?.columnMap?.[field];
+    if (mapped && Object.prototype.hasOwnProperty.call(row || {}, mapped)) return row[mapped];
+    return pick(row, names);
+  }
+
+  function firstNumberEkc(row, meta, field, names) {
+    const value = parseTurkishNumber(pickEkc(row, meta, field, names));
+    if (Number.isFinite(value)) return value;
+    return firstNumber(row, names);
   }
 
   function firstNumber(row, names) {
@@ -835,6 +1024,44 @@
     return lines.join('\n');
   }
 
+  const COMPARE_EXPORT_COLUMNS = [
+    { key: 'localDate', header: 'Tarih', type: 'text' },
+    { key: 'hour', header: 'Saat', type: 'hour' },
+    { key: 'commonMinutes', header: 'Eşleşen DK', type: 'integer' },
+    { key: 'ekcStat', header: 'Ek-C Değerlendirme', type: 'stat' },
+    { key: 'platformStat', header: 'YKS Değerlendirme', type: 'stat' },
+    { key: 'ekcStat', header: 'Ek-C K.Y (%)', type: 'ratio' },
+    { key: 'platformStat', header: 'YKS K.Y (%)', type: 'ratio' },
+    { key: 'avgYksV', header: 'Gerilim Karşılaştırma - YKS V Ort', type: 'number2' },
+    { key: 'avgEkcV', header: 'Gerilim Karşılaştırma - EK-C V Ort', type: 'number2' },
+    { key: 'avgDeltaV', header: 'Gerilim Karşılaştırma - Fark dV', type: 'number2' },
+    { key: 'maxDeltaV', header: 'Gerilim Karşılaştırma - Max dV', type: 'number2' },
+    { key: 'avgYksP', header: 'Aktif Güç Karşılaştırma - YKS P Ort', type: 'number2' },
+    { key: 'avgEkcP', header: 'Aktif Güç Karşılaştırma - EK-C P Ort', type: 'number2' },
+    { key: 'avgDeltaP', header: 'Aktif Güç Karşılaştırma - Fark dP', type: 'number2' },
+    { key: 'maxDeltaP', header: 'Aktif Güç Karşılaştırma - Max dP', type: 'number2' },
+    { key: 'avgYksQ', header: 'Reaktif Güç Karşılaştırma - YKS Q Ort', type: 'number2' },
+    { key: 'avgEkcQ', header: 'Reaktif Güç Karşılaştırma - EK-C Q Ort', type: 'number2' },
+    { key: 'avgDeltaQ', header: 'Reaktif Güç Karşılaştırma - Fark dQ', type: 'number2' },
+    { key: 'maxDeltaQ', header: 'Reaktif Güç Karşılaştırma - Max dQ', type: 'number2' },
+    { key: 'avgYksHybridP', header: 'Hibrit P Karşılaştırma - YKS Hibrit P', type: 'number2' },
+    { key: 'avgEkcHybridP', header: 'Hibrit P Karşılaştırma - EK-C Hibrit P', type: 'number2' },
+    { key: 'avgDeltaHybridP', header: 'Hibrit P Karşılaştırma - Fark dHP', type: 'number2' },
+    { key: 'maxDeltaHybridP', header: 'Hibrit P Karşılaştırma - Max dHP', type: 'number2' }
+  ];
+
+  function buildCompareExportCsv(rows, options = {}) {
+    const columns = options.columns || COMPARE_EXPORT_COLUMNS;
+    const lines = [
+      '\uFEFFsep=;',
+      columns.map((column) => quoteCsv(column.header)).join(';')
+    ];
+    (rows || []).forEach((row) => {
+      lines.push(columns.map((column) => formatCompareExportCell(row, column)).join(';'));
+    });
+    return lines.join('\n');
+  }
+
   function buildCatalogExportCsv(rows, options = {}) {
     const columns = options.columns || RGDH_CATALOG_EXPORT_COLUMNS;
     const lines = [
@@ -859,6 +1086,51 @@
     }
     if (column.type === 'number') return quoteCsv(formatTurkishMetric(value));
     return quoteCsv(value);
+  }
+
+  function formatCompareExportCell(row, column = {}) {
+    const value = row?.[column.key];
+    if (column.type === 'hour') {
+      const hour = Number(value);
+      return Number.isFinite(hour) ? `${String(hour).padStart(2, '0')}:00` : '';
+    }
+    if (column.type === 'integer') {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? String(Math.round(numeric)) : '';
+    }
+    if (column.type === 'number2') return formatTurkishFixed(value, 2);
+    if (column.type === 'ratio') return formatCompareRatio(value);
+    if (column.type === 'stat') return quoteCsv(formatCompareStat(value));
+    if (value === null || value === undefined || value === '') return '';
+    return quoteCsv(value);
+  }
+
+  function formatCompareStat(stat) {
+    if (!stat) return '';
+    const result = String(stat.hourResult || stat.status || '').toUpperCase();
+    const pass = Number(stat.passCount || stat.successMinuteCount || 0);
+    const fail = Number(stat.failCount || 0);
+    const dd = Number(stat.ddCount || 0);
+    const yy = Number(stat.yyCount || 0);
+    const ky = Number(stat.kyCount || 0);
+    return [result, `OK ${pass}`, `FAIL ${fail}`, `DD ${dd}`, `YY ${yy}`, `KY ${ky}`].filter(Boolean).join(' / ');
+  }
+
+  function formatCompareRatio(stat) {
+    const result = String(stat?.hourResult || stat?.status || '').toUpperCase();
+    if (result === 'DD' || result === 'YY' || result === 'KY') return result;
+    const ratio = Number(stat?.passRatio ?? stat?.participationPct);
+    return Number.isFinite(ratio) ? `${formatTurkishFixed(ratio, 2)}%` : '';
+  }
+
+  function formatTurkishFixed(value, digits) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '';
+    return numeric.toLocaleString('tr-TR', {
+      useGrouping: false,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
   }
 
   function formatExportCell(value, column = {}) {
@@ -902,6 +1174,7 @@
     parseEkcCsvText,
     parseRgdhCsvText,
     buildExportCsv,
+    buildCompareExportCsv,
     buildCatalogExportCsv,
     formatExportCell,
     RGDH_EXPORT_COLUMNS,

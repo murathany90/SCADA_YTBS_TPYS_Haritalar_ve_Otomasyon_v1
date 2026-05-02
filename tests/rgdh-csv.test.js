@@ -168,6 +168,54 @@ test('EK-C fixtures parse V P Q fields for all minute rows', () => {
   });
 });
 
+test('parseEkcCsvText repairs blank SAAT header and variant EK-C metric names', () => {
+  const text = [
+    'GERILIM REFERANS DEGERI ILETILEN BARANIN ADI:;TEST_BARA',
+    'ILGILI BIRIMIN KURULU GUCU (Ptotal):;200',
+    'TARIH; ;SIRA_NO;BARA_GERILIMI_KV;BARA_GER_SET_DEG_kV;TOP_AKT_CIKIS_GUCU_MW;TOP_REAKT_CIKIC_GUCU_MVAr',
+    '28.04.2026;00:00:00;1;158,485;159;5,271;0,424'
+  ].join('\n');
+
+  const parsed = csv.parseEkcCsvText(text, { filename: 'variant-ekc.csv' });
+  const row = parsed.rows[0];
+
+  assert.equal(parsed.headers[1], 'SAAT');
+  assert.equal(row.localDate, '2026-04-28');
+  assert.equal(row.localHour, 0);
+  assert.equal(row.localMinute, 0);
+  assert.equal(row.vBara, 158.485);
+  assert.equal(row.pTotal, 5.271);
+  assert.equal(row.qMeas, 0.424);
+  assert.ok(parsed.meta.headerWarnings.some((warning) => /SAAT/.test(warning)));
+});
+
+test('parseEkcCsvText creates synthetic headers for legacy TARIH-only EK-C templates', () => {
+  const text = [
+    'GERILIM REFERANS DEGERI ILETILEN BARANIN ADI:;ESKI_BARA',
+    'ILGILI BIRIMIN UNITELERININ NOMINAL AKTIF GUCU(Pnom) VE MINIMUM KARARLI URETIM DUZEYI (MKUD) (MW):;255,6;150',
+    'TARIH;;;;;;;;',
+    '19.02.2026;00:00:00;1;160,870;160,000;1,209;0,000;1,209;-0,316'
+  ].join('\n');
+
+  const parsed = csv.parseEkcCsvText(text, { filename: 'legacy-ekc.csv' });
+  const row = parsed.rows[0];
+
+  assert.deepEqual(parsed.headers.slice(0, 7), [
+    'TARIH',
+    'SAAT',
+    'SIRA_NO',
+    'BARA_GER_KV',
+    'BARA_GER_SET_DEG_KV',
+    'TOP_AKT_CIK_GUCU_MW',
+    'TOP_REAKT_CIK_GUCU_MVAR'
+  ]);
+  assert.equal(row.localDate, '2026-02-19');
+  assert.equal(row.vBara, 160.87);
+  assert.equal(row.pTotal, 1.209);
+  assert.equal(row.qMeas, 0);
+  assert.ok(parsed.meta.headerWarnings.some((warning) => /sentetik/.test(warning)));
+});
+
 test('extractWindInternalIdFromFilename reads YKS internal busbar id prefix', () => {
   assert.equal(
     csv.extractWindInternalIdFromFilename('10933818957_2026-04-29T00_00_00ZRUZGAR_BARA_VERI.csv'),
@@ -201,4 +249,38 @@ test('buildExportCsv emits Excel/TR compatible semicolon CSV', () => {
   assert.match(text, /"=""10933818957"""/);
   assert.match(text, /12,5/);
   assert.match(text, /-3,25/);
+});
+
+test('buildCompareExportCsv emits Turkish Excel compatible comparison rows', () => {
+  const text = csv.buildCompareExportCsv([{
+    localDate: '2026-04-27',
+    hour: 8,
+    commonMinutes: 60,
+    avgYksV: 406.66,
+    avgEkcV: 406.64,
+    avgDeltaV: 0.15,
+    maxDeltaV: 0.42,
+    avgYksP: 578.4,
+    avgEkcP: 751.63,
+    avgDeltaP: 174.31,
+    maxDeltaP: 605.38,
+    avgYksQ: -102.46,
+    avgEkcQ: -74.21,
+    avgDeltaQ: 29.88,
+    maxDeltaQ: 111.62,
+    avgYksHybridP: 0,
+    avgEkcHybridP: 0,
+    avgDeltaHybridP: 0,
+    maxDeltaHybridP: 0,
+    ekcStat: { hourResult: 'SAGLAMADI', passRatio: 0 },
+    platformStat: { hourResult: 'SAGLADI', passRatio: 100 }
+  }]);
+
+  assert.ok(text.startsWith('\uFEFFsep=;\n'));
+  assert.match(text, /Tarih;Saat;Eşleşen DK/);
+  assert.match(text, /Gerilim Karşılaştırma - YKS V Ort/);
+  assert.match(text, /Aktif Güç Karşılaştırma - Fark dP/);
+  assert.match(text, /2026-04-27;08:00;60/);
+  assert.match(text, /406,66/);
+  assert.match(text, /174,31/);
 });
