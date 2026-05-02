@@ -53,8 +53,39 @@ test('rgdh-monitor page wires scripts after RGDH dependencies and contains RGDH 
   assert.doesNotMatch(html, />Karsilastir</);
   assert.match(
     html,
-    /<script src="rgdh-catalog-data\.js"><\/script>[\s\S]*<script src="rgdh-auxiliary-catalog\.js"><\/script>[\s\S]*<script src="rgdh-csv\.js"><\/script>[\s\S]*<script src="rgdh-normalizer\.js"><\/script>[\s\S]*<script src="rgdh-pivot\.js"><\/script>[\s\S]*<script src="rgdh-comparison\.js"><\/script>[\s\S]*<script src="rgdh-charts\.js"><\/script>[\s\S]*<script src="rgdh-monitor\.js"><\/script>/
+    /<script src="rgdh-catalog-data\.js"><\/script>[\s\S]*<script src="rgdh-auxiliary-catalog\.js"><\/script>[\s\S]*<script src="rgdh-csv\.js"><\/script>[\s\S]*<script src="rgdh-normalizer\.js"><\/script>[\s\S]*<script src="rgdh-pivot\.js"><\/script>[\s\S]*<script src="rgdh-reactive-engine\.js"><\/script>[\s\S]*<script src="rgdh-comparison\.js"><\/script>[\s\S]*<script src="rgdh-charts\.js"><\/script>[\s\S]*<script src="rgdh-monitor\.js"><\/script>/
   );
+});
+
+test('RGDH chart report exposes YKS and EK-C calculation mode toggle', () => {
+  const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const charts = fs.readFileSync(path.join(root, 'rgdh-charts.js'), 'utf8');
+
+  assert.match(html, /rgdh-reactive-engine\.js/);
+  assert.match(js, /calculationMode:\s*'YKS'/);
+  assert.match(js, /buildEkcCalculationRows/);
+  assert.match(js, /getChartCalculationRows/);
+  assert.match(js, /Ek-C hesaplama icin EK-C CSV yukleyin/);
+  assert.match(charts, /YKS Hesaplama/);
+  assert.match(charts, /Ek-C Hesaplama/);
+  assert.match(charts, /chartCalculationMode/);
+  assert.match(charts, /onCalculationModeChange/);
+});
+
+test('RGDH tests table uses updated catalog details and sortable headers', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
+
+  assert.match(js, /testTableSort:\s*\{\s*key:\s*''/);
+  assert.match(js, /TEST_TABLE_COLUMNS/);
+  assert.match(js, /function sortCatalogSummaries/);
+  assert.match(js, /busbarName[\s\S]*localeCompare[\s\S]*busbarType/);
+  assert.match(js, /data-test-sort-key/);
+  assert.match(js, /aria-sort/);
+  assert.match(js, /Nominal İkaz \(Düşük\)/);
+  assert.match(js, /Nominal İkaz \(Aşırı\)/);
+  assert.match(css, /\.rgdh-sort-button/);
 });
 
 test('EK-C upload automatically compares against YKS SCADA data', () => {
@@ -229,10 +260,11 @@ test('rgdh monitor raw data table exposes original YKS status and approval colum
   assert.match(css, /\.rgdh-raw-unit-detail/);
 });
 
-test('rgdh monitor caps auxiliary RES/GES polling budget at five minutes', () => {
+test('rgdh monitor uses 180 second standard budget and caps auxiliary RES/GES polling at five minutes', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
 
-  assert.match(js, /300000/);
+  assert.match(js, /const RGDH_STANDARD_JOB_TIMEOUT_MS = 180000;/);
+  assert.match(js, /const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;/);
   assert.doesNotMatch(js, /Math\.min\(180000/);
 });
 

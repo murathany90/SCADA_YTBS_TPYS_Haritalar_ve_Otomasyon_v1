@@ -317,6 +317,37 @@ button.ghost {
   font-weight: 700;
 }
 
+.rgdh-table th .rgdh-sort-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rgdh-table th .rgdh-sort-button:hover {
+  color: var(--yks-blue);
+}
+
+.rgdh-table th .rgdh-sort-button:focus-visible {
+  outline: 2px solid var(--yks-blue);
+  outline-offset: 2px;
+}
+
+.rgdh-sort-indicator {
+  min-width: 10px;
+  font-size: 10px;
+  line-height: 1;
+}
+
 .rgdh-table tbody tr:nth-child(even) td { background: var(--table-alt-bg); }
 .rgdh-table tbody tr:hover td { background: var(--table-hover-bg); }
 .rgdh-table tbody tr.selected td { background: var(--table-selected-bg); }

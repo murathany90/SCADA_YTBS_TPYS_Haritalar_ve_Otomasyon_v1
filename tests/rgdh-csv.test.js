@@ -126,6 +126,7 @@ test('rgdh_unite_tanimi catalog loads 81 rows and exports in v2 format', () => {
   const exportedParsed = csv.parseSemicolonCsv(exported.replace(/^\uFEFFsep=;\n/, ''));
 
   assert.ok(exported.startsWith('\uFEFFsep=;\n'));
+  assert.doesNotMatch(exported, /Ã|Ä|Å/);
   assert.deepEqual(exportedParsed.headers, [
     'Bara Tipi',
     'Bara ID',
@@ -206,12 +207,32 @@ test('rgdh_unite_tanimi_v2 catalog parses new YTBS detail columns and exports in
   const exportedParsed = csv.parseSemicolonCsv(exported.replace(/^\uFEFFsep=;\n/, ''));
   const exportedAkyel = exportedParsed.rows.find((row) => row['Bara ID'] === '6002' && row['Ünite Adı'] === 'Ünite 1-12');
 
+  assert.doesNotMatch(exported, /Ã|Ä|Å/);
   assert.deepEqual(exportedParsed.headers, sourceHeaders);
   assert.equal(exportedAkyel['Bara Tipi'], 'WIND');
   assert.equal(exportedAkyel['Bara Tipi__2'], 'Hibrit- RES/GES');
   assert.equal(exportedAkyel['YTBS Santral Adı'], 'AKYEL 1 RES');
   assert.equal(exportedAkyel['Enlem'], '36,961');
   assert.equal(exportedAkyel['TPYS Santral MKÜD'], '0');
+});
+
+test('rgdh_unite_tanimi_v2 catalog carries updated conventional nominal excitation values', () => {
+  const catalogPath = path.join(__dirname, '..', 'yks_izleme_modul', 'yks_docs', 'rgdh_unite_tanimi_v2.csv');
+  const parsed = csv.parseRgdhCsvText(fs.readFileSync(catalogPath, 'utf8'), {
+    filename: path.basename(catalogPath)
+  });
+
+  const conventionalRows = parsed.rows.filter((row) => row.busbarType === 'CONVENTIONAL');
+  const acwaGt2 = conventionalRows.find((row) => row.busbarId === 5532 && row.unitName === 'GT-2');
+
+  assert.ok(conventionalRows.length > 0, 'v2 catalog should include conventional rows');
+  assert.ok(acwaGt2, 'updated v2 catalog should include ACWA GT-2');
+  assert.equal(acwaGt2.nominalLowExcitation, -97.19);
+  assert.equal(acwaGt2.nominalHighExcitation, 183.26);
+  assert.equal(
+    conventionalRows.filter((row) => row.nominalLowExcitation !== null && row.nominalHighExcitation !== null).length,
+    conventionalRows.length
+  );
 });
 
 test('EK-C fixtures parse V P Q fields for all minute rows', () => {
@@ -250,6 +271,76 @@ test('parseEkcCsvText repairs blank SAAT header and variant EK-C metric names', 
   assert.equal(row.pTotal, 5.271);
   assert.equal(row.qMeas, 0.424);
   assert.ok(parsed.meta.headerWarnings.some((warning) => /SAAT/.test(warning)));
+});
+
+test('parseEkcCsvText extracts EK-C RGK mode input fields without deciding final result', () => {
+  const text = [
+    'GERILIM REFERANS DEGERI ILETILEN BARANIN ADI:;HIBRIT_BARA',
+    'ANA KAYNAK KURULU GUCU:;100',
+    'YARDIMCI KAYNAK KURULU GUCU:;50',
+    'NOMINAL GERILIM:;154',
+    'GERILIM DUSUMU:;4',
+    'TARIH;SAAT;SIRA_NO;BARA_GER_KV;BARA_GER_SET_DEG_KV;TOP_AKT_CIK_GUCU_MW;TOP_REAKT_CIK_GUCU_MVAr;TOP_ANAKAYNAK_AKT_CIK_GUCU_MW;TOP_YRDKAYNAK_AKT_CIK_GUCU_MW;GUC_FKTR_SET_COSFI;REAKT_GUC_SET_DEG_MVAr;SENKRON_KOMP_SET_MVAR;UEVCB_1_BIRIM_MKUD_MW;UNI_1_GEN_TER_AKT_CIK_GUCU_MW',
+    '28.04.2026;00:00:00;1;158;155;30;-13;5;25;-0,95;10;8;50;51'
+  ].join('\n');
+
+  const parsed = csv.parseEkcCsvText(text, { filename: 'rgk-inputs.csv' });
+  const row = parsed.rows[0];
+
+  assert.equal(parsed.meta.pnomMainMw, 100);
+  assert.equal(parsed.meta.pnomAuxMw, 50);
+  assert.equal(parsed.meta.nominalVoltageKv, 154);
+  assert.equal(parsed.meta.droopPct, 4);
+  assert.equal(row.pMain, 5);
+  assert.equal(row.pAux, 25);
+  assert.equal(row.pfSet, -0.95);
+  assert.equal(row.qSet, 10);
+  assert.equal(row.qSyncReqMvar, 8);
+  assert.deepEqual(row.ekcUnits, [{ index: 1, mkudMw: 50, pActiveMw: 51 }]);
+  assert.equal(row.minuteStat.result, 'KY');
+  assert.match(row.minuteStat.warnings.join(' '), /RGK modu/);
+});
+
+test('parseEkcCsvText carries conventional EK-C excitation limits from header to row units', () => {
+  const text = [
+    'GERILIM REFERANS DEGERI ILETILEN BARANIN ADI:;BAYRAMHACILI_154',
+    'ILGILI BIRIMIN UNITELERININ NOMINAL AKTIF GUCU(Pnom):;23,5;23,5',
+    'ILGILI BIRIMIN UNITELERININ ASIRI VE DUSUK ZORUNLU MVAR DEGERLERI (MVAR):;14,56;-7,72;14,56;-7,72',
+    'TARIH;SAAT;SIRA_NO;BARA_GER_kV;BARA_GER_SET_DEG_kV;TOP_REAKT_CIK_GUCU_MVAr;UNI_1_BIRIM_MKUD;UNI_2_BIRIM_MKUD;UNI_1_GEN_TER_AKT_CIK_GUCU_MW;UNI_2_GEN_TER_AKT_CIK_GUCU_MW',
+    '01.05.2026;03:00:00;181;158,491;156,000;-14,332;14,100;14,100;21,005;21,405'
+  ].join('\n');
+
+  const parsed = csv.parseEkcCsvText(text, { filename: 'bayramhacili-ekc.csv' });
+  const row = parsed.rows[0];
+
+  assert.equal(parsed.meta.qNomHigh, 29.12);
+  assert.equal(parsed.meta.qNomLow, -15.44);
+  assert.deepEqual(parsed.meta.unitExcitationLimits, [
+    { index: 1, nominalHighExcitation: 14.56, nominalLowExcitation: -7.72 },
+    { index: 2, nominalHighExcitation: 14.56, nominalLowExcitation: -7.72 }
+  ]);
+  assert.equal(row.qNomHigh, 29.12);
+  assert.equal(row.qNomLow, -15.44);
+  assert.deepEqual(row.ekcUnits, [
+    {
+      index: 1,
+      mkudMw: 14.1,
+      pActiveMw: 21.005,
+      nominalHighExcitation: 14.56,
+      nominalLowExcitation: -7.72,
+      highExcitationTest: 14.56,
+      lowExcitationTest: -7.72
+    },
+    {
+      index: 2,
+      mkudMw: 14.1,
+      pActiveMw: 21.405,
+      nominalHighExcitation: 14.56,
+      nominalLowExcitation: -7.72,
+      highExcitationTest: 14.56,
+      lowExcitationTest: -7.72
+    }
+  ]);
 });
 
 test('parseEkcCsvText creates synthetic headers for legacy TARIH-only EK-C templates', () => {
@@ -306,12 +397,13 @@ test('buildExportCsv emits Excel/TR compatible semicolon CSV', () => {
   }]);
 
   assert.ok(text.startsWith('\uFEFFsep=;\n'));
-  assert.match(text, /Ölçüm Zamanı|Ã–lÃ§Ã¼m ZamanÄ±/);
+  assert.match(text, /Ölçüm Zamanı/);
   assert.match(text, /GEYCEK RES \u00c7\u0130\u011eDEM/);
   assert.match(text, /"=""2026-04-01T00:00:00\+03:00"""/);
   assert.match(text, /"=""10933818957"""/);
   assert.match(text, /12,5/);
   assert.match(text, /-3,25/);
+  assert.doesNotMatch(text, /Ã|Ä|Å/);
 });
 
 test('buildCompareExportCsv emits Turkish Excel compatible comparison rows', () => {
@@ -346,4 +438,5 @@ test('buildCompareExportCsv emits Turkish Excel compatible comparison rows', () 
   assert.match(text, /2026-04-27;08:00;60/);
   assert.match(text, /406,66/);
   assert.match(text, /174,31/);
+  assert.doesNotMatch(text, /Ã|Ä|Å/);
 });

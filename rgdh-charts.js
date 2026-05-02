@@ -18,6 +18,7 @@
     KY: '#64748b'
   };
   const TPYS_SET_LEGEND_GROUP = 'tpys-set-voltage';
+  const PARTICIPATION_OK_THRESHOLD_PCT = 80;
 
   function renderReport(root, rows, pivotRows, options = {}) {
     if (!root) return;
@@ -159,11 +160,14 @@
     });
     const ytmValues = [...new Set((rows || []).map((r) => r.ytm).filter(Boolean))];
     const hourOptions = Array.from({ length: 24 }, (_, hour) => `<option value="${hour}">${String(hour).padStart(2, '0')}</option>`).join('');
+    const calculationMode = normalizeCalculationMode(options.calculationMode);
+    const ekcDisabled = options.hasEkcCalculation === false ? ' disabled' : '';
 
     toolbar.innerHTML = `
       <label class="rgdh-chart-field rgdh-chart-field-busbar">Bara <select id="chartBusbarSelect" class="rgdh-select"><option value="">Tumu</option>${busbarOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}</select></label>
       <label class="rgdh-chart-field rgdh-chart-field-ytm">BYTM <select id="chartYtmSelect" class="rgdh-select"><option value="">Tumu</option>${ytmValues.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('')}</select></label>
       <label class="rgdh-chart-field rgdh-chart-field-date">Tarih <input id="chartDate" type="date" class="rgdh-input"></label>
+      <label class="rgdh-chart-field rgdh-chart-field-calc">Hesaplama <select id="chartCalculationMode" class="rgdh-select"><option value="YKS">YKS Hesaplama</option><option value="EKC"${ekcDisabled}>Ek-C Hesaplama</option></select></label>
       <label class="rgdh-chart-field rgdh-chart-field-mode">Saat Modu <select id="chartHourMode" class="rgdh-select"><option value="all">Tum gun</option><option value="hours">Saatler</option></select></label>
       <label class="rgdh-chart-field rgdh-chart-field-hour">Baslangic Saat <select id="chartHourStart" class="rgdh-select">${hourOptions}</select></label>
       <label class="rgdh-chart-field rgdh-chart-field-hour">Bitis Saat <select id="chartHourEnd" class="rgdh-select">${hourOptions}</select></label>
@@ -174,6 +178,7 @@
     const selectBusbar = toolbar.querySelector('#chartBusbarSelect');
     const selectYtm = toolbar.querySelector('#chartYtmSelect');
     const inputDate = toolbar.querySelector('#chartDate');
+    const selectCalculationMode = toolbar.querySelector('#chartCalculationMode');
     const hourMode = toolbar.querySelector('#chartHourMode');
     const hourSlider = toolbar.querySelector('#chartHourSlider');
     const hourStart = toolbar.querySelector('#chartHourStart');
@@ -184,6 +189,7 @@
 
     if (options.busbarId) selectBusbar.value = String(options.busbarId);
     if (options.date) inputDate.value = options.date;
+    if (selectCalculationMode) selectCalculationMode.value = calculationMode;
     const writeHourControls = (input) => {
       const normalized = normalizeHourRangeFilter(input);
       const start = normalized.hourStart ?? 0;
@@ -234,11 +240,18 @@
     hourUp.addEventListener('click', () => {
       writeHourControls(shiftHourRangeFilter({ mode: 'hours', hourStart: hourStart.value, hourEnd: hourEnd.value }, 1));
     });
+    selectCalculationMode?.addEventListener('change', () => {
+      const nextMode = normalizeCalculationMode(selectCalculationMode.value);
+      if (typeof options.onCalculationModeChange === 'function') {
+        options.onCalculationModeChange(nextMode);
+      }
+    });
 
     const applyFilters = () => {
       const busbarId = selectBusbar.value;
       const ytm = selectYtm.value;
       const date = inputDate.value;
+      const nextCalculationMode = normalizeCalculationMode(selectCalculationMode?.value || calculationMode);
       const hourFilter = normalizeHourRangeFilter({ mode: hourMode.value, hourStart: hourStart.value, hourEnd: hourEnd.value });
 
       let filtered = rows;
@@ -253,7 +266,7 @@
         filtered = filtered.filter((r) => Number(r.localHour) >= hourFilter.hourStart && Number(r.localHour) <= hourFilter.hourEnd);
       }
 
-      const nextOptions = { ...options, busbarId, date, hourMode: hourFilter.mode, hourStart: hourFilter.hourStart, hourEnd: hourFilter.hourEnd, hour: hourFilter.hour };
+      const nextOptions = { ...options, busbarId, date, calculationMode: nextCalculationMode, hourMode: hourFilter.mode, hourStart: hourFilter.hourStart, hourEnd: hourFilter.hourEnd, hour: hourFilter.hour };
       root.querySelectorAll('canvas').forEach((canvas) => {
         const chart = Chart.getChart(canvas);
         if (chart) chart.destroy();
@@ -686,7 +699,7 @@
     const tbody = document.createElement('tbody');
     buildHourMetricRows(pivotRows).forEach((row) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = [
+      const values = [
         escapeHtml(row.localDate || '-'),
         escapeHtml(`${String(row.hour).padStart(2, '0')}:00`),
         escapeHtml(row.busbarName || '-'),
@@ -706,7 +719,11 @@
         formatNumber(row.qgenAvg),
         formatNumber(row.setAvg),
         formatNumber(row.voltageAvg)
-      ].map((value) => `<td>${value}</td>`).join('');
+      ];
+      tr.innerHTML = values.map((value, index) => {
+        const className = index === 10 ? participationClass(row) : '';
+        return `<td class="${className}">${value}</td>`;
+      }).join('');
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
@@ -822,8 +839,9 @@
     if (result === 'DD') return 'participation-dd';
     if (result === 'YY') return 'participation-yy';
     if (result === 'KY') return 'participation-ky';
-    if (!Number.isFinite(Number(hour.participationPct ?? hour.passRatio))) return 'participation-empty';
-    return result === 'SAGLADI' ? 'participation-ok' : 'participation-fail';
+    const pct = Number(hour.participationPct ?? hour.passRatio);
+    if (!Number.isFinite(pct)) return 'participation-empty';
+    return pct >= PARTICIPATION_OK_THRESHOLD_PCT ? 'participation-ok' : 'participation-fail';
   }
 
   function formatHeatmapCellText(hour) {
@@ -1162,6 +1180,10 @@
     let end = clampHour(hasRange ? input.hourEnd : input.hour);
     if (end < start) end = start;
     return { mode: 'hours', hourStart: start, hourEnd: end, hour: start === end ? start : null };
+  }
+
+  function normalizeCalculationMode(value) {
+    return String(value || '').toUpperCase() === 'EKC' ? 'EKC' : 'YKS';
   }
 
   function shiftHourRangeFilter(input = {}, delta = 0) {

@@ -61,7 +61,8 @@ test('buildPlatformHourStat treats missing minutes and auxiliary approval correc
   assert.equal(stat.yyCount, 10);
   assert.equal(stat.ddCount, 3);
   assert.equal(stat.missingCount, 1);
-  assert.equal(stat.failCount, 1);
+  assert.equal(stat.kyCount, 1);
+  assert.equal(stat.failCount, 0);
   assert.equal(stat.hourResult, 'SAGLADI');
   assert.equal(stat.passRatio, 98.333);
 });

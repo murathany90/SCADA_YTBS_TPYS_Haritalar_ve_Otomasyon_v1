@@ -1291,23 +1291,29 @@ test('rgdhPageFetchMainWorld classifies aborted requests as PAGE_FETCH_TIMEOUT',
   assert.equal(result.errorType, 'PAGE_FETCH_TIMEOUT');
 });
 
-test('handleRgdhFetchStart stores a 60 second YKS job budget in the fetch payload', async () => {
-  const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
-  let capturedPayload = null;
-  context.handleRgdhFetch = async (payload) => {
-    capturedPayload = payload;
-    return { ok: true, conventionalRows: [], windRows: [], domRows: [], partialErrors: [], logs: [] };
-  };
+test('handleRgdhFetchStart stores a 180 second standard YKS job budget in the fetch payload', async () => {
+  const cases = [
+    { sourceType: 'CONVENTIONAL', busbarInternalIds: ['10933818993'] },
+    { sourceType: 'WIND', busbarInternalIds: ['10933818957'] }
+  ];
 
-  const started = await context.handleRgdhFetchStart({
-    localDate: '2026-04-01',
-    sourceType: 'WIND',
-    busbarInternalIds: ['10933818957']
-  });
-  await new Promise((resolve) => setImmediate(resolve));
+  for (const testCase of cases) {
+    const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
+    let capturedPayload = null;
+    context.handleRgdhFetch = async (payload) => {
+      capturedPayload = payload;
+      return { ok: true, conventionalRows: [], windRows: [], domRows: [], partialErrors: [], logs: [] };
+    };
 
-  assert.equal(started.ok, true);
-  assert.equal(capturedPayload.jobTimeoutMs, 60000);
+    const started = await context.handleRgdhFetchStart({
+      localDate: '2026-04-01',
+      ...testCase
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(started.ok, true);
+    assert.equal(capturedPayload.jobTimeoutMs, 180000, testCase.sourceType);
+  }
 });
 
 test('handleRgdhFetchStart caps the YKS job budget at five minutes for auxiliary RES/GES busbars', async () => {

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "SCADA/YTBS/TPYS/ Haritalar ve Otomasyon",
+  "name": "SCADA/YTBS/TPYS/YKS Haritalar ve Otomasyon",
   "version": "1.0.0",
   "description": "TPYS reaktif CSV eşleştirme, zenginleştirilmiş KML haritası, bara set görselleştirme ve tam otomatik CSV indirme.",
   "permissions": [
@@ -18,7 +18,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "SCADA/YTBS/TPYS/ Haritalar ve Otomasyon",
+    "default_title": "SCADA/YTBS/TPYS/YKS Haritalar ve Otomasyon",
     "default_popup": "popup.html"
   },
   "web_accessible_resources": [

@@ -271,21 +271,22 @@
   function buildHourStatFromResultRows(rows, field, pivot) {
     const sourceRows = Array.isArray(rows) ? rows : [];
     const summary = pivot?.reactiveHourSummary || fallbackReactiveHourSummary;
+    const expectedMinuteCount = 60;
     if (!sourceRows.length) {
       return summary({
         passCount: 0,
         failCount: 0,
-        kyCount: 1,
+        kyCount: expectedMinuteCount,
         ddCount: 0,
         yyCount: 0,
-        missingCount: 1,
+        missingCount: expectedMinuteCount,
         activeLiabilityMinutes: 0
       }, {
-        expectedMinuteCount: 1,
+        expectedMinuteCount,
         failMinuteThreshold: 0,
-        minActiveLiabilityMinutes: 1,
-        dominantOfflineThreshold: 0,
-        kyMinuteThreshold: 1
+        minActiveLiabilityMinutes: 13,
+        dominantOfflineThreshold: 47,
+        kyMinuteThreshold: expectedMinuteCount
       });
     }
     const counts = { passCount: 0, failCount: 0, kyCount: 0, ddCount: 0, yyCount: 0 };
@@ -297,16 +298,17 @@
       else if (result === RESULT_DD) counts.ddCount += 1;
       else if (result === RESULT_YY) counts.yyCount += 1;
     });
-    const expectedMinuteCount = sourceRows.length;
+    const missingCount = Math.max(0, expectedMinuteCount - sourceRows.length);
+    counts.kyCount += missingCount;
     return summary({
       ...counts,
-      missingCount: 0,
+      missingCount,
       activeLiabilityMinutes: counts.passCount + counts.failCount + counts.ddCount + counts.yyCount
     }, {
       expectedMinuteCount,
       failMinuteThreshold: Math.floor(expectedMinuteCount * 0.2),
-      minActiveLiabilityMinutes: 1,
-      dominantOfflineThreshold: Math.max(0, expectedMinuteCount - 1),
+      minActiveLiabilityMinutes: 13,
+      dominantOfflineThreshold: 47,
       kyMinuteThreshold: expectedMinuteCount
     });
   }

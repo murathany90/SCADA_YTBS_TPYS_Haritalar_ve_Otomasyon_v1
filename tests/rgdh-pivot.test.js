@@ -101,6 +101,27 @@ test('buildDailyPivot computes hourly averages and participation percentage over
   assert.equal(hour.qgenAvg, -5);
 });
 
+test('buildPlatformHourStat classifies missing minutes as KY without adding them to failed minutes', () => {
+  const rows = [
+    ...Array.from({ length: 45 }, (_, minute) => makeRow(minute, { approvalStatus: 1 })),
+    ...Array.from({ length: 10 }, (_, minute) => makeRow(45 + minute, { noObligationStatus: 1, approvalStatus: 0 })),
+    ...Array.from({ length: 3 }, (_, minute) => makeRow(55 + minute, { offBoardStatus: 1, approvalStatus: 0 })),
+    makeRow(58, { approvalStatus: 0, auxiliaryApprovalStatus: 1 })
+  ];
+
+  const stat = pivot.buildPlatformHourStat(rows);
+
+  assert.equal(stat.minuteCount, 59);
+  assert.equal(stat.passCount, 46);
+  assert.equal(stat.yyCount, 10);
+  assert.equal(stat.ddCount, 3);
+  assert.equal(stat.kyCount, 1);
+  assert.equal(stat.missingCount, 1);
+  assert.equal(stat.failCount, 0);
+  assert.equal(stat.hourResult, 'SAGLADI');
+  assert.equal(stat.participationPct, 98.333);
+});
+
 test('buildDailyPivot gives approvalStatus priority when counting successful minutes', () => {
   const rows = Array.from({ length: 60 }, (_, minute) => makeRow(minute, {
     approvalStatus: minute < 45 ? 1 : 0,

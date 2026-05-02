@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const charts = require('../rgdh-charts.js');
 
@@ -67,6 +69,22 @@ test('selectRowsForReport filters by inclusive hour range', () => {
   const selected = charts.selectRowsForReport(rows, { busbarId: 5532, hourMode: 'hours', hourStart: 8, hourEnd: 10 });
 
   assert.deepEqual(selected.map((row) => row.localHour), [8, 9, 10]);
+});
+
+test('renderReport toolbar supports YKS and EK-C calculation modes without changing row filtering', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rgdh-charts.js'), 'utf8');
+
+  assert.match(source, /chartCalculationMode/);
+  assert.match(source, /YKS Hesaplama/);
+  assert.match(source, /Ek-C Hesaplama/);
+  assert.match(source, /onCalculationModeChange/);
+  assert.deepEqual(
+    charts.selectRowsForReport([
+      makeRow(5532, 8, 0),
+      { ...makeRow(5532, 9, 0), calculationSource: 'EKC' }
+    ], { busbarId: 5532, hourMode: 'hours', hourStart: 8, hourEnd: 9 }).map((row) => row.localHour),
+    [8, 9]
+  );
 });
 
 test('selectRowsForReport keeps legacy single-hour behavior through hour range options', () => {
@@ -206,6 +224,18 @@ test('participationClass differentiates DD YY KY neutral result colors', () => {
   assert.equal(charts.participationClass({ hourResult: 'DD', participationPct: null }), 'participation-dd');
   assert.equal(charts.participationClass({ hourResult: 'YY', participationPct: null }), 'participation-yy');
   assert.equal(charts.participationClass({ hourResult: 'KY', participationPct: null }), 'participation-ky');
+});
+
+test('participationClass colors numeric participation with comparison threshold', () => {
+  assert.equal(charts.participationClass({ hourResult: 'SAGLADI', participationPct: 79.99 }), 'participation-fail');
+  assert.equal(charts.participationClass({ hourResult: 'SAGLADI', participationPct: 80 }), 'participation-ok');
+  assert.equal(charts.participationClass({ hourResult: 'SAGLADI', participationPct: 73.333 }), 'participation-fail');
+});
+
+test('detailed hour metric table applies the same participation color class', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rgdh-charts.js'), 'utf8');
+
+  assert.match(source, /participationClass\(row\)/);
 });
 
 test('buildHourMetricRows exposes hourly detail metrics for conventional and wind rows', () => {

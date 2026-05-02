@@ -1204,7 +1204,7 @@ Platform/YKS verisinin ana kaynağı API'dir; hibrit CSV fallback yalnız backgr
 - Gerilim ve trafo için SCADA overlay mantığı genişletildi. Seçili SCADA metriği aktifken overlay, statik katman checkbox’larından bağımsız render alabiliyor. Desteklenen modlar: `Kutu`, `Nokta (Ad)`, `Nokta (Adsız)`, `Isı Haritası`.
 - Yoğun TM bölgeleri için ekran-uzayı tabanlı declutter eklendi. Düşük zoom’da yalnız en kritik öğeler gösteriliyor, zoom arttıkça daha fazla öğe açılıyor. Seçili öğe her zaman görünür kalıyor.
 - Otomatik yenileme yeniden kuruldu: eski çoklu timer mantığı yerine tek sahipli `setTimeout` scheduler kullanılıyor. Sekme arka planda kalınca yenileme boşa düşmüyor; görünür olunca overdue kontrolüyle telafi fetch tetikleniyor.
-- Popup/extension adı güncellendi: **`SCADA/YTBS/TPYS/ Haritalar ve Otomasyon`**. Popup kart sırası yeniden düzenlendi; `Haritada Göster` ayrı üst karta taşındı.
+- Popup/extension adı güncellendi: **`SCADA/YTBS/TPYS/YKS Haritalar ve Otomasyon`**. Popup kart sırası yeniden düzenlendi; `Haritada Göster` ayrı üst karta taşındı.
 
 
 **İleride Yapılacak Geliştirmeler**

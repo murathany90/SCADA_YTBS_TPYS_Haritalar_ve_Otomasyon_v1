@@ -12,11 +12,13 @@
     comparison: null,
     pivot: { rows: [] },
     activeTab: 'raw',
+    calculationMode: 'YKS',
     chartSelection: { busbarId: null, hour: null, date: null },
     compareSelection: { busbarId: '', ytm: '', hourMode: 'all', hourStart: null, hourEnd: null, hour: null, date: null },
     compareHourRows: [],
     rawUnitSelection: null,
     selectedTestBusbarKey: '',
+    testTableSort: { key: '', direction: 'asc' },
     errors: [],
     fetchLogs: [],
     yksLogs: [],
@@ -25,7 +27,7 @@
   };
 
   const el = {};
-  const RGDH_STANDARD_JOB_TIMEOUT_MS = 60000;
+  const RGDH_STANDARD_JOB_TIMEOUT_MS = 180000;
   const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;
   const RGDH_HYBRID_CONTINUATION_TIMEOUT_MS = 900000;
   const RGDH_HYBRID_CONTINUATION_POLL_GRACE_MS = 60000;
@@ -33,6 +35,22 @@
   const COMPARE_AVG_DELTA_LIMITS = { dV: 0.5, dP: 1, dQ: 1 };
   const COMPARE_MAX_DELTA_LIMITS = { dV: 3, dP: 10, dQ: 5 };
   const CONVENTIONAL_UNIT_SOURCE_TYPE = 'CONVENTIONAL_UNIT';
+
+  const TEST_TABLE_COLUMNS = [
+    { key: 'busbarType', label: 'Bara Tipi' },
+    { key: 'busbarId', label: 'Bara ID' },
+    { key: 'busbarName', label: 'Bara Adı', html: (row) => renderHybridNameHtml(row.busbarName || row.busbarId || '-', row) },
+    { key: 'rgkType', label: 'RGK Tipi' },
+    { key: 'voltageLevel', label: 'Bara Gerilim Seviyesi', html: (row) => formatNumber(row.voltageLevel) },
+    { key: 'ytm', label: 'BYTM' },
+    { key: 'plantId', label: 'TPYS Santral ID' },
+    { key: 'plantName', label: 'TPYS Santral İsmi', html: (row) => renderHybridNameHtml(row.plantName || '-', row) },
+    { key: 'busbar1Ta', label: 'Bara 1 TA' },
+    { key: 'busbar1Setnum', label: 'Bara 1 Setnum' },
+    { key: 'busbar2Ta', label: 'Bara 2 TA' },
+    { key: 'busbar2Setnum', label: 'Bara 2 Setnum' },
+    { key: 'busbar3Ta', label: 'Bara 3 TA' }
+  ];
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -154,6 +172,13 @@
         syncDynamicOptions();
         renderTestsTable();
       }));
+    el.testsTable?.addEventListener('click', (event) => {
+      const button = event.target?.closest?.('[data-test-sort-key]');
+      if (!button) return;
+      event.preventDefault();
+      setTestTableSort(button.dataset.testSortKey);
+      renderTestsTable();
+    });
     el.btnFetchYks.addEventListener('click', fetchYksData);
     el.btnCancelFetch?.addEventListener('click', cancelYksFetch);
     el.btnPickCsv.addEventListener('click', () => el.csvInput.click());
@@ -511,7 +536,7 @@
     }
 
     if (ekcRows.length) {
-      state.ekcRows = bindEkcRowsToSelectedBusbar(ekcRows, bindingTarget);
+      state.ekcRows = buildEkcCalculationRows(bindEkcRowsToSelectedBusbar(ekcRows, bindingTarget));
       state.ekcGroups = ekcGroups;
       state.ekcLoaded = true;
       state.ekcBindingTarget = bindingTarget || null;
@@ -534,6 +559,27 @@
 
   function bindEkcRowsToSelectedBusbar(rows, target = resolveEkcBindingTarget()) {
     return RGDH_COMPARISON.bindEkcRowsToSelectedBusbar(rows, target);
+  }
+
+  function buildEkcCalculationRows(rows) {
+    if (!RGDH_REACTIVE_ENGINE?.buildEkcCalculationRows) return rows || [];
+    return RGDH_REACTIVE_ENGINE.buildEkcCalculationRows(rows || [], buildEkcCatalogContextIndex());
+  }
+
+  function buildEkcCatalogContextIndex() {
+    const map = new Map();
+    RGDH_NORMALIZER.buildCatalogBusbarSummaries(state.catalogRows).forEach((summary) => {
+      const keys = [
+        summary.busbarId,
+        summary.busbarName,
+        summary.plantName,
+        summary.ytbsPlantName
+      ].map((value) => String(value ?? '').trim()).filter(Boolean);
+      keys.forEach((key) => {
+        if (!map.has(key)) map.set(key, summary);
+      });
+    });
+    return map;
   }
 
   function resolveEkcBindingTarget() {
@@ -1375,29 +1421,61 @@
     if (state.activeTab !== 'charts') return;
     const filters = readFilters();
     const selectedBusbar = resolveSelectedBusbar(filters);
-    const first = rows.find((row) => row.busbarId !== null && row.busbarId !== undefined);
+    const chartData = getChartCalculationRows(rows, pivotRows);
+    const chartRows = chartData.rows;
+    const chartPivotRows = chartData.pivotRows;
+    const first = chartRows.find((row) => row.busbarId !== null && row.busbarId !== undefined);
     const busbarId = state.chartSelection.busbarId ?? first?.busbarId ?? selectedBusbar?.busbarId;
     const selection = {
       busbarId,
       hour: state.chartSelection.hour,
-      date: resolveChartDate(rows, busbarId, state.chartSelection.date || filters.date),
+      date: resolveChartDate(chartRows, busbarId, state.chartSelection.date || filters.date),
       showVoltage: state.showVoltage,
+      calculationMode: state.calculationMode,
+      hasEkcCalculation: state.ekcRows.length > 0,
+      onCalculationModeChange: (mode) => {
+        state.calculationMode = mode === 'EKC' ? 'EKC' : 'YKS';
+        state.chartSelection = { ...state.chartSelection, hour: null };
+        renderCharts(getFilteredRows(), state.pivot.rows);
+      },
       onHourSelect: ({ busbarId: selectedBusbarId, date, hour }) => {
         state.chartSelection = { busbarId: selectedBusbarId, hour, date: date || null };
         renderCharts(getFilteredRows(), state.pivot.rows);
       }
     };
-    const labelRow = rows.find((row) => String(row.busbarId) === String(selection.busbarId)) || selectedBusbar;
+    const labelRow = chartRows.find((row) => String(row.busbarId) === String(selection.busbarId)) || selectedBusbar;
     if (el.chartContextLabel) {
       const datePart = selection.date ? `${selection.date} - ` : '';
       const name = renderHybridNameHtml(labelRow?.busbarName || selection.busbarId || 'Bara', labelRow);
       const suffix = selection.hour === null || selection.hour === undefined
         ? `${datePart}tum gun`
         : `${datePart}${String(selection.hour).padStart(2, '0')}:00`;
-      el.chartContextLabel.innerHTML = `${name} - ${escapeHtml(suffix)}`;
+      const modeLabel = state.calculationMode === 'EKC' ? 'Ek-C Hesaplama' : 'YKS Hesaplama';
+      const emptyEkc = chartData.fallbackToYks ? ' - Ek-C hesaplama icin EK-C CSV yukleyin.' : '';
+      el.chartContextLabel.innerHTML = `${escapeHtml(modeLabel)} - ${name} - ${escapeHtml(suffix)}${escapeHtml(emptyEkc)}`;
     }
-    RGDH_CHARTS.renderReport(el.chartsRoot, rows, pivotRows, selection);
+    RGDH_CHARTS.renderReport(el.chartsRoot, chartRows, chartPivotRows, selection);
     applyVoltageVisibility();
+  }
+
+  function getChartCalculationRows(platformRows, platformPivotRows) {
+    if (state.calculationMode !== 'EKC') {
+      return { rows: platformRows || [], pivotRows: platformPivotRows || [], mode: 'YKS' };
+    }
+    const ekcRows = getFilteredEkcRows();
+    if (!ekcRows.length) {
+      return {
+        rows: platformRows || [],
+        pivotRows: platformPivotRows || [],
+        mode: 'YKS',
+        fallbackToYks: true
+      };
+    }
+    return {
+      rows: ekcRows,
+      pivotRows: RGDH_PIVOT.buildDailyPivot(ekcRows).rows,
+      mode: 'EKC'
+    };
   }
 
   function renderCompareView(platformRows) {
@@ -1626,8 +1704,7 @@
     const selectedSummary = summaries.find((row) => catalogBusbarKey(row) === selectedKey) || summaries[0] || null;
     state.selectedTestBusbarKey = selectedSummary ? catalogBusbarKey(selectedSummary) : '';
 
-    const headers = ['Bara Tipi', 'Bara ID', 'Bara Adı', 'RGK Tipi', 'Bara Gerilim Seviyesi', 'BYTM', 'TPYS Santral ID', 'TPYS Santral İsmi', 'Bara 1 TA', 'Bara 1 Setnum', 'Bara 2 TA', 'Bara 2 Setnum', 'Bara 3 TA'];
-    el.testsTable.innerHTML = `<thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead>`;
+    el.testsTable.innerHTML = `<thead><tr>${TEST_TABLE_COLUMNS.map(renderTestSortHeader).join('')}</tr></thead>`;
     const tbody = document.createElement('tbody');
     summaries.slice(0, 2000).forEach((catalogRow) => {
       const tr = document.createElement('tr');
@@ -1637,31 +1714,43 @@
         state.selectedTestBusbarKey = rowKey;
         renderTestsTable();
       });
-      tr.innerHTML = [
-        escapeHtml(catalogRow.busbarType || '-'),
-        escapeHtml(catalogRow.busbarId ?? '-'),
-        renderHybridNameHtml(catalogRow.busbarName || catalogRow.busbarId || '-', catalogRow),
-        escapeHtml(catalogRow.rgkType || '-'),
-        formatNumber(catalogRow.voltageLevel),
-        escapeHtml(catalogRow.ytm || '-'),
-        escapeHtml(catalogRow.plantId ?? '-'),
-        renderHybridNameHtml(catalogRow.plantName || '-', catalogRow),
-        escapeHtml(catalogRow.busbar1Ta || '-'),
-        escapeHtml(catalogRow.busbar1Setnum || '-'),
-        escapeHtml(catalogRow.busbar2Ta || '-'),
-        escapeHtml(catalogRow.busbar2Setnum || '-'),
-        escapeHtml(catalogRow.busbar3Ta || '-')
-      ].map((value) => `<td>${value}</td>`).join('');
+      tr.innerHTML = TEST_TABLE_COLUMNS
+        .map((column) => `<td>${renderTestTableCell(catalogRow, column)}</td>`)
+        .join('');
       tbody.appendChild(tr);
     });
     if (!summaries.length) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="${headers.length}">Katalog yukleniyor veya test filtrelerini genisletin.</td>`;
+      tr.innerHTML = `<td colspan="${TEST_TABLE_COLUMNS.length}">Katalog yukleniyor veya test filtrelerini genisletin.</td>`;
       tbody.appendChild(tr);
     }
     el.testsTable.appendChild(tbody);
     renderTestUnitDetails(selectedSummary);
     renderTestOtherDetails(selectedSummary);
+  }
+
+  function renderTestSortHeader(column) {
+    const sort = state.testTableSort || {};
+    const active = sort.key === column.key;
+    const direction = active && sort.direction === 'desc' ? 'desc' : 'asc';
+    const ariaSort = active ? (direction === 'desc' ? 'descending' : 'ascending') : 'none';
+    const indicator = active ? (direction === 'desc' ? '▼' : '▲') : '';
+    return `<th aria-sort="${ariaSort}"><button type="button" class="rgdh-sort-button ${active ? 'active' : ''}" data-test-sort-key="${escapeHtml(column.key)}">${escapeHtml(column.label)}<span class="rgdh-sort-indicator" aria-hidden="true">${indicator}</span></button></th>`;
+  }
+
+  function renderTestTableCell(row, column) {
+    if (typeof column.html === 'function') return column.html(row);
+    const value = row?.[column.key];
+    return escapeHtml(value === null || value === undefined || value === '' ? '-' : value);
+  }
+
+  function setTestTableSort(key) {
+    if (!TEST_TABLE_COLUMNS.some((column) => column.key === key)) return;
+    const current = state.testTableSort || { key: '', direction: 'asc' };
+    state.testTableSort = {
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    };
   }
 
   function renderTestUnitDetails(summary) {
@@ -1740,13 +1829,13 @@
 
   function formatBooleanDetail(value) {
     if (value === true) return 'Evet';
-    if (value === false) return 'Hayir';
+    if (value === false) return 'Hayır';
     return '-';
   }
 
   function getFilteredTestSummaries(filters = readTestFilters()) {
     const search = normalizeText(filters.search);
-    return RGDH_NORMALIZER.buildCatalogBusbarSummaries(state.catalogRows).filter((row) => {
+    const rows = RGDH_NORMALIZER.buildCatalogBusbarSummaries(state.catalogRows).filter((row) => {
       if (search) {
         const text = normalizeText(`${row.plantName || ''} ${row.busbarName || ''} ${row.busbarId || ''}`);
         if (!text.includes(search)) return false;
@@ -1756,6 +1845,33 @@
       if (filters.hybridOnly && !row.hasAuxiliarySource) return false;
       return true;
     });
+    return sortCatalogSummaries(rows);
+  }
+
+  function sortCatalogSummaries(rows) {
+    const sort = state.testTableSort || {};
+    const key = TEST_TABLE_COLUMNS.some((column) => column.key === sort.key) ? sort.key : '';
+    const direction = sort.direction === 'desc' ? -1 : 1;
+    return [...(rows || [])].sort((a, b) => {
+      if (!key) return compareCatalogDefault(a, b);
+      const primary = compareSortValues(a?.[key], b?.[key]);
+      return primary ? primary * direction : compareCatalogDefault(a, b);
+    });
+  }
+
+  function compareCatalogDefault(a, b) {
+    const byBusbarName = String(a?.busbarName || '').localeCompare(String(b?.busbarName || ''), 'tr', { sensitivity: 'base', numeric: true });
+    if (byBusbarName) return byBusbarName;
+    const byBusbarType = String(a?.busbarType || '').localeCompare(String(b?.busbarType || ''), 'tr', { sensitivity: 'base', numeric: true });
+    if (byBusbarType) return byBusbarType;
+    return compareSortValues(a?.busbarId, b?.busbarId);
+  }
+
+  function compareSortValues(a, b) {
+    const aNumber = Number(a);
+    const bNumber = Number(b);
+    if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) return aNumber - bNumber;
+    return String(a ?? '').localeCompare(String(b ?? ''), 'tr', { sensitivity: 'base', numeric: true });
   }
 
   function getTestBusbarOptions(filters = readTestFilters()) {
@@ -1822,6 +1938,7 @@
   function rebuildEnrichment() {
     state.apiRows = enrichRows(state.apiRows);
     state.domRows = enrichRows(state.domRows);
+    if (state.ekcRows.length) state.ekcRows = buildEkcCalculationRows(state.ekcRows);
   }
 
   function enrichRows(rows) {

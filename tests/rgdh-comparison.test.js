@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const comparison = require('../rgdh-comparison.js');
 const pivot = require('../rgdh-pivot.js');
+const engine = require('../rgdh-reactive-engine.js');
 
 test('bindEkcRowsToSelectedBusbar preserves EK-C identity and attaches selected YKS busbar', () => {
   const rows = comparison.bindEkcRowsToSelectedBusbar([{
@@ -108,8 +109,8 @@ test('buildEkcPlatformComparison matches by busbar date minute and fills deltas'
   assert.equal(result.rows[0].deltaP, 0.5);
   assert.equal(result.rows[0].deltaQ, 0.25);
   assert.equal(result.hourRows[0].commonMinutes, 1);
-  assert.equal(result.hourRows[0].ekcStat.hourResult, 'SAGLADI');
-  assert.equal(result.hourRows[0].platformStat.hourResult, 'SAGLADI');
+  assert.equal(result.hourRows[0].ekcStat.hourResult, 'YY');
+  assert.equal(result.hourRows[0].platformStat.hourResult, 'YY');
 });
 
 test('buildEkcPlatformComparison hour rows expose separate EK-C and YKS result counts for table summaries', () => {
@@ -137,14 +138,74 @@ test('buildEkcPlatformComparison hour rows expose separate EK-C and YKS result c
     ddCount: hourRow.ekcStat.ddCount,
     yyCount: hourRow.ekcStat.yyCount,
     kyCount: hourRow.ekcStat.kyCount
-  }, { passCount: 1, failCount: 1, ddCount: 1, yyCount: 1, kyCount: 1 });
+  }, { passCount: 1, failCount: 1, ddCount: 1, yyCount: 1, kyCount: 56 });
   assert.deepEqual({
     passCount: hourRow.platformStat.passCount,
     failCount: hourRow.platformStat.failCount,
     ddCount: hourRow.platformStat.ddCount,
     yyCount: hourRow.platformStat.yyCount,
     kyCount: hourRow.platformStat.kyCount
-  }, { passCount: 1, failCount: 1, ddCount: 1, yyCount: 1, kyCount: 1 });
+  }, { passCount: 1, failCount: 1, ddCount: 1, yyCount: 1, kyCount: 56 });
+});
+
+test('Bayramhacili EK-C comparison hour uses header excitation limits instead of KY', () => {
+  const catalogContext = {
+    platformRgkType: 'KON_GB_2003S',
+    voltageLevel: 154,
+    units: [
+      { unitName: 'Unite-1', isBalancingUnit: true, tpysUnitMkud: 14.1, unitPmkudMw: 14.1 },
+      { unitName: 'Unite-2', isBalancingUnit: true, tpysUnitMkud: 14.1, unitPmkudMw: 14.1 }
+    ]
+  };
+  const ekcRows = Array.from({ length: 60 }, (_, minute) => {
+    const qMeas = minute < 55 ? -14.332 : -13.5;
+    const row = {
+      busbarId: '2110',
+      busbarName: 'BAYRAMHACILI 154',
+      sourceType: 'CONVENTIONAL',
+      localDate: '2026-05-01',
+      localHour: 3,
+      localMinute: minute,
+      dakikaIndex: 180 + minute,
+      measurementDateLocal: `2026-05-01T03:${String(minute).padStart(2, '0')}:00+03:00`,
+      vBara: 158.491,
+      vSet: 156,
+      pTotal: 42.41,
+      qMeas,
+      pnomMw: 47,
+      ekcUnits: [
+        { index: 1, mkudMw: 14.1, pActiveMw: 21.005, nominalHighExcitation: 14.56, nominalLowExcitation: -7.72 },
+        { index: 2, mkudMw: 14.1, pActiveMw: 21.405, nominalHighExcitation: 14.56, nominalLowExcitation: -7.72 }
+      ]
+    };
+    return {
+      ...row,
+      minuteStat: engine.evaluateEkcMinute(row, catalogContext)
+    };
+  });
+  const platformRows = Array.from({ length: 60 }, (_, minute) => ({
+    busbarId: '2110',
+    busbarName: 'BAYRAMHACILI 154',
+    sourceType: 'CONVENTIONAL',
+    localDate: '2026-05-01',
+    localHour: 3,
+    localMinute: minute,
+    measurementDateLocal: `2026-05-01T03:${String(minute).padStart(2, '0')}:00+03:00`,
+    liveBusbarVoltage: 158.4,
+    pgenMw: 42,
+    qgenMvar: -14.5,
+    approvalStatus: minute < 55 ? 1 : 0
+  }));
+
+  const result = comparison.buildEkcPlatformComparison(platformRows, ekcRows, { pivot });
+  const hourRow = result.hourRows[0];
+
+  assert.equal(hourRow.commonMinutes, 60);
+  assert.equal(hourRow.ekcStat.hourResult, 'SAGLADI');
+  assert.equal(hourRow.ekcStat.passCount, 55);
+  assert.equal(hourRow.ekcStat.failCount, 5);
+  assert.equal(hourRow.ekcStat.kyCount, 0);
+  assert.equal(hourRow.ekcStat.passRatio, 91.667);
 });
 
 test('buildEkcPlatformComparison sorts hour rows by date and numeric hour', () => {
@@ -236,8 +297,10 @@ test('buildEkcPlatformComparison hour rows use absolute average deltas and expos
   assert.equal(hourRow.avgEkcHybridP, 5.5);
   assert.equal(hourRow.avgDeltaHybridP, 2.5);
   assert.equal(hourRow.maxDeltaHybridP, 3);
-  assert.equal(hourRow.ekcStat.passRatio, 50);
-  assert.equal(hourRow.platformStat.passRatio, 50);
+  assert.equal(hourRow.ekcStat.hourResult, 'YY');
+  assert.equal(hourRow.platformStat.hourResult, 'YY');
+  assert.equal(hourRow.ekcStat.passRatio, null);
+  assert.equal(hourRow.platformStat.passRatio, null);
 });
 
 test('buildEkcPlatformComparison reports no YKS data without turning missing side into KY', () => {
@@ -260,7 +323,7 @@ test('buildEkcPlatformComparison reports no YKS data without turning missing sid
   assert.equal(result.summary.both, 0);
   assert.equal(result.summary.ekcOnly, 1);
   assert.equal(result.diagnosis, 'Ortak dakika bulunamadi: EK-C tarihi icin YKS SCADA verisi yok');
-  assert.equal(result.hourRows[0].ekcStat.hourResult, 'SAGLADI');
+  assert.equal(result.hourRows[0].ekcStat.hourResult, 'YY');
   assert.equal(result.hourRows[0].platformStat, null);
 });
 

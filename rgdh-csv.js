@@ -595,6 +595,7 @@
       qNomMainLow: null,
       qNomAuxHigh: null,
       qNomAuxLow: null,
+      unitExcitationLimits: [],
       nominalVoltageKv: null,
       droopPct: null,
       mode: null
@@ -622,6 +623,7 @@
       } else if (/asiri.*dusuk.*mvar/.test(label)) {
         meta.qNomHigh = sumPositiveOrFirst(nums, first);
         meta.qNomLow = sumNegativeOrSecond(nums, second);
+        meta.unitExcitationLimits = buildEkcUnitExcitationLimits(nums);
       }
       if (/nominal gerilim/.test(label)) meta.nominalVoltageKv = first;
       if (/gerilim dusumu|droop/.test(label)) meta.droopPct = first;
@@ -705,6 +707,10 @@
     pfSet: {
       aliases: ['GUC_FKTR_SET_COSFI', 'GUC_FAKTORU_SET_COSFI'],
       patterns: [/^guc (fktr|faktoru) set cosfi$/]
+    },
+    qSyncReqMvar: {
+      aliases: ['SENKRON_KOMP_SET_MVAR', 'SENKRON_KOMP_SET_MVAr', 'Q_SYNC_REQ_MVAR', 'Q_SYNC_REQ_MVAr'],
+      patterns: [/^(senkron komp set|q sync req) mvar$/]
     }
   };
 
@@ -809,11 +815,15 @@
       qMeas,
       qSet: firstNumberEkc(row, meta, 'qSet', ['REAKT_GUC_SET_DEG_MVAr', 'REAKTIF_GUC_SET_DEG_MVAr']),
       pfSet: firstNumberEkc(row, meta, 'pfSet', ['GUC_FKTR_SET_COSFI', 'GUC_FAKTORU_SET_COSFI']),
+      qSyncReqMvar: firstNumberEkc(row, meta, 'qSyncReqMvar', ['SENKRON_KOMP_SET_MVAR', 'SENKRON_KOMP_SET_MVAr', 'Q_SYNC_REQ_MVAR', 'Q_SYNC_REQ_MVAr']),
+      qNomHigh: meta.qNomHigh,
+      qNomLow: meta.qNomLow,
       pnomMw: meta.pnomMw ?? ((meta.pnomMainMw || 0) + (meta.pnomAuxMw || 0) || null),
       pnomMainMw: meta.pnomMainMw,
       pnomAuxMw: meta.pnomAuxMw,
       nominalVoltageKv: meta.nominalVoltageKv,
       droopPct: meta.droopPct,
+      ekcUnits: mergeEkcUnitExcitationLimits(extractEkcUnitMeasurements(row), meta.unitExcitationLimits),
       raw: row
     };
     base.tpysVoltageSet = base.vSet;
@@ -823,8 +833,74 @@
     base.auxiliaryMw = base.pAux;
     base.measurementDateLocal = base.measurementDateLocal || `${tarih} ${saat}`;
     base.localMinute = Number(dateInfo.localMinute);
-    base.minuteStat = deriveEkcMinuteStat(base, meta, index);
+    base.minuteStat = baseMinuteStat('KY', ['RGK modu hesap motorunda belirlenecek.']);
     return base;
+  }
+
+  function extractEkcUnitMeasurements(row) {
+    const units = new Map();
+    Object.entries(row || {}).forEach(([header, value]) => {
+      const normalized = normalizeCsvHeader(header);
+      const numeric = parseTurkishNumber(value);
+      if (!Number.isFinite(numeric)) return;
+      const mkudIndex = extractEkcUnitIndex(normalized, /(?:uevcb|uecvb|birim).*?(\d+).*mkud|(\d+).*birim.*mkud/);
+      if (mkudIndex) {
+        if (!units.has(mkudIndex)) units.set(mkudIndex, { index: mkudIndex });
+        units.get(mkudIndex).mkudMw = numeric;
+        return;
+      }
+      const activeIndex = extractEkcUnitIndex(normalized, /(?:uni|unit).*?(\d+).*?(?:akt|aktif|gen ter)|(\d+).*gen ter.*akt/);
+      if (activeIndex) {
+        if (!units.has(activeIndex)) units.set(activeIndex, { index: activeIndex });
+        units.get(activeIndex).pActiveMw = numeric;
+      }
+    });
+    return [...units.values()].sort((a, b) => a.index - b.index);
+  }
+
+  function extractEkcUnitIndex(normalizedHeader, pattern) {
+    const match = String(normalizedHeader || '').match(pattern);
+    if (!match) return null;
+    const value = Number(match[1] || match[2]);
+    return Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+  }
+
+  function buildEkcUnitExcitationLimits(values) {
+    const nums = (values || []).filter(Number.isFinite);
+    const limits = [];
+    for (let i = 0; i < nums.length; i += 2) {
+      const high = nums[i];
+      const low = nums[i + 1];
+      if (!Number.isFinite(high) && !Number.isFinite(low)) continue;
+      const item = { index: limits.length + 1 };
+      if (Number.isFinite(high)) item.nominalHighExcitation = Math.abs(high);
+      if (Number.isFinite(low)) item.nominalLowExcitation = -Math.abs(low);
+      limits.push(item);
+    }
+    return limits;
+  }
+
+  function mergeEkcUnitExcitationLimits(units, limits) {
+    const byIndex = new Map((limits || []).map((item) => [Number(item.index), item]));
+    const unitIndexes = new Set((units || []).map((unit) => Number(unit.index)).filter(Number.isFinite));
+    (limits || []).forEach((limit) => {
+      const index = Number(limit.index);
+      if (Number.isFinite(index) && !unitIndexes.has(index)) unitIndexes.add(index);
+    });
+    return [...unitIndexes].sort((a, b) => a - b).map((index) => {
+      const unit = (units || []).find((item) => Number(item.index) === index) || { index };
+      const limit = byIndex.get(index) || {};
+      const merged = { ...unit };
+      if (Number.isFinite(limit.nominalHighExcitation)) {
+        merged.nominalHighExcitation = limit.nominalHighExcitation;
+        merged.highExcitationTest = limit.nominalHighExcitation;
+      }
+      if (Number.isFinite(limit.nominalLowExcitation)) {
+        merged.nominalLowExcitation = limit.nominalLowExcitation;
+        merged.lowExcitationTest = limit.nominalLowExcitation;
+      }
+      return merged;
+    });
   }
 
   function pickEkc(row, meta, field, names) {

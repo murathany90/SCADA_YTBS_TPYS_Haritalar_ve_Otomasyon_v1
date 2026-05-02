@@ -255,13 +255,13 @@
     });
     const measuredFailCount = counts.failCount;
     const missingCount = Math.max(0, settings.expectedMinuteCount - rows.length);
-    counts.failCount += missingCount;
+    counts.kyCount += missingCount;
 
     const hourSummary = reactiveHourSummary({
       ...counts,
       missingCount,
       usableCount: counts.passCount + measuredFailCount,
-      activeLiabilityMinutes: counts.passCount + counts.failCount
+      activeLiabilityMinutes: counts.passCount + measuredFailCount
     }, settings);
     const metrics = buildRawHourlyMetrics(rows, settings);
     return {
