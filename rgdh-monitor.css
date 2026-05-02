@@ -292,6 +292,7 @@ button.ghost {
 }
 
 .rgdh-table-wrap.tests { max-height: calc(100vh - 320px); }
+.rgdh-table-wrap.raw-unit { max-height: 260px; }
 
 .rgdh-table {
   width: 100%;
@@ -332,6 +333,7 @@ button.ghost {
 .rgdh-table tbody tr:nth-child(even) td:first-child { background: var(--table-alt-bg); }
 .rgdh-table tbody tr:hover td:first-child,
 .rgdh-table tbody tr.selected td:first-child { background: var(--table-selected-bg); }
+.rgdh-table tbody tr.raw-unit-selectable { cursor: pointer; }
 .rgdh-table.compact td { text-align: center; }
 .rgdh-table.compact td:first-child,
 .rgdh-table.compact td:nth-child(2),
@@ -648,6 +650,14 @@ button.ghost {
   color: var(--rgdh-passive);
   padding: 14px;
   font-size: 13px;
+}
+
+.rgdh-raw-unit-detail {
+  margin-top: 10px;
+}
+
+.rgdh-raw-unit-detail[hidden] {
+  display: none;
 }
 
 .rgdh-context-label,

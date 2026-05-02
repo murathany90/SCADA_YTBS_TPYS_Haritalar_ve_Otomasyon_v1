@@ -50,6 +50,7 @@ $files = @(
   'rgdh-diagnostics.js',
   'rgdh-catalog-data.js',
   'rgdh-auxiliary-catalog.js',
+  'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_v2.csv',
   'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv',
   'yks-rgdh-instrumentation.js',
   'yks-rgdh-diagnostic-bridge.js',

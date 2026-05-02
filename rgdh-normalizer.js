@@ -74,6 +74,64 @@
     });
   }
 
+  function normalizeConventionalUnitApiRow(raw) {
+    const busbar = raw?.busbar || {};
+    const date = parseDate(raw?.measurementDate);
+    const matchedUnit = findConventionalUnitDefinition(raw, busbar);
+    const directDiLimit = numberFromAliases(raw, [
+      'sumDIMvarLimit',
+      'diMvarLimit',
+      'unitDIMvarLimit',
+      'dIMvarLimit',
+      'DIMvarLimit'
+    ]);
+    const directAiLimit = numberFromAliases(raw, [
+      'sumAIMvarLimit',
+      'aiMvarLimit',
+      'unitAIMvarLimit',
+      'aIMvarLimit',
+      'AIMvarLimit'
+    ]);
+    const unitId = nullableNumber(firstDefined(raw?.rgdhConvUnitId, raw?.unitId, raw?.uevcbId));
+    const unitName = stringValue(firstDefined(raw?.unitB3Name, raw?.unitName, matchedUnit?.name));
+    const busbarId = nullableNumber(firstDefined(busbar.busbarId, raw?.rgdhBusId));
+    const row = {
+      id: '',
+      sourceOrigin: 'API_UNIT',
+      sourceType: 'CONVENTIONAL_UNIT',
+      ...date,
+      ytm: stringValue(busbar.distributionCenter),
+      city: stringValue(busbar.city),
+      busbarInternalId: nullableNumber(busbar.id),
+      busbarId,
+      busbarName: stringValue(busbar.busbarName),
+      plantId: nullableNumber(busbar.plantId),
+      plantName: stringValue(busbar.plantName),
+      voltageLevel: nullableNumber(busbar.voltageLevel),
+      unitId,
+      unitName,
+      unitB1B2Name: stringValue(raw?.unitB1B2Name),
+      unitB3Name: stringValue(raw?.unitB3Name),
+      sourceKind: stringValue(firstDefined(raw?.resourceType, matchedUnit?.resourceType)),
+      hourlyMkudMw: nullableNumber(raw?.hourlyMkud),
+      minMkudMw: nullableNumber(raw?.minMkud),
+      pgenMw: nullableNumber(raw?.activePower),
+      qgenMvar: nullableNumber(raw?.reactivePower),
+      activePowerQuality: stringValue(raw?.activePowerQ0Txt),
+      reactivePowerQuality: stringValue(raw?.reactivePowerQ0Txt),
+      diMvarLimit: Number.isFinite(directDiLimit)
+        ? directDiLimit
+        : nullableNumber(firstDefined(matchedUnit?.underExcite, matchedUnit?.lowExcitationTest)),
+      aiMvarLimit: Number.isFinite(directAiLimit)
+        ? directAiLimit
+        : nullableNumber(firstDefined(matchedUnit?.overExcite, matchedUnit?.highExcitationTest)),
+      raw
+    };
+    const unitKey = row.unitId ?? row.unitName ?? 'UNKNOWN';
+    row.id = `${row.sourceType}:${row.busbarId ?? 'UNKNOWN'}:${unitKey}:${row.measurementDateLocal || row.measurementDateUtc || 'NO_DATE'}`;
+    return row;
+  }
+
   function normalizeWindApiRow(raw) {
     const busbar = raw?.busbar || {};
     const sourceType = normalizeWindMainSourceType(busbar.busbarType || 'WIND');
@@ -265,6 +323,31 @@
     }));
   }
 
+  function findConventionalUnitDefinition(raw, busbar) {
+    const unitId = stringValue(firstDefined(raw?.rgdhConvUnitId, raw?.unitId, raw?.uevcbId));
+    const unitName = normalizeText(firstDefined(raw?.unitB3Name, raw?.unitName));
+    const units = [
+      ...(Array.isArray(raw?.conventionalUnitList) ? raw.conventionalUnitList : []),
+      ...(Array.isArray(busbar?.conventionalUnitList) ? busbar.conventionalUnitList : [])
+    ];
+    if (unitId) {
+      const byId = units.find((unit) => {
+        const candidates = [
+          unit?.uevcbId,
+          unit?.rgdhConvUnitId,
+          unit?.unitId,
+          unit?.id
+        ].map((value) => stringValue(value));
+        return candidates.includes(unitId);
+      });
+      if (byId) return byId;
+    }
+    if (unitName) {
+      return units.find((unit) => normalizeText(firstDefined(unit?.name, unit?.unitName)).includes(unitName));
+    }
+    return null;
+  }
+
   function computeVoltageOutOfBand(row) {
     if (row.liveBusbarVoltage === null) return false;
     if (row.busbarUpperLimit !== null && row.liveBusbarVoltage > row.busbarUpperLimit) return true;
@@ -424,6 +507,21 @@
           busbar2Setnum: row.busbar2Setnum || '',
           busbar3Ta: row.busbar3Ta || '',
           busbar3Setnum: row.busbar3Setnum || '',
+          ytbsPlantName: row.ytbsPlantName || '',
+          ytbsSubstationId: row.ytbsSubstationId ?? null,
+          ytbsSubstationName: row.ytbsSubstationName || '',
+          latitude: row.latitude ?? null,
+          longitude: row.longitude ?? null,
+          ytbsSourceType: row.ytbsSourceType || '',
+          secondarySources: row.secondarySources || '',
+          city: row.city || '',
+          ytbsBusbarType: row.ytbsBusbarType || '',
+          hasSynchronousCondenser: row.hasSynchronousCondenser ?? null,
+          hasEuasProtocol: row.hasEuasProtocol ?? null,
+          platformRgkType: row.platformRgkType || '',
+          rgkTypeDescription: row.rgkTypeDescription || '',
+          isBalancingUnit: row.isBalancingUnit ?? null,
+          tpysPlantMkud: row.tpysPlantMkud ?? null,
           units: []
         });
       }
@@ -461,7 +559,23 @@
       speedDrop: row.speedDrop ?? null,
       powerFactor: row.powerFactor ?? null,
       terminalVoltage: row.terminalVoltage ?? null,
-      unitActive: row.unitActive ?? null
+      unitActive: row.unitActive ?? null,
+      ytbsPlantName: row.ytbsPlantName || '',
+      ytbsSubstationId: row.ytbsSubstationId ?? null,
+      ytbsSubstationName: row.ytbsSubstationName || '',
+      latitude: row.latitude ?? null,
+      longitude: row.longitude ?? null,
+      ytbsSourceType: row.ytbsSourceType || '',
+      secondarySources: row.secondarySources || '',
+      city: row.city || '',
+      ytbsBusbarType: row.ytbsBusbarType || '',
+      hasSynchronousCondenser: row.hasSynchronousCondenser ?? null,
+      hasEuasProtocol: row.hasEuasProtocol ?? null,
+      platformRgkType: row.platformRgkType || '',
+      rgkTypeDescription: row.rgkTypeDescription || '',
+      isBalancingUnit: row.isBalancingUnit ?? null,
+      tpysUnitMkud: row.tpysUnitMkud ?? null,
+      tpysPlantMkud: row.tpysPlantMkud ?? null
     };
   }
 
@@ -654,6 +768,7 @@
     RGDH_COMPARE_TOLERANCE,
     COMPARE_FIELDS,
     normalizeConventionalApiRow,
+    normalizeConventionalUnitApiRow,
     normalizeWindApiRow,
     normalizeCsvRow,
     normalizeCsvParseResult,

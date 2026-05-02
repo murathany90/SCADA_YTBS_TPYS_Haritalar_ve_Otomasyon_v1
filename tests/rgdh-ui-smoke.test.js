@@ -13,7 +13,7 @@ test('popup contains RGDH monitor button and popup.js opens the monitor page', (
   assert.match(js, /rgdh-monitor\.html/);
 });
 
-test('rgdh-monitor page wires scripts after RGDH dependencies and contains four tabs', () => {
+test('rgdh-monitor page wires scripts after RGDH dependencies and contains RGDH tabs', () => {
   const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
 
   assert.match(html, /YKS RGDH Izleme ve Dogrulama Sistemi/);
@@ -43,6 +43,8 @@ test('rgdh-monitor page wires scripts after RGDH dependencies and contains four 
   assert.doesNotMatch(html, /id="testUnitSelect"/);
   assert.doesNotMatch(html, /id="testSourceKindSelect"/);
   assert.match(html, /id="testUnitDetailsTable"/);
+  assert.match(html, /Diğer Detaylar|Diger Detaylar/);
+  assert.match(html, /id="testOtherDetailsTable"/);
   assert.match(html, /id="chartContextLabel"/);
   assert.match(html, /id="fetchLogPanel"/);
   assert.doesNotMatch(html, /<option value="HYBRID">Hibrit<\/option>/);
@@ -207,12 +209,24 @@ test('rgdh monitor exposes separate extension and YKS log panels', () => {
 
 test('rgdh monitor raw data table exposes original YKS status and approval columns', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
 
   ['TPYS GD', 'Devre Durumu', 'Yukumluluk Durumu', 'D.I MVAR ONAY', 'A.I MVAR ONAY', 'Onay Durum'].forEach((header) => {
     assert.match(js, new RegExp(header.replace('.', '\\.')));
   });
   assert.match(js, /formatStatusFlag/);
   assert.match(js, /formatObligationStatus/);
+  assert.match(html, /id="rawUnitDetail"/);
+  assert.match(html, /id="rawUnitTable"/);
+  assert.match(js, /conventionalUnitRows/);
+  assert.match(js, /rawUnitSelection/);
+  assert.match(js, /function renderRawUnitDetail/);
+  assert.match(js, /function selectRawUnitMinute/);
+  assert.match(js, /CONVENTIONAL_UNIT/);
+  assert.match(js, /Unite Pgen Aktif/);
+  assert.match(js, /Unite Qgen Reaktif/);
+  assert.match(css, /\.rgdh-raw-unit-detail/);
 });
 
 test('rgdh monitor caps auxiliary RES/GES polling budget at five minutes', () => {
@@ -282,18 +296,22 @@ test('rgdh-catalog-data.js is valid JSON with 81 busbar-unit rows', () => {
   assert.ok(data[0].bid, 'First row should have busbarId');
   assert.ok(data[0].bn, 'First row should have busbarName');
   assert.ok(data[0].sk, 'First row should have sourceKind');
+  assert.ok(data[0].ypn, 'First row should have YTBS plant name');
+  assert.ok(Object.prototype.hasOwnProperty.call(data[0], 'ybt'), 'First row should carry second Bara Tipi as YTBS busbar type');
   assert.ok(data.some(row => row.sk === 'WIND'), 'Should have WIND rows');
   assert.ok(data.some(row => row.sk !== 'WIND'), 'Should have CONVENTIONAL rows');
 });
 
-test('extension build and manifest include the auxiliary catalog overlay', () => {
+test('extension build and manifest include the auxiliary catalog overlay and v2 catalog', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
   const webResources = manifest.web_accessible_resources.flatMap((entry) => entry.resources || []);
 
   assert.ok(webResources.includes('rgdh-auxiliary-catalog.js'));
+  assert.ok(webResources.includes('yks_izleme_modul/yks_docs/rgdh_unite_tanimi_v2.csv'));
   assert.ok(webResources.includes('yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv'));
   assert.match(buildScript, /rgdh-auxiliary-catalog\.js/);
+  assert.match(buildScript, /yks_izleme_modul[\\\/]yks_docs[\\\/]rgdh_unite_tanimi_v2\.csv/);
   assert.match(buildScript, /yks_izleme_modul[\\\/]yks_docs[\\\/]rgdh_unite_tanimi_\.csv/);
 });
 

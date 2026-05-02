@@ -68,6 +68,79 @@ test('normalizeConventionalApiRow maps API fields to the shared model', () => {
   assert.equal(row.flags.voltageOutOfBand, false);
 });
 
+test('normalizeConventionalUnitApiRow maps unit endpoint fields and direct limits', () => {
+  const row = normalizer.normalizeConventionalUnitApiRow({
+    id: 15236472311,
+    measurementDate: '2026-05-01T21:00:00Z',
+    unitB1B2Name: 'CAYIRHAN/15',
+    unitB3Name: 'Gen 1',
+    rgdhBusId: 2112,
+    rgdhConvUnitId: 3204406,
+    activePower: 122.13,
+    minMkud: 90,
+    hourlyMkud: 450,
+    activePowerQ0Txt: 'Actual',
+    reactivePower: 22.71,
+    reactivePowerQ0Txt: 'Actual',
+    sumDIMvarLimit: -26,
+    sumAIMvarLimit: 34,
+    busbar: {
+      id: 10933818991,
+      busbarType: 'CONVENTIONAL',
+      busbarId: 2112,
+      busbarName: 'ÇAYIRHAN TES 380',
+      plantName: 'ÇAYIRHAN TES',
+      distributionCenter: 'OA_YTM'
+    }
+  });
+
+  assert.equal(row.sourceOrigin, 'API_UNIT');
+  assert.equal(row.sourceType, 'CONVENTIONAL_UNIT');
+  assert.equal(row.localDate, '2026-05-02');
+  assert.equal(row.localHour, 0);
+  assert.equal(row.localMinute, 0);
+  assert.equal(row.busbarInternalId, 10933818991);
+  assert.equal(row.busbarId, 2112);
+  assert.equal(row.busbarName, 'ÇAYIRHAN TES 380');
+  assert.equal(row.plantName, 'ÇAYIRHAN TES');
+  assert.equal(row.unitId, 3204406);
+  assert.equal(row.unitName, 'Gen 1');
+  assert.equal(row.unitB1B2Name, 'CAYIRHAN/15');
+  assert.equal(row.hourlyMkudMw, 450);
+  assert.equal(row.minMkudMw, 90);
+  assert.equal(row.pgenMw, 122.13);
+  assert.equal(row.qgenMvar, 22.71);
+  assert.equal(row.activePowerQuality, 'Actual');
+  assert.equal(row.reactivePowerQuality, 'Actual');
+  assert.equal(row.diMvarLimit, -26);
+  assert.equal(row.aiMvarLimit, 34);
+});
+
+test('normalizeConventionalUnitApiRow falls back to matched busbar unit excitation limits', () => {
+  const row = normalizer.normalizeConventionalUnitApiRow({
+    measurementDate: '2026-05-01T21:05:00Z',
+    unitB3Name: 'Gen 4',
+    rgdhConvUnitId: 3204406,
+    activePower: 120,
+    reactivePower: 21,
+    busbar: {
+      id: 10933818991,
+      busbarType: 'CONVENTIONAL',
+      busbarId: 2112,
+      busbarName: 'ÇAYIRHAN TES 380',
+      conventionalUnitList: [{
+        name: 'ÜNİTE-4',
+        uevcbId: 3204406,
+        underExcite: -27.5,
+        overExcite: 35.5
+      }]
+    }
+  });
+
+  assert.equal(row.diMvarLimit, -27.5);
+  assert.equal(row.aiMvarLimit, 35.5);
+});
+
 test('normalizeWindApiRow keeps RES/GES as main type and separates auxiliary source fields', () => {
   const row = normalizer.normalizeWindApiRow({
     measurementDate: '2026-04-01T07:59:00Z',
@@ -328,6 +401,37 @@ test('buildCatalogBusbarSummaries groups YKS catalog into 42 busbars with unit c
   assert.equal(acwa.units[0].unitActive, true);
   assert.equal(akyel.units.some((unit) => unit.unitName === 'YARDIMCI KAYNAK GES' && unit.nominalHighExcitation === 19.367), true);
   assert.equal(auxiliarySummaries.length, 8);
+});
+
+test('buildCatalogBusbarSummaries carries v2 YTBS details to summary and units', () => {
+  const catalogFile = path.join(__dirname, '..', 'yks_izleme_modul', 'yks_docs', 'rgdh_unite_tanimi_v2.csv');
+  const parsed = csv.parseRgdhCsvText(fs.readFileSync(catalogFile, 'utf8'), {
+    filename: path.basename(catalogFile)
+  });
+
+  const summaries = normalizer.buildCatalogBusbarSummaries(parsed.rows);
+  const akyel = summaries.find((row) => row.busbarId === 6002);
+  const mainUnit = akyel.units.find((unit) => unit.unitName === 'Ünite 1-12');
+
+  assert.equal(akyel.busbarType, 'WIND');
+  assert.equal(akyel.ytbsPlantName, 'AKYEL 1 RES');
+  assert.equal(akyel.ytbsSubstationId, 1735);
+  assert.equal(akyel.ytbsSubstationName, 'AKYEL 1 RES');
+  assert.equal(akyel.latitude, 36.961);
+  assert.equal(akyel.longitude, 33.469);
+  assert.equal(akyel.ytbsSourceType, 'Rüzgar');
+  assert.equal(akyel.secondarySources, 'Güneş');
+  assert.equal(akyel.city, 'Karaman');
+  assert.equal(akyel.ytbsBusbarType, 'Hibrit- RES/GES');
+  assert.equal(akyel.hasSynchronousCondenser, false);
+  assert.equal(akyel.hasEuasProtocol, false);
+  assert.equal(akyel.platformRgkType, 'HIB_RESGES_GK');
+  assert.equal(akyel.rgkTypeDescription, 'RES-1>> 03.01.2013 ve sonrası');
+  assert.equal(akyel.isBalancingUnit, false);
+  assert.equal(akyel.tpysPlantMkud, 0);
+  assert.equal(mainUnit.ytbsPlantName, 'AKYEL 1 RES');
+  assert.equal(mainUnit.ytbsBusbarType, 'Hibrit- RES/GES');
+  assert.equal(mainUnit.tpysUnitMkud, 0);
 });
 
 test('auxiliary catalog overlay adds Karaman and RES/GES helper GES units from YKS definitions', () => {

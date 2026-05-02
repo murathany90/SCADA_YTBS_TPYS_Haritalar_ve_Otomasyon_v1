@@ -43,9 +43,10 @@ const RGDH_WIND_CHUNK_CONCURRENCY = 3;
 const RGDH_WIND_CHUNK_SPAN_HOURS = 2;
 const RGDH_CATALOG_TARGETED_SIZE = 50;
 const RGDH_CATALOG_FALLBACK_MAX_PAGES = 5;
-const RGDH_FETCH_ROW_KINDS = ['conventionalRows', 'windRows', 'domRows'];
+const RGDH_FETCH_ROW_KINDS = ['conventionalRows', 'conventionalUnitRows', 'windRows', 'domRows'];
 const RGDH_ALLOWED_PATHS = [
   '/api/rgdh-conventional-busbar-data',
+  '/api/teias-rgdh-conv-unit-data',
   '/api/rgdh-wind-busbar-data',
   '/api/rgdh-wind-busbar-data-csv',
   '/api/general-parameter-by-name',
@@ -527,7 +528,7 @@ async function handleRgdhFetchCancel(payload) {
 }
 
 function createEmptyRgdhRowStore() {
-  return { conventionalRows: [], windRows: [], domRows: [] };
+  return { conventionalRows: [], conventionalUnitRows: [], windRows: [], domRows: [] };
 }
 
 function extractRgdhResultRows(result) {
@@ -546,10 +547,12 @@ function summarizeRgdhFetchResult(result, rowStore = createEmptyRgdhRowStore()) 
   delete summary.continuationPayload;
   delete summary.continuationPayloads;
   const conventionalRows = rowStore.conventionalRows?.length || 0;
+  const conventionalUnitRows = rowStore.conventionalUnitRows?.length || 0;
   const windRows = rowStore.windRows?.length || 0;
   const domRows = rowStore.domRows?.length || 0;
   summary.rowCounts = {
     conventionalRows,
+    conventionalUnitRows,
     windRows,
     domRows,
     apiRows: conventionalRows + windRows
@@ -591,6 +594,7 @@ async function handleRgdhFetch(payload) {
   const result = {
     ok: true,
     conventionalRows: [],
+    conventionalUnitRows: [],
     windRows: [],
     domRows: [],
     partialErrors: [],
@@ -615,6 +619,16 @@ async function handleRgdhFetch(payload) {
 
   for (const localDate of dates) {
     if (sourceType === 'ALL' || sourceType === 'CONVENTIONAL') {
+      const unitFetched = await fetchRgdhConventionalUnitDay({
+        api,
+        localDate,
+        busbarId: selectedInternalIds[0],
+        payload,
+        deadlineAt
+      });
+      result.logs.push(...unitFetched.logs);
+      result.conventionalUnitRows.push(...unitFetched.rows);
+      result.partialErrors.push(...unitFetched.partialErrors);
       try {
         const fetched = await fetchRgdhBusbarByHours({
           api,
@@ -1206,6 +1220,86 @@ async function fetchRgdhWithFallbackDetailed(endpoint, params, options = {}) {
       throw directError;
     }
   }
+}
+
+async function fetchRgdhConventionalUnitDay({ api, localDate, busbarId, payload, deadlineAt }) {
+  const endpoint = api.RGDH_ENDPOINTS.conventionalUnit;
+  const rows = [];
+  const logs = [];
+  const partialErrors = [];
+  const timeoutMs = clampRgdhRequestTimeout(Number(payload.conventionalUnitTimeoutMs || RGDH_PAGE_FETCH_TIMEOUT_MS), deadlineAt);
+  const params = api.buildConventionalUnitDayParams(localDate, busbarId, {
+    size: Number(payload.conventionalUnitPageSize || 57600)
+  });
+  delete params.page;
+  const requestUrl = buildSafeRgdhRequestUrl(api, endpoint, params);
+
+  if (timeoutMs <= 0) {
+    const error = {
+      source: 'CONVENTIONAL_UNIT',
+      busbarId,
+      internalBusbarId: busbarId,
+      localDate,
+      chunkStart: params['measurementDate.greaterOrEqualThan'] || '',
+      chunkEnd: params['measurementDate.lessThan'] || '',
+      requestUrl,
+      errorType: 'YKS_JOB_TIMEOUT',
+      errorClass: 'YKS_JOB_TIMEOUT',
+      message: `YKS cekimi ${Math.round(Number(payload.jobTimeoutMs || RGDH_JOB_TIMEOUT_MS) / 1000)} sn toplam sure butcesini doldurdu.`
+    };
+    logs.push(createRgdhLog('warn', 'CONVENTIONAL_UNIT', `${localDate}: konvansiyonel unite verisi alinamadi: ${error.message}`, error));
+    return { rows, logs, partialErrors: [error] };
+  }
+
+  logs.push(createRgdhLog('info', 'CONVENTIONAL_UNIT', `${localDate}: konvansiyonel unite endpoint sorgulanacak: ${busbarId}`, {
+    endpoint,
+    params: sanitizeRgdhParams(params),
+    busbarId,
+    internalBusbarId: busbarId,
+    localDate,
+    chunkStart: params['measurementDate.greaterOrEqualThan'] || '',
+    chunkEnd: params['measurementDate.lessThan'] || '',
+    requestUrl,
+    pageTimeoutMs: timeoutMs
+  }));
+
+  const pageResult = await runRgdhPageFetchInYksTab({ endpoint, params, timeoutMs });
+  if (!pageResult?.ok) {
+    const sanitized = sanitizeRgdhBackgroundError({
+      ...(pageResult || {}),
+      message: pageResult?.error || pageResult?.reason || pageResult?.message
+    });
+    const error = {
+      source: 'CONVENTIONAL_UNIT',
+      busbarId,
+      internalBusbarId: busbarId,
+      localDate,
+      chunkStart: params['measurementDate.greaterOrEqualThan'] || '',
+      chunkEnd: params['measurementDate.lessThan'] || '',
+      requestUrl,
+      errorClass: sanitized.errorType,
+      ...sanitized
+    };
+    logs.push(createRgdhLog('warn', 'CONVENTIONAL_UNIT', `${localDate}: konvansiyonel unite verisi alinamadi: ${sanitized.message}`, error));
+    return { rows, logs, partialErrors: [error] };
+  }
+
+  rows.push(...(Array.isArray(pageResult.rows) ? pageResult.rows : []));
+  logs.push(createRgdhLog('success', 'CONVENTIONAL_UNIT', `${localDate}: konvansiyonel unite endpoint ${rows.length} kayit aldi.`, {
+    endpoint,
+    busbarId,
+    internalBusbarId: busbarId,
+    localDate,
+    chunkStart: params['measurementDate.greaterOrEqualThan'] || '',
+    chunkEnd: params['measurementDate.lessThan'] || '',
+    requestUrl,
+    rowCount: rows.length,
+    conventionalUnitRows: rows.length,
+    responseTotalCount: pageResult.totalCount || pageResult.responseTotalCount || null,
+    responseLink: pageResult.responseLink || ''
+  }));
+
+  return { rows: sortRgdhRowsByMeasurementDate(rows), logs, partialErrors };
 }
 
 async function fetchRgdhBusbarByHours({ api, source, endpoint, buildParams, localDate, busbarId, payload, deadlineAt, preflight = true, logContext = {} }) {
@@ -3212,6 +3306,7 @@ function createRgdhError(message, errorType, httpStatus) {
 async function rgdhPageFetchMainWorld(request) {
   const allowed = [
     '/api/rgdh-conventional-busbar-data',
+    '/api/teias-rgdh-conv-unit-data',
     '/api/rgdh-wind-busbar-data',
     '/api/rgdh-wind-busbar-data-csv',
     '/api/general-parameter-by-name',

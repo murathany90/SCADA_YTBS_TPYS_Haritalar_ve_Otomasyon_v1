@@ -45,6 +45,31 @@ test('buildRgdhUrl allows the YKS wind CSV range endpoint', () => {
   assert.equal(url.searchParams.has('page'), false);
 });
 
+test('buildRgdhUrl allows the YKS conventional unit data endpoint', () => {
+  const url = api.buildRgdhUrl('/api/teias-rgdh-conv-unit-data', {
+    'measurementDate.greaterOrEqualThan': '2026-05-01T21:00:00Z',
+    'measurementDate.lessThan': '2026-05-02T21:00:00Z',
+    'busbarId.equals': 10933818991,
+    size: 57600,
+    sort: 'measurementDate,asc'
+  });
+
+  assert.equal(api.RGDH_ENDPOINTS.conventionalUnit, '/api/teias-rgdh-conv-unit-data');
+  assert.equal(url.pathname, '/api/teias-rgdh-conv-unit-data');
+  assert.equal(url.searchParams.get('busbarId.equals'), '10933818991');
+});
+
+test('buildConventionalUnitDayParams mirrors YKS unit table request without page parameter', () => {
+  const params = api.buildConventionalUnitDayParams('2026-05-02', 10933818991);
+
+  assert.equal(params['measurementDate.greaterOrEqualThan'], '2026-05-01T21:00:00Z');
+  assert.equal(params['measurementDate.lessThan'], '2026-05-02T21:00:00Z');
+  assert.equal(params['busbarId.equals'], 10933818991);
+  assert.equal(params.size, 57600);
+  assert.equal(params.sort, 'measurementDate,asc');
+  assert.equal(Object.hasOwn(params, 'page'), false);
+});
+
 test('buildConventionalDayParams maps selected YKS internal busbar id to busbarId.equals', () => {
   const params = api.buildConventionalDayParams('2026-04-30', {
     busbarInternalId: 10933818977,

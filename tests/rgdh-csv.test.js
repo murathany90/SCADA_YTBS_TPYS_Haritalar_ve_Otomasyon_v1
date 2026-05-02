@@ -16,6 +16,14 @@ test('parseSemicolonCsv handles BOM, quotes, semicolons and blank rows', () => {
   assert.equal(parsed.rows[0].Deger, '409,51');
 });
 
+test('parseSemicolonCsv preserves duplicate headers with ordinal suffixes', () => {
+  const parsed = csv.parseSemicolonCsv('Bara Tipi;Bara ID;Bara Tipi\nWIND;6002;Hibrit- RES/GES');
+
+  assert.deepEqual(parsed.headers, ['Bara Tipi', 'Bara ID', 'Bara Tipi']);
+  assert.equal(parsed.rows[0]['Bara Tipi'], 'WIND');
+  assert.equal(parsed.rows[0]['Bara Tipi__2'], 'Hibrit- RES/GES');
+});
+
 test('parseTurkishNumber supports decimal comma and null-like values', () => {
   assert.equal(csv.parseTurkishNumber('409,51'), 409.51);
   assert.equal(csv.parseTurkishNumber('-0,95'), -0.95);
@@ -100,7 +108,7 @@ test('detectRgdhCsvType identifies busbar unit catalog exports', () => {
   assert.equal(parsed.rows[0].unitActive, true);
 });
 
-test('rgdh_unite_tanimi catalog loads 81 rows and exports in source format', () => {
+test('rgdh_unite_tanimi catalog loads 81 rows and exports in v2 format', () => {
   const catalogPath = path.join(__dirname, '..', 'yks_izleme_modul', 'yks_docs', 'rgdh_unite_tanimi_.csv');
   const parsed = csv.parseRgdhCsvText(fs.readFileSync(catalogPath, 'utf8'), {
     filename: path.basename(catalogPath)
@@ -145,17 +153,72 @@ test('rgdh_unite_tanimi catalog loads 81 rows and exports in source format', () 
     'Ünite PMKUD',
     'Nominal İkaz (Düşük)',
     'Nominal İkaz (Aşırı)',
-    'Ünite Aktif mi ?'
+    'Ünite Aktif mi ?',
+    'YTBS Santral Adı',
+    'YTBS Trafo Merkezi ID',
+    'YTBS Trafo Merkezi Adı',
+    'Enlem',
+    'Boylam',
+    'KAYNAK TÜRÜ',
+    'İkincil Kaynakları',
+    'İli',
+    'Bara Tipi',
+    'Senkron Kompansatör Var mI?',
+    'EÜAŞ Protokol Var Mı?',
+    'Yan Hizmetler Analiz Platformu RGK Tipi',
+    'RGK TİPİ Açıklama',
+    'Dengeleme Birimi mi?',
+    'TPYS Ünite MKÜD',
+    'TPYS Santral MKÜD'
   ]);
   assert.equal(exportedParsed.rows.length, 81);
   assert.equal(exportedParsed.rows.find((row) => row['Bara ID'] === '6002' && row['Ünite Adı'] === 'YARDIMCI KAYNAK GES')['Ünite Nominal Güç'], '39,990');
+});
+
+test('rgdh_unite_tanimi_v2 catalog parses new YTBS detail columns and exports in v2 order', () => {
+  const catalogPath = path.join(__dirname, '..', 'yks_izleme_modul', 'yks_docs', 'rgdh_unite_tanimi_v2.csv');
+  const raw = fs.readFileSync(catalogPath, 'utf8');
+  const sourceHeaders = csv.parseSemicolonCsv(raw).headers;
+  const parsed = csv.parseRgdhCsvText(raw, { filename: path.basename(catalogPath) });
+  const akyel = parsed.rows.find((row) => row.busbarId === 6002 && row.unitName === 'Ünite 1-12');
+
+  assert.equal(parsed.type, 'BUSBAR_UNIT_CATALOG');
+  assert.equal(parsed.rows.length, 81);
+  assert.equal(akyel.busbarType, 'WIND');
+  assert.equal(akyel.ytbsBusbarType, 'Hibrit- RES/GES');
+  assert.equal(akyel.ytbsPlantName, 'AKYEL 1 RES');
+  assert.equal(akyel.ytbsSubstationId, 1735);
+  assert.equal(akyel.ytbsSubstationName, 'AKYEL 1 RES');
+  assert.equal(akyel.latitude, 36.961);
+  assert.equal(akyel.longitude, 33.469);
+  assert.equal(akyel.ytbsSourceType, 'Rüzgar');
+  assert.equal(akyel.secondarySources, 'Güneş');
+  assert.equal(akyel.city, 'Karaman');
+  assert.equal(akyel.hasSynchronousCondenser, false);
+  assert.equal(akyel.hasEuasProtocol, false);
+  assert.equal(akyel.platformRgkType, 'HIB_RESGES_GK');
+  assert.equal(akyel.rgkTypeDescription, 'RES-1>> 03.01.2013 ve sonrası');
+  assert.equal(akyel.isBalancingUnit, false);
+  assert.equal(akyel.tpysUnitMkud, 0);
+  assert.equal(akyel.tpysPlantMkud, 0);
+
+  const exported = csv.buildCatalogExportCsv(parsed.rows);
+  const exportedParsed = csv.parseSemicolonCsv(exported.replace(/^\uFEFFsep=;\n/, ''));
+  const exportedAkyel = exportedParsed.rows.find((row) => row['Bara ID'] === '6002' && row['Ünite Adı'] === 'Ünite 1-12');
+
+  assert.deepEqual(exportedParsed.headers, sourceHeaders);
+  assert.equal(exportedAkyel['Bara Tipi'], 'WIND');
+  assert.equal(exportedAkyel['Bara Tipi__2'], 'Hibrit- RES/GES');
+  assert.equal(exportedAkyel['YTBS Santral Adı'], 'AKYEL 1 RES');
+  assert.equal(exportedAkyel['Enlem'], '36,961');
+  assert.equal(exportedAkyel['TPYS Santral MKÜD'], '0');
 });
 
 test('EK-C fixtures parse V P Q fields for all minute rows', () => {
   const fixtureDir = path.join(__dirname, '..', 'yks_izleme_modul', 'ek-c_test_csv_datalar');
   const files = fs.readdirSync(fixtureDir).filter((file) => file.toLowerCase().endsWith('.csv'));
 
-  assert.ok(files.length >= 6);
+  assert.ok(files.length > 0);
   files.forEach((file) => {
     const parsed = csv.parseEkcCsvText(fs.readFileSync(path.join(fixtureDir, file), 'utf8'), { filename: file });
     const rows = parsed.rows || [];

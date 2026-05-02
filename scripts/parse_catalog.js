@@ -3,7 +3,7 @@ const path = require('path');
 
 const csv = require('../rgdh-csv.js');
 
-const csvPath = path.join(__dirname, '..', 'yks_izleme_modul', 'yks_docs', 'rgdh_unite_tanimi_.csv');
+const csvPath = path.join(__dirname, '..', 'yks_izleme_modul', 'yks_docs', 'rgdh_unite_tanimi_v2.csv');
 const outPath = path.join(__dirname, '..', 'rgdh-catalog-data.js');
 
 const shortNames = {
@@ -38,7 +38,23 @@ const shortNames = {
   speedDrop: 'sd',
   powerFactor: 'pf',
   terminalVoltage: 'tv',
-  unitActive: 'ua'
+  unitActive: 'ua',
+  ytbsPlantName: 'ypn',
+  ytbsSubstationId: 'ysid',
+  ytbsSubstationName: 'ysn',
+  latitude: 'lat',
+  longitude: 'lon',
+  ytbsSourceType: 'ysrc',
+  secondarySources: 'secsrc',
+  city: 'city',
+  ytbsBusbarType: 'ybt',
+  hasSynchronousCondenser: 'sync',
+  hasEuasProtocol: 'euas',
+  platformRgkType: 'prgk',
+  rgkTypeDescription: 'rgkdesc',
+  isBalancingUnit: 'db',
+  tpysUnitMkud: 'tum',
+  tpysPlantMkud: 'tpm'
 };
 
 function compactCatalogRow(row) {

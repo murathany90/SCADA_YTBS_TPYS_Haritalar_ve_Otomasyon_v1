@@ -8,6 +8,7 @@
   const YKS_BASE_URL = 'https://yks.teias.gov.tr';
   const RGDH_ENDPOINTS = {
     conventional: '/api/rgdh-conventional-busbar-data',
+    conventionalUnit: '/api/teias-rgdh-conv-unit-data',
     wind: '/api/rgdh-wind-busbar-data',
     windCsv: '/api/rgdh-wind-busbar-data-csv',
     parameter: '/api/general-parameter-by-name',
@@ -141,6 +142,18 @@
       sort: 'measurementDate,asc',
       ...normalizedExtra
     };
+  }
+
+  function buildConventionalUnitDayParams(localDate, busbarInternalId, extra = {}) {
+    const range = buildUtcDayRangeForIstanbul(localDate);
+    return normalizeBusbarExtra({
+      'measurementDate.greaterOrEqualThan': range.startUtc,
+      'measurementDate.lessThan': range.endUtc,
+      busbarInternalId,
+      size: 57600,
+      sort: 'measurementDate,asc',
+      ...extra
+    });
   }
 
   function buildWindDayParams(localDate, busbarInternalId, extra = {}) {
@@ -354,6 +367,7 @@
     parseLastPageFromLinkHeader,
     fetchAllPages,
     buildConventionalDayParams,
+    buildConventionalUnitDayParams,
     buildWindDayParams,
     buildConventionalHourParams,
     buildWindHourParams,

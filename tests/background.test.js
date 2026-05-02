@@ -445,6 +445,9 @@ test('handleRgdhFetch chunks selected conventional busbar by hourly exclusive da
   const calls = [];
   context.runRgdhPageFetchInYksTab = async (payload) => {
     calls.push(payload);
+    if (payload.endpoint === '/api/teias-rgdh-conv-unit-data') {
+      return { ok: true, rows: [{ measurementDate: payload.params['measurementDate.greaterOrEqualThan'], unitB3Name: 'Gen 1' }], lastPage: 0, totalCount: 1 };
+    }
     return { ok: true, rows: [{ measurementDate: payload.params['measurementDate.greaterOrEqualThan'] }], lastPage: 0, totalCount: 1 };
   };
 
@@ -456,19 +459,49 @@ test('handleRgdhFetch chunks selected conventional busbar by hourly exclusive da
   });
 
   assert.equal(result.ok, true);
+  assert.equal(result.conventionalUnitRows.length, 1);
   assert.equal(result.conventionalRows.length, 24);
-  assert.equal(calls.length, 24);
-  assert.equal(calls[0].endpoint, '/api/rgdh-conventional-busbar-data');
+  assert.equal(calls.length, 25);
+  assert.equal(calls[0].endpoint, '/api/teias-rgdh-conv-unit-data');
   assert.equal(calls[0].params['measurementDate.greaterOrEqualThan'], '2026-03-31T21:00:00Z');
-  assert.equal(calls[0].params['measurementDate.lessThan'], '2026-03-31T22:00:00Z');
+  assert.equal(calls[0].params['measurementDate.lessThan'], '2026-04-01T21:00:00Z');
   assert.equal(calls[0].params['busbarId.equals'], '10933818993');
-  assert.equal(calls[0].params.size, 60);
+  assert.equal(calls[0].params.size, 57600);
   assert.equal(calls[0].params.sort, 'measurementDate,asc');
-  assert.equal(calls[23].params['measurementDate.greaterOrEqualThan'], '2026-04-01T20:00:00Z');
-  assert.equal(calls[23].params['measurementDate.lessThan'], '2026-04-01T21:00:00Z');
+  assert.equal(Object.hasOwn(calls[0].params, 'page'), false);
+  assert.equal(calls[1].endpoint, '/api/rgdh-conventional-busbar-data');
+  assert.equal(calls[1].params['measurementDate.greaterOrEqualThan'], '2026-03-31T21:00:00Z');
+  assert.equal(calls[1].params['measurementDate.lessThan'], '2026-03-31T22:00:00Z');
+  assert.equal(calls[24].params['measurementDate.greaterOrEqualThan'], '2026-04-01T20:00:00Z');
+  assert.equal(calls[24].params['measurementDate.lessThan'], '2026-04-01T21:00:00Z');
   assert.equal(calls.some((call) => call.params.size === 1440), false);
   assert.equal(result.logs.some((log) => /2026-04-01 00:00-01:00/.test(log.message)), true);
   assert.equal(result.logs.some((log) => /Saatlik toplam 24 kayit alindi/.test(log.message)), true);
+});
+
+test('handleRgdhFetch keeps conventional busbar rows when conventional unit endpoint fails', async () => {
+  const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => [] }) });
+  const calls = [];
+  context.runRgdhPageFetchInYksTab = async (payload) => {
+    calls.push(payload);
+    if (payload.endpoint === '/api/teias-rgdh-conv-unit-data') {
+      return { ok: false, error: 'unit timeout', errorType: 'PAGE_FETCH_TIMEOUT', httpStatus: null };
+    }
+    return { ok: true, rows: [{ measurementDate: payload.params['measurementDate.greaterOrEqualThan'] }], lastPage: 0, totalCount: 1 };
+  };
+
+  const result = await context.handleRgdhFetch({
+    localDate: '2026-04-01',
+    sourceType: 'CONVENTIONAL',
+    busbarInternalIds: ['10933818993']
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.conventionalUnitRows.length, 0);
+  assert.equal(result.conventionalRows.length, 24);
+  assert.equal(calls[0].endpoint, '/api/teias-rgdh-conv-unit-data');
+  assert.equal(result.partialErrors.some((error) => error.source === 'CONVENTIONAL_UNIT' && error.errorType === 'PAGE_FETCH_TIMEOUT'), true);
+  assert.equal(result.logs.some((log) => log.phase === 'CONVENTIONAL_UNIT' && log.level === 'warn'), true);
 });
 
 test('handleRgdhFetch chunks selected RES/GES busbar by hourly page-zero date ranges', async () => {
@@ -1549,6 +1582,7 @@ test('RGDH fetch jobs keep row payloads out of status and expose chunks separate
   context.handleRgdhFetch = async () => ({
     ok: true,
     conventionalRows: [{ id: 1 }, { id: 2 }],
+    conventionalUnitRows: [{ id: 'u1' }, { id: 'u2' }],
     windRows: [{ id: 3 }],
     domRows: [],
     partialErrors: [],
@@ -1563,10 +1597,16 @@ test('RGDH fetch jobs keep row payloads out of status and expose chunks separate
   await new Promise((resolve) => setImmediate(resolve));
   const completed = await context.handleRgdhFetchStatus({ jobId: started.jobId });
   const chunk = await context.handleRgdhFetchRows({ jobId: started.jobId, kind: 'conventionalRows', offset: 1, limit: 1 });
+  const unitChunk = await context.handleRgdhFetchRows({ jobId: started.jobId, kind: 'conventionalUnitRows', offset: 0, limit: 2 });
 
   assert.equal(completed.status, 'completed');
   assert.equal(completed.result.conventionalRows, undefined);
+  assert.equal(completed.result.conventionalUnitRows, undefined);
   assert.equal(completed.result.rowCounts.conventionalRows, 2);
+  assert.equal(completed.result.rowCounts.conventionalUnitRows, 2);
+  assert.equal(completed.result.rowCounts.apiRows, 3);
   assert.deepEqual(chunk.rows, [{ id: 2 }]);
   assert.equal(chunk.total, 2);
+  assert.deepEqual(unitChunk.rows, [{ id: 'u1' }, { id: 'u2' }]);
+  assert.equal(unitChunk.total, 2);
 });

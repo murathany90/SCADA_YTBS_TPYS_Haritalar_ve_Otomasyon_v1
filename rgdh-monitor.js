@@ -2,6 +2,7 @@
   const state = {
     apiRows: [],
     domRows: [],
+    conventionalUnitRows: [],
     ekcRows: [],
     ekcGroups: [],
     ekcLoaded: false,
@@ -14,6 +15,7 @@
     chartSelection: { busbarId: null, hour: null, date: null },
     compareSelection: { busbarId: '', ytm: '', hourMode: 'all', hourStart: null, hourEnd: null, hour: null, date: null },
     compareHourRows: [],
+    rawUnitSelection: null,
     selectedTestBusbarKey: '',
     errors: [],
     fetchLogs: [],
@@ -30,11 +32,12 @@
   const COMPARE_KY_THRESHOLD_PCT = 80;
   const COMPARE_AVG_DELTA_LIMITS = { dV: 0.5, dP: 1, dQ: 1 };
   const COMPARE_MAX_DELTA_LIMITS = { dV: 3, dP: 10, dQ: 5 };
+  const CONVENTIONAL_UNIT_SOURCE_TYPE = 'CONVENTIONAL_UNIT';
 
   document.addEventListener('DOMContentLoaded', init);
 
   const CATALOG_SHORT_TO_LONG = {
-    bt: 'baraTipi', bid: 'busbarId', bn: 'busbarName', rt: 'rgkType', vl: 'voltageLevel',
+    bt: 'busbarType', bid: 'busbarId', bn: 'busbarName', rt: 'rgkType', vl: 'voltageLevel',
     ytm: 'ytm', pid: 'plantId', pn: 'plantName',
     b1t: 'busbar1Ta', b1s: 'busbar1Setnum', b2t: 'busbar2Ta', b2s: 'busbar2Setnum',
     b3t: 'busbar3Ta', b3s: 'busbar3Setnum',
@@ -43,7 +46,12 @@
     pnom: 'unitPnomMw', pmkud: 'unitPmkudMw',
     lowTest: 'lowExcitationTest', highTest: 'highExcitationTest',
     nomLow: 'nominalLowExcitation', nomHigh: 'nominalHighExcitation',
-    sd: 'speedDrop', pf: 'powerFactor', tv: 'terminalVoltage', ua: 'unitActive'
+    sd: 'speedDrop', pf: 'powerFactor', tv: 'terminalVoltage', ua: 'unitActive',
+    ypn: 'ytbsPlantName', ysid: 'ytbsSubstationId', ysn: 'ytbsSubstationName',
+    lat: 'latitude', lon: 'longitude', ysrc: 'ytbsSourceType', secsrc: 'secondarySources',
+    city: 'city', ybt: 'ytbsBusbarType', sync: 'hasSynchronousCondenser',
+    euas: 'hasEuasProtocol', prgk: 'platformRgkType', rgkdesc: 'rgkTypeDescription',
+    db: 'isBalancingUnit', tum: 'tpysUnitMkud', tpm: 'tpysPlantMkud'
   };
 
   function expandCatalogRow(short) {
@@ -58,6 +66,7 @@
   }
 
   const DEFAULT_CATALOG_PATHS = [
+    'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_v2.csv',
     'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv',
     'yks_izleme_modul/yks_docs/data1/_BARA_VE_UNITE_TANIMLAMA_CSV_2026-04-30T12_20_06Z_.csv',
     'yks_izleme_modul/yks_docs/data1/_BARA_VE_\u00DCN\u0130TE_TANIMLAMA_CSV_2026-04-30T12_20_06Z_.csv'
@@ -123,7 +132,7 @@
       'btnFetchYks', 'btnCancelFetch', 'btnPickCsv', 'csvInput',
       'btnExportCsv', 'btnToggleTheme', 'btnToggleVoltage',
       'statSource', 'statRows', 'statBusbars',
-      'statMismatch', 'statStatus', 'rawTable', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable',
+      'statMismatch', 'statStatus', 'rawTable', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
       'testCatalogSearchInput', 'testBusbarTypeSelect', 'testBusbarSelect', 'testHybridOnlyCheckbox', 'btnExportTestsCsv',
       'btnErrorDetails', 'extensionLogCount', 'extensionLogPanel', 'btnCloseErrors', 'btnExportExtensionLogCsv', 'btnClearErrorLogs', 'extensionLogList',
       'btnYksLogs', 'yksLogCount', 'yksLogPanel', 'btnRefreshYksLogs', 'btnExportYksLogCsv', 'btnClearYksLogs', 'btnCloseYksLogs', 'yksLogList',
@@ -369,7 +378,7 @@
   async function hydrateFetchResultRows(jobId, result) {
     if (!result?.hasRowChunks || !RGDH_DOM_BRIDGE.getRgdhFetchRows) return result || {};
     const hydrated = { ...result };
-    for (const kind of ['conventionalRows', 'windRows', 'domRows']) {
+    for (const kind of ['conventionalRows', 'conventionalUnitRows', 'windRows', 'domRows']) {
       const total = Number(result.rowCounts?.[kind] || 0);
       hydrated[kind] = [];
       for (let offset = 0; offset < total; offset += 1000) {
@@ -390,11 +399,13 @@
       ...(response.busbarInternalIds || [])
     ]);
     const conventional = (response.conventionalRows || []).map(RGDH_NORMALIZER.normalizeConventionalApiRow);
+    const conventionalUnits = (response.conventionalUnitRows || []).map(RGDH_NORMALIZER.normalizeConventionalUnitApiRow);
     const wind = (response.windRows || []).map(RGDH_NORMALIZER.normalizeWindApiRow);
     const dom = (response.domRows || [])
       .map((row) => RGDH_NORMALIZER.finalizeRow({ ...row, sourceOrigin: 'DOM' }))
       .filter((row) => !RGDH_NORMALIZER.isZeroDomMeasurementRow(row));
     state.apiRows = enrichRows([...conventional, ...wind]);
+    state.conventionalUnitRows = conventionalUnits;
     state.domRows = enrichRows(dom);
     (response.partialErrors || []).forEach((item) => {
       pushError('API', item.message || item.error || String(item), item);
@@ -610,7 +621,9 @@
     state.pivot = RGDH_PIVOT.buildDailyPivot(rows);
     renderFilterNotice(rows);
     renderStats(rows);
+    syncRawUnitSelectionWithRows(rows);
     renderRawTable(rows);
+    renderRawUnitDetail();
     renderDailyTable(state.pivot.rows);
     renderDailyMetricTable(state.pivot.rows);
     renderCharts(rows, state.pivot.rows);
@@ -1124,6 +1137,14 @@
     rows.slice(0, 2000).forEach((row) => {
       const tr = document.createElement('tr');
       const status = rowStatus(row);
+      const rawSelection = buildRawUnitSelection(row);
+      if (rawSelection) {
+        tr.classList.add('raw-unit-selectable');
+        tr.title = 'Bu dakikanin konvansiyonel unite detaylarini goster';
+      }
+      if (rawSelection && rawUnitSelectionEquals(state.rawUnitSelection, rawSelection)) {
+        tr.classList.add('selected');
+      }
       const cols = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
       tr.innerHTML = [
         badge(row.sourceOrigin),
@@ -1152,9 +1173,112 @@
         formatStatusFlag(row.approvalStatus ?? row.auxiliaryApprovalStatus),
         `${badge(status)} ${rowMismatchBadge(row)}`
       ].map((value, index) => `<td class="${cols[index]}">${value}</td>`).join('');
+      tr.addEventListener('click', () => selectRawUnitMinute(row));
       tbody.appendChild(tr);
     });
     el.rawTable.appendChild(tbody);
+  }
+
+  function selectRawUnitMinute(row) {
+    const selection = buildRawUnitSelection(row);
+    state.rawUnitSelection = selection;
+    renderRawTable(getFilteredRows());
+    renderRawUnitDetail();
+  }
+
+  function syncRawUnitSelectionWithRows(rows) {
+    if (!state.rawUnitSelection) return;
+    const stillVisible = (rows || []).some((row) => {
+      const selection = buildRawUnitSelection(row);
+      return selection && rawUnitSelectionEquals(selection, state.rawUnitSelection);
+    });
+    if (!stillVisible) state.rawUnitSelection = null;
+  }
+
+  function buildRawUnitSelection(row) {
+    if (!row || String(row.sourceOrigin || '').toUpperCase() !== 'API') return null;
+    if (String(row.sourceType || '').toUpperCase() !== 'CONVENTIONAL') return null;
+    const minuteKey = String(row.measurementDateLocal || row.measurementDateUtc || '').slice(0, 16);
+    if (!minuteKey) return null;
+    return {
+      busbarInternalId: row.busbarInternalId ?? null,
+      busbarId: row.busbarId ?? null,
+      measurementMinute: minuteKey,
+      measurementDateLocal: row.measurementDateLocal || '',
+      label: `${row.busbarName || row.busbarId || '-'} ${minuteKey.replace('T', ' ')}`
+    };
+  }
+
+  function rawUnitSelectionEquals(left, right) {
+    if (!left || !right) return false;
+    return String(left.measurementMinute || '') === String(right.measurementMinute || '')
+      && String(left.busbarInternalId ?? '') === String(right.busbarInternalId ?? '')
+      && String(left.busbarId ?? '') === String(right.busbarId ?? '');
+  }
+
+  function renderRawUnitDetail() {
+    if (!el.rawUnitDetail || !el.rawUnitTable) return;
+    const selection = state.rawUnitSelection;
+    const rows = selection ? filterConventionalUnitRowsForSelection(selection) : [];
+    if (!selection || !rows.length) {
+      el.rawUnitDetail.hidden = true;
+      el.rawUnitTable.innerHTML = '';
+      return;
+    }
+    el.rawUnitDetail.hidden = false;
+    if (el.rawUnitTitle) {
+      el.rawUnitTitle.textContent = `Konvansiyonel Unite Dakika Detayi - ${selection.label}`;
+    }
+    const headers = [
+      'YTM',
+      'Olcum Zamani',
+      'Bara ID',
+      'Bara Adi',
+      'Unite ID',
+      'Unite Adi',
+      'Hourly MKUD',
+      'Min MKUD',
+      'Unite Pgen Aktif',
+      'Kalite',
+      'Unite Qgen Reaktif',
+      'Kalite',
+      'D.I. MVAr Limit',
+      'A.I. MVAr Limit'
+    ];
+    const bodyRows = rows.map((row) => [
+      escapeHtml(row.ytm || '-'),
+      escapeHtml(row.measurementDateLocal || row.measurementDateUtc || '-'),
+      escapeHtml(row.busbarId ?? '-'),
+      escapeHtml(row.busbarName || '-'),
+      escapeHtml(row.unitId ?? '-'),
+      escapeHtml(row.unitName || '-'),
+      formatNumber(row.hourlyMkudMw),
+      formatNumber(row.minMkudMw),
+      formatNumber(row.pgenMw),
+      escapeHtml(row.activePowerQuality || '-'),
+      formatNumber(row.qgenMvar),
+      escapeHtml(row.reactivePowerQuality || '-'),
+      formatNumber(row.diMvarLimit),
+      formatNumber(row.aiMvarLimit)
+    ]);
+    el.rawUnitTable.innerHTML = [
+      `<thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>`,
+      `<tbody>${bodyRows.map((cells) => `<tr>${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody>`
+    ].join('');
+  }
+
+  function filterConventionalUnitRowsForSelection(selection) {
+    return (state.conventionalUnitRows || []).filter((row) => {
+      const rowMinute = String(row.measurementDateLocal || row.measurementDateUtc || '').slice(0, 16);
+      if (rowMinute !== selection.measurementMinute) return false;
+      const sameInternal = selection.busbarInternalId !== null && selection.busbarInternalId !== undefined
+        && row.busbarInternalId !== null && row.busbarInternalId !== undefined
+        && String(row.busbarInternalId) === String(selection.busbarInternalId);
+      const sameDisplay = selection.busbarId !== null && selection.busbarId !== undefined
+        && row.busbarId !== null && row.busbarId !== undefined
+        && String(row.busbarId) === String(selection.busbarId);
+      return sameInternal || sameDisplay;
+    });
   }
 
   function renderDailyTable(pivotRows) {
@@ -1537,6 +1661,7 @@
     }
     el.testsTable.appendChild(tbody);
     renderTestUnitDetails(selectedSummary);
+    renderTestOtherDetails(selectedSummary);
   }
 
   function renderTestUnitDetails(summary) {
@@ -1569,6 +1694,54 @@
       tbody.appendChild(tr);
     }
     el.testUnitDetailsTable.appendChild(tbody);
+  }
+
+  function renderTestOtherDetails(summary) {
+    if (!el.testOtherDetailsTable) return;
+    const headers = [
+      'Ünite Adı', 'YTBS Santral Adı', 'YTBS TM ID', 'YTBS TM Adı', 'Enlem', 'Boylam',
+      'KAYNAK TÜRÜ', 'İkincil Kaynakları', 'İli', 'YTBS Bara Tipi',
+      'Senkron Kompansatör', 'EÜAŞ Protokol', 'Platform RGK Tipi', 'RGK TİPİ Açıklama',
+      'Dengeleme Birimi', 'TPYS Ünite MKÜD', 'TPYS Santral MKÜD'
+    ];
+    el.testOtherDetailsTable.innerHTML = `<thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead>`;
+    const tbody = document.createElement('tbody');
+    const units = summary?.units || [];
+    units.forEach((unit) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = [
+        escapeHtml(unit.unitName || '-'),
+        escapeHtml(unit.ytbsPlantName || summary?.ytbsPlantName || '-'),
+        escapeHtml(unit.ytbsSubstationId ?? summary?.ytbsSubstationId ?? '-'),
+        escapeHtml(unit.ytbsSubstationName || summary?.ytbsSubstationName || '-'),
+        formatNumber(unit.latitude ?? summary?.latitude),
+        formatNumber(unit.longitude ?? summary?.longitude),
+        escapeHtml(unit.ytbsSourceType || summary?.ytbsSourceType || '-'),
+        escapeHtml(unit.secondarySources || summary?.secondarySources || '-'),
+        escapeHtml(unit.city || summary?.city || '-'),
+        escapeHtml(unit.ytbsBusbarType || summary?.ytbsBusbarType || '-'),
+        escapeHtml(formatBooleanDetail(unit.hasSynchronousCondenser ?? summary?.hasSynchronousCondenser)),
+        escapeHtml(formatBooleanDetail(unit.hasEuasProtocol ?? summary?.hasEuasProtocol)),
+        escapeHtml(unit.platformRgkType || summary?.platformRgkType || '-'),
+        escapeHtml(unit.rgkTypeDescription || summary?.rgkTypeDescription || '-'),
+        escapeHtml(formatBooleanDetail(unit.isBalancingUnit ?? summary?.isBalancingUnit)),
+        formatNumber(unit.tpysUnitMkud),
+        formatNumber(unit.tpysPlantMkud ?? summary?.tpysPlantMkud)
+      ].map((value) => `<td>${value}</td>`).join('');
+      tbody.appendChild(tr);
+    });
+    if (!units.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="${headers.length}">Secili bara icin diger detay yok.</td>`;
+      tbody.appendChild(tr);
+    }
+    el.testOtherDetailsTable.appendChild(tbody);
+  }
+
+  function formatBooleanDetail(value) {
+    if (value === true) return 'Evet';
+    if (value === false) return 'Hayir';
+    return '-';
   }
 
   function getFilteredTestSummaries(filters = readTestFilters()) {
@@ -2012,7 +2185,7 @@
 
   function exportTestsCsv() {
     const text = RGDH_CSV.buildCatalogExportCsv(state.catalogRows);
-    downloadText('rgdh_unite_tanimi_.csv', text, 'text/csv;charset=utf-8');
+    downloadText('rgdh_unite_tanimi_v2.csv', text, 'text/csv;charset=utf-8');
   }
 
   function downloadText(filename, text, type) {

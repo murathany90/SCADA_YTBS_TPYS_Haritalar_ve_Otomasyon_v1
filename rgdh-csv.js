@@ -84,17 +84,29 @@
     }
 
     const headers = (lines.shift() || []).map((value) => cleanCell(value).replace(/^\uFEFF/, ''));
+    const headerKeys = makeUniqueHeaderKeys(headers);
     const rows = lines
       .filter((line) => line.some((value) => cleanCell(value) !== ''))
       .map((line) => {
         const object = {};
         headers.forEach((header, index) => {
-          object[header] = cleanCell(line[index]);
+          const key = headerKeys[index] || header;
+          object[key] = cleanCell(line[index]);
         });
         return object;
       });
 
     return { headers, rows };
+  }
+
+  function makeUniqueHeaderKeys(headers) {
+    const seen = new Map();
+    return (headers || []).map((header, index) => {
+      const base = header || `Column ${index + 1}`;
+      const count = (seen.get(base) || 0) + 1;
+      seen.set(base, count);
+      return count === 1 ? base : `${base}__${count}`;
+    });
   }
 
   function cleanCell(value) {
@@ -386,6 +398,22 @@
       powerFactor: parseTurkishNumber(pick(row, ['Guc Faktoru', 'Güç Faktörü'])),
       terminalVoltage: parseTurkishNumber(pick(row, ['Terminal Gerilimi'])),
       unitActive: parseTurkishBoolean(pick(row, ['Unite Aktif mi ?', 'Ünite Aktif mi ?'])),
+      ytbsPlantName: pick(row, ['YTBS Santral Adi', 'YTBS Santral Adı']),
+      ytbsSubstationId: parseInteger(pick(row, ['YTBS Trafo Merkezi ID'])),
+      ytbsSubstationName: pick(row, ['YTBS Trafo Merkezi Adi', 'YTBS Trafo Merkezi Adı']),
+      latitude: parseTurkishNumber(pick(row, ['Enlem'])),
+      longitude: parseTurkishNumber(pick(row, ['Boylam'])),
+      ytbsSourceType: pick(row, ['KAYNAK TURU', 'KAYNAK TÜRÜ']),
+      secondarySources: pick(row, ['Ikincil Kaynaklari', 'İkincil Kaynakları']),
+      city: pick(row, ['Ili', 'İli']),
+      ytbsBusbarType: pick(row, ['Bara Tipi__2', 'Bara Tipi 2']),
+      hasSynchronousCondenser: parseTurkishBoolean(pick(row, ['Senkron Kompansator Var mI?', 'Senkron Kompansatör Var mI?', 'Senkron Kompansator Var Mi?', 'Senkron Kompansatör Var Mı?'])),
+      hasEuasProtocol: parseTurkishBoolean(pick(row, ['EUAS Protokol Var Mi?', 'EÜAŞ Protokol Var Mı?'])),
+      platformRgkType: pick(row, ['Yan Hizmetler Analiz Platformu RGK Tipi']),
+      rgkTypeDescription: pick(row, ['RGK TIPI Aciklama', 'RGK TİPİ Açıklama']),
+      isBalancingUnit: parseTurkishBoolean(pick(row, ['Dengeleme Birimi mi?', 'Dengeleme Birimi Mi?'])),
+      tpysUnitMkud: parseTurkishNumber(pick(row, ['TPYS Unite MKUD', 'TPYS Ünite MKÜD'])),
+      tpysPlantMkud: parseTurkishNumber(pick(row, ['TPYS Santral MKUD', 'TPYS Santral MKÜD'])),
       lowExcitationTest2: parseTurkishNumber(pick(row, ['Dusuk Ikaz 2', 'Dusuk Ikaz(TEST) 2'])),
       highExcitationTest2: parseTurkishNumber(pick(row, ['Asiri Ikaz 2', 'Asiri Ikaz(TEST) 2'])),
       speedDrop: parseTurkishNumber(pick(row, ['Speed Drop', 'SpeedDrop'])),
@@ -1009,7 +1037,23 @@
     { key: 'unitPmkudMw', header: 'Ünite PMKUD', type: 'number' },
     { key: 'nominalLowExcitation', header: 'Nominal İkaz (Düşük)', type: 'number' },
     { key: 'nominalHighExcitation', header: 'Nominal İkaz (Aşırı)', type: 'number' },
-    { key: 'unitActive', header: 'Ünite Aktif mi ?', type: 'active' }
+    { key: 'unitActive', header: 'Ünite Aktif mi ?', type: 'active' },
+    { key: 'ytbsPlantName', header: 'YTBS Santral Adı', type: 'text' },
+    { key: 'ytbsSubstationId', header: 'YTBS Trafo Merkezi ID', type: 'number' },
+    { key: 'ytbsSubstationName', header: 'YTBS Trafo Merkezi Adı', type: 'text' },
+    { key: 'latitude', header: 'Enlem', type: 'number' },
+    { key: 'longitude', header: 'Boylam', type: 'number' },
+    { key: 'ytbsSourceType', header: 'KAYNAK TÜRÜ', type: 'text' },
+    { key: 'secondarySources', header: 'İkincil Kaynakları', type: 'text' },
+    { key: 'city', header: 'İli', type: 'text' },
+    { key: 'ytbsBusbarType', header: 'Bara Tipi', rawHeader: 'Bara Tipi__2', type: 'text' },
+    { key: 'hasSynchronousCondenser', header: 'Senkron Kompansatör Var mI?', type: 'boolean01' },
+    { key: 'hasEuasProtocol', header: 'EÜAŞ Protokol Var Mı?', type: 'boolean01' },
+    { key: 'platformRgkType', header: 'Yan Hizmetler Analiz Platformu RGK Tipi', type: 'text' },
+    { key: 'rgkTypeDescription', header: 'RGK TİPİ Açıklama', type: 'text' },
+    { key: 'isBalancingUnit', header: 'Dengeleme Birimi mi?', type: 'boolean01' },
+    { key: 'tpysUnitMkud', header: 'TPYS Ünite MKÜD', type: 'number' },
+    { key: 'tpysPlantMkud', header: 'TPYS Santral MKÜD', type: 'number' }
   ];
 
   function buildExportCsv(rows, options = {}) {
@@ -1075,14 +1119,19 @@
   }
 
   function formatCatalogExportCell(row, column = {}) {
-    if (row?.raw && Object.prototype.hasOwnProperty.call(row.raw, column.header)) {
-      return quoteCsv(row.raw[column.header]);
+    const rawHeader = column.rawHeader || column.header;
+    if (row?.raw && Object.prototype.hasOwnProperty.call(row.raw, rawHeader)) {
+      return quoteCsv(row.raw[rawHeader]);
     }
     const value = row?.[column.key];
     if (value === null || value === undefined || value === '') return '';
     if (column.type === 'active') {
       if (value === true) return quoteCsv('AKTİF');
       if (value === false) return quoteCsv('PASİF');
+    }
+    if (column.type === 'boolean01') {
+      if (value === true) return quoteCsv('1');
+      if (value === false) return quoteCsv('0');
     }
     if (column.type === 'number') return quoteCsv(formatTurkishMetric(value));
     return quoteCsv(value);
