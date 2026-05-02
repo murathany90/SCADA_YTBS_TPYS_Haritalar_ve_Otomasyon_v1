@@ -509,7 +509,7 @@ data/kml_layers_v2.json   # 34 MB — gereksiz yere commit etmeyin
 ## RGDH İzleme Modülü
 
 RGDH İzleme Modülü, popup üzerindeki **RGDH İzleme** butonu ile açılan ayrı izleme ekranıdır.
-Bu ekranın amacı, YKS tarafındaki RGDH verisini CSV ve DOM kaynakları ile aynı normalize modele taşımaktır.
+Bu ekranın amacı, YKS tarafındaki RGDH API/DOM verisini ve kullanıcı tarafından yüklenen EK-C CSV verisini aynı normalize modele taşımaktır.
 Modül hem Konvansiyonel Bara Data hem de RES/GES Bara Data ekranlarını destekler.
 Modül tek bara odaklı YKS çekimi yapar; toplu YKS çekimi yerine seçili katalog barası üzerinden ilerler.
 Modülün ana ekranı `rgdh-monitor.html`, iş mantığı `rgdh-monitor.js`, YKS transport katmanı `background.js` içindedir.
@@ -517,9 +517,10 @@ API URL ve parametre üretimi `rgdh-api-client.js` içinde tutulur.
 CSV ayrıştırma `rgdh-csv.js`, normalize model `rgdh-normalizer.js`, günlük özet `rgdh-pivot.js` ile yapılır.
 Grafik raporu `rgdh-charts.js`, hata ve network kayıtları `rgdh-diagnostics.js` tarafından desteklenir.
 YKS sayfası ile köprü kuran kısım `rgdh-dom-bridge.js` dosyasında toplanır.
-Ekranın dört ana sekmesi vardır: **Ham Data**, **Günlük RGDH İzleme**, **RGDH Grafik Rapor**, **RGDH Testleri**.
-Bu dört sekme aynı veri havuzunu okur.
-Veri havuzunda API satırları, CSV satırları ve DOM fallback satırları ayrı tutulur.
+EK-C/YKS karşılaştırma ve dakika eşleştirme mantığı `rgdh-comparison.js` içinde tutulur.
+Ekranın beş ana sekmesi vardır: **Ham Data**, **Günlük RGDH İzleme**, **RGDH Grafik Rapor**, **EK-C / YKS SCADA Karşılaştırma**, **RGDH Testleri**.
+Bu beş sekme aynı ana veri havuzunu okur; EK-C satırları karşılaştırma için ayrı state altında tutulur.
+Veri havuzunda API satırları, DOM fallback satırları, hibrit YKS CSV fallback satırları ve kullanıcı EK-C satırları ayrı tutulur.
 Hibrit RES/GES baralarda YKS API'nin saatlik veya page'li isteklerde takılabildiği durumlar için özel hızlı prob, continuation job ve CSV fallback akışı bulunur.
 Bu hibrit akış, AKYEL-1 RES gibi page-less API pencerelerinde satır dönmeyen ama YKS CSV endpointinden veri alınabilen santraller için tasarlanmıştır.
 Sekmelerde gösterilen tablolar, üst filtrelerin sonucuna göre yeniden hesaplanır.
@@ -529,12 +530,15 @@ Tarih alanı İstanbul yerel günü kabul eder.
 Bitiş tarihi seçilirse aralık bitiş tarihi hariç olacak şekilde okunur.
 Bara seçimi katalogdan gelen tekil bara özetleri ile doldurulur.
 YKS çekimi için katalogdan bara seçmek zorunludur.
-CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
+`Ek-C CSV Yükle` bir veya daha fazla kullanıcı EK-C dosyasını aynı oturum karşılaştırma havuzuna ekler; ekrandaki buton etiketi `Ek-C CSV Yukle` şeklindedir.
+EK-C yükleme `state.ekcRows`, `state.ekcGroups` ve `state.ekcLoaded` ayrımıyla platform/YKS verisinden ayrı izlenir.
+Platform/YKS verisinin ana kaynağı API'dir; hibrit CSV fallback yalnız background job tarafından kullanılan YKS endpoint tamamlamasıdır.
 
 ### Ana Kavramlar
 
 - `API satırı`: YKS endpointlerinden dönen ham JSON satırıdır.
-- `CSV satırı`: YKS dışa aktarım CSV dosyasından ayrıştırılan satırdır.
+- `CSV satırı`: YKS dışa aktarım veya hibrit fallback CSV içeriğinden ayrıştırılan satırdır.
+- `EK-C satırı`: Kullanıcının yüklediği EK-C CSV dosyasından üretilen dakika bazlı satırdır.
 - `DOM satırı`: API erişimi başarısız olduğunda YKS ekran tablosundan okunabilen sınırlı satırdır.
 - `Normalize satır`: API, CSV veya DOM satırının ortak RGDH modeline dönüştürülmüş halidir.
 - `Katalog satırı`: Bara/Ünite Tanımlama CSV'sinden veya gömülü katalogdan gelen tanım satırıdır.
@@ -550,6 +554,9 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - `CSV fallback`: Hibrit continuation içinde `/api/rgdh-wind-busbar-data-csv` endpointinin önce denenmesidir.
 - `preferCsvFallback`: Continuation payload'ında CSV yolunun saatlik API denemelerinden önce kullanılacağını gösteren flag'dir.
 - `missingWindows`: Hibrit job'un parent aşamasında tamamlayamadığı UTC pencere listesidir.
+- `Dakika sonucu`: Tek dakika için `SAĞLADI`, `SAĞLAMADI`, `DD`, `YY` veya `KY` karar kodudur.
+- `Saatlik karar`: Dakika sonuçlarının `reactiveHourSummary()` ile tek saat sonucuna çevrilmiş halidir.
+- `Katılım yüzdesi`: Yalnız normal değerlendirme saatlerinde gösterilen, DD/YY dakikalarını katılıma dahil eden saatlik yüzdedir.
 - `Diagnostic event`: Background, content script veya YKS sayfasından toplanan debug kaydıdır.
 - `Fetch log`: Kullanıcının panelde gördüğü, her aşamayı okunabilir şekilde anlatan iş günlüğüdür.
 
@@ -568,9 +575,10 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Hibrit baralar tabloda küçük işaret ile görünür.
 - `YKS'den Çek` butonu background job başlatır.
 - `İptal` butonu aktif job için cancel isteği gönderir.
-- `CSV Yükle` butonu YKS CSV dosyalarını veya katalog CSV'sini okur.
+- `Ek-C CSV Yükle` butonu kullanıcı tarafından sağlanan EK-C CSV dosyalarını okur; ekrandaki buton etiketi `Ek-C CSV Yukle` şeklindedir.
+- EK-C dosyaları platform/YKS ana veri havuzuna karıştırılmaz; karşılaştırma sekmesi için `state.ekcRows` ve `state.ekcGroups` altında tutulur.
 - `Gerilim Kaynaklarını Göster` butonu gerilim kolonlarını görünür yapar.
-- `Karşılaştır` butonu API ve CSV normalize satırlarını karşılaştırır.
+- `EK-C / YKS SCADA Karşılaştırma` sekmesi API platform satırları ile EK-C dakika satırlarını karşılaştırır.
 - `CSV Dışarı Aktar` butonu mevcut normalize görünümü dışa aktarır.
 - `Hata Detayları` butonu hata panelini açar.
 - Hata panelinde hem yerel hata listesi hem de network/console diagnostikleri bulunur.
@@ -619,16 +627,18 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Her satır bir tarih, bir bara ve bir kontrol tipi kombinasyonudur.
 - Tablo başında Tarih, Bara, Tip ve Kontrol kolonları bulunur.
 - Sonrasında 00 ile 23 arasında 24 saat kolonu yer alır.
-- Saat hücreleri ilgili saatteki dakika bazlı katılım yüzdesini gösterir.
+- Saat hücreleri ilgili saatteki saatlik reaktif sonucu veya normal saatlerde dakika bazlı katılım yüzdesini gösterir.
 - Beklenen dakika sayısı normal durumda 60 dakikadır.
-- Başarılı dakika sayısı onay, yükümlülük ve veri kalitesine göre hesaplanır.
-- Katılım yüzdesi `successMinuteCount / expectedMinuteCount` üzerinden üretilir.
+- Başarılı dakika sayısı onay, yükümlülük, devre durumu ve veri kalitesine göre hesaplanır.
+- Dakika sonucu `SAĞLADI`, `SAĞLAMADI`, `DD`, `YY` veya `KY` olarak normalize edilir.
+- Katılım yüzdesi yalnız normal değerlendirme saatlerinde `((SAĞLADI + DD + YY) / 60) * 100` üzerinden üretilir.
+- `DD`, `YY` veya `KY` ile bastırılan saatlerde katılım yüzdesi `null` kabul edilir ve hücrede sonuç kodu gösterilir.
 - Hücre rengi `participationClass` sonucuna göre atanır.
 - Yeterli veri varsa hücre yeşil sınıfa yakın görünür.
 - Eksik veya uyarılı veri varsa hücre uyarı sınıfına düşer.
 - Başarısız veya çok eksik veri varsa hücre kırmızı sınıfa düşer.
-- Veri yoksa hücre `-` gösterir.
-- Hücre tooltip bilgisinde saat, katılım, set gerilimi, canlı gerilim, P, Q ve başarılı dakika sayısı bulunur.
+- Veri yoksa veya saat tamamen boşsa hücre `KY` sonucuna düşebilir.
+- Hücre tooltip bilgisinde saat, sonuç, katılım, set gerilimi, canlı gerilim, P, Q, geçen/kalan dakika ve DD/YY/KY sayıları bulunur.
 - Tarih hücresine tıklanırsa aynı bara için tam gün grafik rapora geçilir.
 - Saat hücresine tıklanırsa aynı bara, aynı tarih ve seçili saat için grafik rapora geçilir.
 - Bu davranış `state.chartSelection` üzerinden taşınır.
@@ -644,6 +654,32 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - CSV ve API karşılaştırması yapılmışsa kalite rozetleri ham data üzerinden kontrol edilir.
 - Günlük tablo, normalize edilmiş veri yoksa boş kalır.
 - YKS çekimi tamamlandı ama bu sekme boşsa önce Ham Data ve hata paneli kontrol edilmelidir.
+
+### Reaktif Karar Kuralları
+
+- Platform/YKS dakika kararı `derivePlatformMinuteResult()` ile üretilir.
+- Platform/YKS tarafında satır yoksa dakika sonucu `KY` olur.
+- Platform/YKS tarafında `devreDurumu != 1`, `serviceActive=false`, `offBoardStatus=1` veya `offBoard=1` ise dakika sonucu `DD` olur.
+- Platform/YKS tarafında `yukumlulukDurumu != 1`, `noObligationStatus=1` veya `noObligation=1` ise dakika sonucu `YY` olur.
+- Platform/YKS tarafında `mainApproved`, `approvalStatus`, `mainApprovalStatus`, `rgdhApprovalStatus`, `auxApproved`, `auxiliaryApprovalStatus` veya `auxApprovalStatus` alanlarından herhangi biri `1` ise dakika sonucu `SAĞLADI` olur.
+- Platform/YKS tarafında onay alanı var ama ana veya yardımcı onay yoksa dakika sonucu `SAĞLAMADI` olur.
+- Eksik kritik ölçüm varsa dakika sonucu `KY` olur; eski kalite kodları gerekiyorsa `OK` sonucu `SAĞLADI`, `WARN/FAIL` sonucu `SAĞLAMADI`, `OFF` sonucu `DD`, `NO_DATA` sonucu `KY` olarak normalize edilir.
+- EK-C dakika kararı `deriveEkcMinuteStat()` ile üretilir.
+- EK-C tarafında zaman bilgisi veya aktif güç okunamazsa dakika sonucu `KY` olur.
+- EK-C tarafında `P < Pnom * 0.01` ise dakika sonucu `DD` olur.
+- EK-C tarafında `P < Pnom * 0.10` ise dakika sonucu `YY` olur.
+- EK-C tarafında reaktif güç okunamazsa dakika sonucu `SAĞLAMADI` olur.
+- EK-C tarafında Q hedefi hesaplanabiliyorsa ölçülen Q, hedefin yönüne göre limitlerle karşılaştırılır ve dakika sonucu `SAĞLADI` veya `SAĞLAMADI` olur.
+- EK-C tarafında Q hedefi hesaplanamıyorsa dakika veri var/yok kuralından geçer ve uyarı ile `SAĞLADI` kabul edilir.
+- Saatlik karar `reactiveHourSummary()` ile ortak kurala göre verilir.
+- Saatte `KY >= 60` ise saat sonucu `KY` olur.
+- Saatte `DD = 60` ise saat sonucu `DD` olur.
+- Saatte `YY = 60` ise saat sonucu `YY` olur.
+- Saatte `YY + DD > 47` ise çoğunluk sonucu kullanılır; eşitlikte `YY` seçilir.
+- Saatte aktif yükümlülük dakika sayısı `13` altındaysa saat sonucu `YY` olur.
+- Saatte uygunsuz dakika sayısı `12` veya daha azsa saat sonucu `SAĞLADI` olur.
+- Saatte uygunsuz dakika sayısı `12` üstündeyse saat sonucu `SAĞLAMADI` olur.
+- `DD`, `YY` ve `KY` saatleri katılım yüzdesini bastırır; normal saatlerde katılım yüzdesi `((SAĞLADI + DD + YY) / beklenen dakika) * 100` olarak hesaplanır.
 
 ### Sekme 3: RGDH Grafik Rapor
 
@@ -663,7 +699,10 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Grafik araç çubuğunda Bitiş saat/dakika alanları bulunur.
 - `Sorgula` butonu bu grafik içi filtreleri uygular.
 - `Tam Ekran` butonu grafik alanını geniş okumaya uygun hale getirir.
-- Ana grafik P, Q, limit ve gerilim serilerini satır içeriğine göre oluşturur.
+- Grafik raporu iki ayrı çizim üretir.
+- Üst grafik gerilim ve aktif güç serilerini birlikte gösterir.
+- Alt grafik reaktif güç ve limit serilerini gösterir.
+- EK-C verisi bulunan karşılaştırma görünümünde Q hedefi ve tolerans limitleri ayrıca çizilebilir.
 - TPYS Set gerilimi ayrı seri olarak tutulur.
 - Canlı bara gerilimi ayrı seri olarak tutulur.
 - Gerilim kaynakları görünürlüğü üstteki gerilim toggle ile yönetilir.
@@ -680,7 +719,26 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Eğer gerilim çizgileri görünmüyorsa `Gerilim Kaynaklarını Göster` butonu kontrol edilmelidir.
 - Eğer yardımcı kaynak verileri bekleniyorsa Ham Data sekmesindeki yardımcı kolonlarla grafik birlikte okunmalıdır.
 
-### Sekme 4: RGDH Testleri
+### Sekme 4: EK-C / YKS SCADA Karşılaştırma
+
+- EK-C / YKS SCADA Karşılaştırma sekmesi kullanıcı EK-C dosyası ile API platform satırlarını aynı dakika anahtarında eşleştirir.
+- Karşılaştırma için EK-C satırları platform satırlarından ayrı tutulur.
+- EK-C satırları seçili YKS barasına bağlanırken önce katalog bara ID, sonra iç bara ID, sonra görünen bara ID, en son normalize ad anahtarları denenir.
+- Dakika eşleşme anahtarı bara kimliği, yerel tarih ve gün içi dakika indeksinden oluşur.
+- Join durumu `both`, `ekc_only` veya `platform_only` olarak saklanır.
+- `both` satırlarında EK-C ve YKS dakika sonucu, gerilim, aktif güç, reaktif güç ve hibrit aktif güç farkları hesaplanır.
+- `ekc_only` satırları EK-C'de olup aktif filtrede YKS SCADA karşılığı bulunmayan dakikalardır.
+- `platform_only` satırları YKS SCADA tarafında olup EK-C karşılığı bulunmayan dakikalardır.
+- Sekme bağlam etiketinde ortak dakika, yalnız EK-C, yalnız YKS SCADA ve sonuç farkı sayıları gösterilir.
+- Ortak dakika bulunamazsa tanı metni tarih uyumsuzluğu, seçili bara/binding eksikliği, EK-C V/P/Q alan eksikliği veya YKS veri yokluğu ayrımını gösterir.
+- Karşılaştırma grafiği üstte EK-C ve YKS gerilim/aktif güç serilerini, altta EK-C ve YKS reaktif güç/limit serilerini birlikte gösterir.
+- Karşılaştırma tablosu saat bazlı özet üretir.
+- Saat özetinde EK-C değerlendirme, YKS değerlendirme, EK-C katılım yüzdesi, YKS katılım yüzdesi, eşleşen dakika, ortalama ve maksimum `dV`, `dP`, `dQ` değerleri bulunur.
+- Hibrit kaynaklarda YKS yardımcı aktif güç ile EK-C hibrit aktif güç ayrıca karşılaştırılır.
+- Saat satırına tıklanınca karşılaştırma grafiği ilgili tarih ve saat filtresine geçer.
+- Karşılaştırma CSV dışa aktarımı saatlik özetleri Excel/TR uyumlu semicolon CSV olarak üretir.
+
+### Sekme 5: RGDH Testleri
 
 - RGDH Testleri sekmesi ölçüm satırlarından çok katalog ve sertifika tanımlarına odaklanır.
 - Ana kaynak Bara/Ünite Tanımlama CSV'sidir.
@@ -988,22 +1046,20 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Bu flag normalizer hatası değil, YKS kaynağında veri boşluğu göstergesidir.
 - Normalize satırlar katalog ile zenginleştirilebilir.
 - Zenginleştirme santral adı, YTM ve iç ID gibi alanları tamamlar.
-- Karşılaştırma işlemi API ve CSV satırları arasında toleranslı alan farkı üretir.
+- Karşılaştırma işlemi API platform satırları ile EK-C satırları arasında toleranslı alan farkı üretir.
 
 ### CSV Kullanımı
 
-- `CSV Yükle` birden fazla dosya kabul eder.
-- Bara/Ünite Tanımlama CSV'si katalog olarak algılanır.
-- Konvansiyonel RGDH CSV'si ölçüm satırı olarak algılanır.
-- RES/GES RGDH CSV'si ölçüm satırı olarak algılanır.
-- CSV tipi tanınamazsa hata paneline yazılır.
-- Katalog CSV'si yüklenirse mevcut katalog satırlarıyla birleştirilir.
-- Ölçüm CSV'si yüklenirse `state.csvRows` içine normalize edilerek eklenir.
-- CSV satırları API satırlarıyla aynı sekmelerde gösterilir.
-- CSV satırları `CSV` kaynak rozetiyle ayrılır.
+- `Ek-C CSV Yükle` birden fazla kullanıcı EK-C dosyası kabul eder; ekrandaki buton etiketi `Ek-C CSV Yukle` şeklindedir.
+- EK-C parser `TARIH` ve `SAAT` başlığını bulur; boş `SAAT` başlığı ve eski `TARIH` ağırlıklı şablonlar için onarım yapabilir.
+- EK-C satırları dakika bazında `tarih`, `saat`, `dakikaIndex`, `hour`, `vBara`, `vSet`, `pTotal`, `pMain`, `pAux`, `qMeas` ve `minuteStat` alanlarına normalize edilir.
+- EK-C yükleri `state.ekcRows`, `state.ekcGroups` ve `state.ekcLoaded` altında platform/YKS satırlarından ayrı tutulur.
+- EK-C satırları Ham Data sekmesinin ana platform listesine karıştırılmaz; EK-C / YKS SCADA Karşılaştırma sekmesinde kullanılır.
+- EK-C tipi veya zorunlu alanları tanınamazsa hata paneline tanı yazılır.
+- Bara/Ünite Tanımlama CSV'si katalog doğrulama ve test akışı için kullanılabilir.
 - Hibrit CSV fallback kullanıcı dosya yüklemesi değildir; background job tarafından YKS CSV endpointinden alınan satırları normalize akışına verir.
 - Hibrit CSV fallback JSON döndüğünde satırlar kaynak API satırı gibi, text/csv döndüğünde parser üzerinden dönüştürülmüş satır gibi işlenir.
-- Karşılaştırma butonu API ve CSV verisini aynı normalize model üzerinden kıyaslar.
+- Karşılaştırma akışı API platform verisini EK-C kullanıcı dosyasıyla aynı normalize dakika modeli üzerinden kıyaslar.
 - Dışa aktarım Excel/TR uyumlu semicolon CSV üretir.
 
 ### Hata, Log ve Diagnostik Sistemi
@@ -1101,6 +1157,9 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - RGDH background davranışları `tests/background.test.js` ile korunur.
 - API parametre üretimi `tests/rgdh-api-client.test.js` ile korunur.
 - Normalizer davranışları `tests/rgdh-normalizer.test.js` ile korunur.
+- Reaktif dakika/saat kararları `tests/rgdh-reactive-rules.test.cjs` ve `tests/rgdh-pivot.test.js` ile korunur.
+- EK-C/YKS karşılaştırma davranışı `tests/rgdh-comparison.test.js` ile korunur.
+- EK-C parser ve CSV export davranışları `tests/rgdh-csv.test.js` ile korunur.
 - Grafik davranışları `tests/rgdh-charts.test.js` ile korunur.
 - UI smoke kontrolleri `tests/rgdh-ui-smoke.test.js` ile korunur.
 - Diagnostik export davranışları `tests/rgdh-diagnostics.test.js` ile korunur.
@@ -1116,6 +1175,13 @@ CSV yükleme ise bir veya daha fazla dosyayı aynı oturum veri havuzuna ekler.
 - Erciyes benzeri hızlı page-less pencere başarı testlerinde CSV fallback'e geçmeden mevcut hızlı yolun korunduğu doğrulanır.
 - String `"true"` gelen `hasAuxiliarySource` değeri testlerle hibrit kabul edilir.
 - Bu bölüm güncellenirken gerçek kod davranışı ile README anlatımı birlikte tutulmalıdır.
+
+### Katılım Yüzdesi ve Saatlik Karar Özeti
+
+| Kaynak | Dakika Kararı | Saatlik Karar | Katılım Yüzdesi |
+|---|---|---|---|
+| YKS / Platform | `derivePlatformMinuteResult()` ile `KY`, `DD`, `YY`, `SAĞLADI`, `SAĞLAMADI` üretir; yardımcı onay ana onay gibi geçer kabul edilir. | `reactiveHourSummary()` ortak karar sırasını uygular; eksik dakikalar YKS saat hesabında başarısız dakika olarak sayılır, tamamen boş saat `KY` olur. | Yalnız normal `SAĞLADI/SAĞLAMADI` saatlerinde `((SAĞLADI + DD + YY) / 60) * 100`; `DD/YY/KY` saatlerinde yüzde `null`/gizli. |
+| EK-C | `deriveEkcMinuteStat()` Pnom eşikleri, Q hedefi ve Q limitlerine göre karar üretir; Q hedefi yoksa veri var/yok kuralı ile geçer. | Karşılaştırma saat özetinde EK-C sonuçları da aynı `reactiveHourSummary()` sırasına sokulur; saat beklenen dakika sayısı eldeki EK-C dakika sayısıdır. | Normal saatlerde `((SAĞLADI + DD + YY) / beklenen dakika) * 100`; `DD/YY/KY` saatlerinde yüzde bastırılır. |
 
 ---
 
