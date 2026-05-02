@@ -25,6 +25,16 @@ test('parseTurkishNumber supports decimal comma and null-like values', () => {
   assert.equal(csv.parseTurkishNumber('null'), null);
 });
 
+test('parsers unwrap Excel text formula cells before date and number normalization', () => {
+  assert.equal(csv.parseTurkishNumber('="10928268862"'), 10928268862);
+  assert.equal(csv.parseTurkishNumber('="158,91"'), 158.91);
+
+  const parsed = csv.parseTurkishDateTime('="2026-04-27T00:00:00+03:00"');
+  assert.equal(parsed.localDate, '2026-04-27');
+  assert.equal(parsed.localHour, 0);
+  assert.equal(parsed.localMinute, 0);
+});
+
 test('parseTurkishBoolean supports Turkish AKTIF/PASIF catalog values', () => {
   assert.equal(csv.parseTurkishBoolean('AKTİF'), true);
   assert.equal(csv.parseTurkishBoolean('Aktif'), true);
@@ -139,6 +149,23 @@ test('rgdh_unite_tanimi catalog loads 81 rows and exports in source format', () 
   ]);
   assert.equal(exportedParsed.rows.length, 81);
   assert.equal(exportedParsed.rows.find((row) => row['Bara ID'] === '6002' && row['Ünite Adı'] === 'YARDIMCI KAYNAK GES')['Ünite Nominal Güç'], '39,990');
+});
+
+test('EK-C fixtures parse V P Q fields for all minute rows', () => {
+  const fixtureDir = path.join(__dirname, '..', 'yks_izleme_modul', 'ek-c_test_csv_datalar');
+  const files = fs.readdirSync(fixtureDir).filter((file) => file.toLowerCase().endsWith('.csv'));
+
+  assert.ok(files.length >= 6);
+  files.forEach((file) => {
+    const parsed = csv.parseEkcCsvText(fs.readFileSync(path.join(fixtureDir, file), 'utf8'), { filename: file });
+    const rows = parsed.rows || [];
+    const finiteCount = (field) => rows.filter((row) => typeof row[field] === 'number' && Number.isFinite(row[field])).length;
+
+    assert.equal(rows.length, 1440, `${file} should include one full day of minute rows`);
+    assert.equal(finiteCount('vBara'), rows.length, `${file} should parse EK-C busbar voltage`);
+    assert.equal(finiteCount('pTotal'), rows.length, `${file} should parse EK-C active power`);
+    assert.equal(finiteCount('qMeas'), rows.length, `${file} should parse EK-C reactive power`);
+  });
 });
 
 test('extractWindInternalIdFromFilename reads YKS internal busbar id prefix', () => {

@@ -1,0 +1,316 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const comparison = require('../rgdh-comparison.js');
+const pivot = require('../rgdh-pivot.js');
+
+test('bindEkcRowsToSelectedBusbar preserves EK-C identity and attaches selected YKS busbar', () => {
+  const rows = comparison.bindEkcRowsToSelectedBusbar([{
+    fileName: 'KURTKAYASI_2026-04-28.csv',
+    plantName: 'KURTKAYASI_RES',
+    busbarName: 'KURTKAYASI_RES',
+    sourceType: 'WIND',
+    localDate: '2026-04-28'
+  }], {
+    busbarId: '4772',
+    busbarInternalId: '10933818954',
+    busbarName: 'KURTKAYASI RES',
+    plantName: 'KURTKAYASI RES',
+    sourceType: 'WIND',
+    ytm: 'OA_YTM'
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].busbarId, '4772');
+  assert.equal(rows[0].busbarInternalId, '10933818954');
+  assert.equal(rows[0].busbarName, 'KURTKAYASI RES');
+  assert.equal(rows[0].plantName, 'KURTKAYASI RES');
+  assert.equal(rows[0].sourceType, 'WIND');
+  assert.equal(rows[0].ytm, 'OA_YTM');
+  assert.equal(rows[0].ekcOriginalName, 'KURTKAYASI_RES');
+  assert.equal(rows[0].ekcOriginalBusbarName, 'KURTKAYASI_RES');
+  assert.equal(rows[0].ekcOriginalPlantName, 'KURTKAYASI_RES');
+  assert.equal(rows[0].ekcBoundToYks, true);
+});
+
+test('getEkcDateFilterUpdate switches filters to a single EK-C date or an exclusive multi-day range', () => {
+  const single = comparison.getEkcDateFilterUpdate([
+    { localDate: '2026-04-28' },
+    { localDate: '2026-04-28' }
+  ], { date: '2026-04-27', endDate: '' });
+
+  assert.deepEqual(single, {
+    changed: true,
+    dates: ['2026-04-28'],
+    date: '2026-04-28',
+    endDate: ''
+  });
+
+  const multi = comparison.getEkcDateFilterUpdate([
+    { localDate: '2026-04-28' },
+    { localDate: '2026-04-30' },
+    { localDate: '2026-04-29' }
+  ], { date: '2026-04-27', endDate: '' });
+
+  assert.deepEqual(multi, {
+    changed: true,
+    dates: ['2026-04-28', '2026-04-29', '2026-04-30'],
+    date: '2026-04-28',
+    endDate: '2026-05-01'
+  });
+
+  assert.deepEqual(
+    comparison.getEkcDateFilterUpdate([{ localDate: '2026-04-28' }], { date: '2026-04-28', endDate: '2026-04-29' }),
+    { changed: false, dates: ['2026-04-28'] }
+  );
+});
+
+test('buildEkcPlatformComparison matches by busbar date minute and fills deltas', () => {
+  const ekcRows = [{
+    busbarId: '4772',
+    busbarName: 'KURTKAYASI RES',
+    sourceType: 'WIND',
+    localDate: '2026-04-28',
+    localHour: 0,
+    localMinute: 1,
+    hour: 0,
+    dakikaIndex: 1,
+    measurementDateLocal: '2026-04-28T00:01:00+03:00',
+    vBara: 158.5,
+    vSet: 159,
+    pTotal: 5.5,
+    qMeas: 1.25,
+    minuteStat: { result: 'SAGLADI', limitLow: 1, limitHigh: 2 }
+  }];
+  const platformRows = [{
+    busbarId: '4772',
+    busbarName: 'KURTKAYASI RES',
+    sourceType: 'WIND',
+    localDate: '2026-04-28',
+    localHour: 0,
+    localMinute: 1,
+    measurementDateLocal: '2026-04-28T00:01:00+03:00',
+    liveBusbarVoltage: 158,
+    tpysVoltageSet: 159,
+    pgenMw: 5,
+    qgenMvar: 1,
+    approvalStatus: 1
+  }];
+
+  const result = comparison.buildEkcPlatformComparison(platformRows, ekcRows, { pivot });
+
+  assert.equal(result.summary.both, 1);
+  assert.equal(result.summary.ekcOnly, 0);
+  assert.equal(result.summary.platformOnly, 0);
+  assert.equal(result.diagnosis, '');
+  assert.equal(result.rows[0].joinState, 'both');
+  assert.equal(result.rows[0].deltaV, 0.5);
+  assert.equal(result.rows[0].deltaP, 0.5);
+  assert.equal(result.rows[0].deltaQ, 0.25);
+  assert.equal(result.hourRows[0].commonMinutes, 1);
+  assert.equal(result.hourRows[0].ekcStat.hourResult, 'SAGLADI');
+  assert.equal(result.hourRows[0].platformStat.hourResult, 'SAGLADI');
+});
+
+test('buildEkcPlatformComparison hour rows expose separate EK-C and YKS result counts for table summaries', () => {
+  const ekcRows = [
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, dakikaIndex: 1, measurementDateLocal: '2026-04-28T00:01:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'SAGLADI' } },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, dakikaIndex: 2, measurementDateLocal: '2026-04-28T00:02:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'SAGLAMADI' } },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, dakikaIndex: 3, measurementDateLocal: '2026-04-28T00:03:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'DD' } },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, dakikaIndex: 4, measurementDateLocal: '2026-04-28T00:04:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'YY' } },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, dakikaIndex: 5, measurementDateLocal: '2026-04-28T00:05:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'KY' } }
+  ];
+  const platformRows = [
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, localMinute: 1, measurementDateLocal: '2026-04-28T00:01:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, approvalStatus: 1 },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, localMinute: 2, measurementDateLocal: '2026-04-28T00:02:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, approvalStatus: 0 },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, localMinute: 3, measurementDateLocal: '2026-04-28T00:03:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, offBoardStatus: 1, noObligationStatus: 0, approvalStatus: 1 },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, localMinute: 4, measurementDateLocal: '2026-04-28T00:04:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, offBoardStatus: 0, noObligationStatus: 1, approvalStatus: 1 },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, localMinute: 5, measurementDateLocal: '2026-04-28T00:05:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, platformResult: 'KY' }
+  ];
+
+  const result = comparison.buildEkcPlatformComparison(platformRows, ekcRows, { pivot });
+  const hourRow = result.hourRows[0];
+
+  assert.deepEqual({
+    passCount: hourRow.ekcStat.passCount,
+    failCount: hourRow.ekcStat.failCount,
+    ddCount: hourRow.ekcStat.ddCount,
+    yyCount: hourRow.ekcStat.yyCount,
+    kyCount: hourRow.ekcStat.kyCount
+  }, { passCount: 1, failCount: 1, ddCount: 1, yyCount: 1, kyCount: 1 });
+  assert.deepEqual({
+    passCount: hourRow.platformStat.passCount,
+    failCount: hourRow.platformStat.failCount,
+    ddCount: hourRow.platformStat.ddCount,
+    yyCount: hourRow.platformStat.yyCount,
+    kyCount: hourRow.platformStat.kyCount
+  }, { passCount: 1, failCount: 1, ddCount: 1, yyCount: 1, kyCount: 1 });
+});
+
+test('buildEkcPlatformComparison sorts hour rows by date and numeric hour', () => {
+  const ekcRows = [
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, dakikaIndex: 0, measurementDateLocal: '2026-04-28T00:00:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'SAGLADI' } },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 10, dakikaIndex: 600, measurementDateLocal: '2026-04-28T10:00:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'SAGLADI' } },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 2, dakikaIndex: 120, measurementDateLocal: '2026-04-28T02:00:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'SAGLADI' } },
+    { busbarId: '4772', localDate: '2026-04-29', localHour: 1, dakikaIndex: 60, measurementDateLocal: '2026-04-29T01:00:00+03:00', vBara: 158, pTotal: 5, qMeas: 1, minuteStat: { result: 'SAGLADI' } }
+  ];
+  const platformRows = [
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 0, localMinute: 0, measurementDateLocal: '2026-04-28T00:00:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, approvalStatus: 1 },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 10, localMinute: 0, measurementDateLocal: '2026-04-28T10:00:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, approvalStatus: 1 },
+    { busbarId: '4772', localDate: '2026-04-28', localHour: 2, localMinute: 0, measurementDateLocal: '2026-04-28T02:00:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, approvalStatus: 1 },
+    { busbarId: '4772', localDate: '2026-04-29', localHour: 1, localMinute: 0, measurementDateLocal: '2026-04-29T01:00:00+03:00', liveBusbarVoltage: 158, pgenMw: 5, qgenMvar: 1, approvalStatus: 1 }
+  ];
+
+  const result = comparison.buildEkcPlatformComparison(platformRows, ekcRows, { pivot });
+
+  assert.deepEqual(
+    result.hourRows.map((row) => `${row.localDate} ${String(row.hour).padStart(2, '0')}`),
+    ['2026-04-28 00', '2026-04-28 02', '2026-04-28 10', '2026-04-29 01']
+  );
+});
+
+test('buildEkcPlatformComparison hour rows use absolute average deltas and expose K.Y percentages', () => {
+  const ekcRows = [
+    {
+      busbarId: '4772',
+      localDate: '2026-04-28',
+      localHour: 0,
+      dakikaIndex: 0,
+      measurementDateLocal: '2026-04-28T00:00:00+03:00',
+      vBara: 105,
+      pTotal: 11,
+      qMeas: -5,
+      pAux: 1,
+      minuteStat: { result: 'SAGLADI' }
+    },
+    {
+      busbarId: '4772',
+      localDate: '2026-04-28',
+      localHour: 0,
+      dakikaIndex: 1,
+      measurementDateLocal: '2026-04-28T00:01:00+03:00',
+      vBara: 95,
+      pTotal: 8,
+      qMeas: 3,
+      auxiliaryMw: 10,
+      minuteStat: { result: 'SAGLAMADI' }
+    }
+  ];
+  const platformRows = [
+    {
+      busbarId: '4772',
+      localDate: '2026-04-28',
+      localHour: 0,
+      localMinute: 0,
+      measurementDateLocal: '2026-04-28T00:00:00+03:00',
+      liveBusbarVoltage: 100,
+      pgenMw: 10,
+      qgenMvar: -1,
+      auxiliaryMw: 3,
+      approvalStatus: 1
+    },
+    {
+      busbarId: '4772',
+      localDate: '2026-04-28',
+      localHour: 0,
+      localMinute: 1,
+      measurementDateLocal: '2026-04-28T00:01:00+03:00',
+      liveBusbarVoltage: 100,
+      pgenMw: 10,
+      qgenMvar: 1,
+      auxiliaryMw: 7,
+      approvalStatus: 0
+    }
+  ];
+
+  const result = comparison.buildEkcPlatformComparison(platformRows, ekcRows, { pivot });
+  const hourRow = result.hourRows[0];
+
+  assert.equal(hourRow.avgDeltaV, 5);
+  assert.equal(hourRow.avgDeltaP, 1.5);
+  assert.equal(hourRow.avgDeltaQ, 3);
+  assert.equal(hourRow.maxDeltaV, 5);
+  assert.equal(hourRow.maxDeltaP, 2);
+  assert.equal(hourRow.maxDeltaQ, 4);
+  assert.equal(hourRow.avgYksHybridP, 5);
+  assert.equal(hourRow.avgEkcHybridP, 5.5);
+  assert.equal(hourRow.avgDeltaHybridP, 2.5);
+  assert.equal(hourRow.maxDeltaHybridP, 3);
+  assert.equal(hourRow.ekcStat.passRatio, 50);
+  assert.equal(hourRow.platformStat.passRatio, 50);
+});
+
+test('buildEkcPlatformComparison reports no YKS data without turning missing side into KY', () => {
+  const result = comparison.buildEkcPlatformComparison([], [{
+    busbarId: '4772',
+    busbarName: 'KURTKAYASI RES',
+    sourceType: 'WIND',
+    localDate: '2026-04-28',
+    localHour: 0,
+    localMinute: 1,
+    hour: 0,
+    dakikaIndex: 1,
+    measurementDateLocal: '2026-04-28T00:01:00+03:00',
+    vBara: 158.5,
+    pTotal: 5.5,
+    qMeas: 1.25,
+    minuteStat: { result: 'SAGLADI' }
+  }], { pivot });
+
+  assert.equal(result.summary.both, 0);
+  assert.equal(result.summary.ekcOnly, 1);
+  assert.equal(result.diagnosis, 'Ortak dakika bulunamadi: EK-C tarihi icin YKS SCADA verisi yok');
+  assert.equal(result.hourRows[0].ekcStat.hourResult, 'SAGLADI');
+  assert.equal(result.hourRows[0].platformStat, null);
+});
+
+test('buildEkcPlatformComparison separates missing selected busbar from parser field problems', () => {
+  const noBinding = comparison.buildEkcPlatformComparison([{
+    busbarId: '4772',
+    localDate: '2026-04-28',
+    localHour: 0,
+    localMinute: 1,
+    measurementDateLocal: '2026-04-28T00:01:00+03:00',
+    liveBusbarVoltage: 158,
+    pgenMw: 5,
+    qgenMvar: 1,
+    approvalStatus: 1
+  }], [{
+    localDate: '2026-04-28',
+    localHour: 0,
+    localMinute: 1,
+    dakikaIndex: 1,
+    measurementDateLocal: '2026-04-28T00:01:00+03:00',
+    vBara: 158,
+    pTotal: 5,
+    qMeas: 1,
+    minuteStat: { result: 'SAGLADI' }
+  }], { pivot, bindingTargetMissing: true });
+
+  assert.equal(noBinding.diagnosis, 'Ortak dakika bulunamadi: secili YKS SCADA barasi yok veya EK-C icin otomatik bara eslesmesi yapilamadi');
+
+  const parserMissing = comparison.buildEkcPlatformComparison([{
+    busbarId: '4772',
+    localDate: '2026-04-28',
+    localHour: 0,
+    localMinute: 1,
+    measurementDateLocal: '2026-04-28T00:01:00+03:00',
+    liveBusbarVoltage: 158,
+    pgenMw: 5,
+    qgenMvar: 1,
+    approvalStatus: 1
+  }], [{
+    busbarId: '4772',
+    localDate: '2026-04-28',
+    localHour: 0,
+    localMinute: 2,
+    dakikaIndex: 2,
+    measurementDateLocal: '2026-04-28T00:02:00+03:00',
+    vBara: null,
+    pTotal: 5,
+    qMeas: 1,
+    minuteStat: { result: 'SAGLADI' }
+  }], { pivot });
+
+  assert.equal(parserMissing.diagnosis, 'Ortak dakika bulunamadi: EK-C V/P/Q alanlari eksik veya okunamadi');
+});

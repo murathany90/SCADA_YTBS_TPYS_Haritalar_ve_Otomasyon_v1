@@ -16,9 +16,14 @@ test('popup contains RGDH monitor button and popup.js opens the monitor page', (
 test('rgdh-monitor page wires scripts after RGDH dependencies and contains four tabs', () => {
   const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
 
+  assert.match(html, /YKS RGDH Izleme ve Dogrulama Sistemi/);
+  assert.doesNotMatch(html, /YAN HIZMETLER KONTROL SISTEMI/);
+  assert.doesNotMatch(html, /<small>RGDH Izleme<\/small>/);
+  assert.doesNotMatch(html, /class="rgdh-page-title"/);
   assert.match(html, /data-tab="raw"/);
   assert.match(html, /data-tab="daily"/);
   assert.match(html, /data-tab="charts"/);
+  assert.match(html, /data-tab="compare"[\s\S]*EK-C \/ YKS SCADA Karsilastirma/);
   assert.match(html, /data-tab="tests"/);
   assert.match(html, /Bitis Tarihi \(haric\)|Bitiş Tarihi \(hariç\)/);
   assert.match(html, /<label>Bara Ara[\s\S]*<select id="filterSearch"/);
@@ -42,10 +47,85 @@ test('rgdh-monitor page wires scripts after RGDH dependencies and contains four 
   assert.match(html, /id="fetchLogPanel"/);
   assert.doesNotMatch(html, /<option value="HYBRID">Hibrit<\/option>/);
   assert.match(html, /id="btnToggleVoltage"[\s\S]*Gerilim Kaynaklarini Goster/);
+  assert.doesNotMatch(html, /id="btnCompare"/);
+  assert.doesNotMatch(html, />Karsilastir</);
   assert.match(
     html,
-    /<script src="rgdh-catalog-data\.js"><\/script>[\s\S]*<script src="rgdh-auxiliary-catalog\.js"><\/script>[\s\S]*<script src="rgdh-csv\.js"><\/script>[\s\S]*<script src="rgdh-normalizer\.js"><\/script>[\s\S]*<script src="rgdh-pivot\.js"><\/script>[\s\S]*<script src="rgdh-charts\.js"><\/script>[\s\S]*<script src="rgdh-monitor\.js"><\/script>/
+    /<script src="rgdh-catalog-data\.js"><\/script>[\s\S]*<script src="rgdh-auxiliary-catalog\.js"><\/script>[\s\S]*<script src="rgdh-csv\.js"><\/script>[\s\S]*<script src="rgdh-normalizer\.js"><\/script>[\s\S]*<script src="rgdh-pivot\.js"><\/script>[\s\S]*<script src="rgdh-comparison\.js"><\/script>[\s\S]*<script src="rgdh-charts\.js"><\/script>[\s\S]*<script src="rgdh-monitor\.js"><\/script>/
   );
+});
+
+test('EK-C upload automatically compares against YKS SCADA data', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  assert.match(js, /function autoCompareAfterEkcLoad/);
+  assert.match(js, /autoCompareAfterEkcLoad\(\)/);
+  assert.match(js, /EK-C \/ YKS SCADA/);
+  assert.doesNotMatch(js, /el\.btnCompare\.addEventListener/);
+});
+
+test('EK-C upload binds selected YKS busbar, syncs date and explains missing matches', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const comparisonJs = fs.readFileSync(path.join(root, 'rgdh-comparison.js'), 'utf8');
+  const combined = `${js}\n${comparisonJs}`;
+
+  assert.match(js, /function bindEkcRowsToSelectedBusbar/);
+  assert.match(js, /function resolveEkcBindingTarget/);
+  assert.match(js, /function syncFiltersToEkcDates/);
+  assert.match(js, /RGDH_COMPARISON\.buildEkcPlatformComparison/);
+  assert.match(combined, /ekcOriginalName/);
+  assert.match(combined, /Ortak dakika bulunamadi: EK-C tarihi icin YKS SCADA verisi yok/);
+  assert.match(combined, /secili YKS SCADA barasi yok veya EK-C icin otomatik bara eslesmesi yapilamadi/);
+  assert.match(js, /function compareStatusBadge/);
+  assert.match(js, /Eslesmedi/);
+});
+
+test('EK-C comparison uses chart filters and compact result columns', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const charts = fs.readFileSync(path.join(root, 'rgdh-charts.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
+
+  assert.match(charts, /renderComparison/);
+  assert.match(charts, /chartHourStart/);
+  assert.match(charts, /chartHourEnd/);
+  assert.match(js, /compareSelection/);
+  assert.match(js, /data-compare-hour/);
+  assert.match(js, /Ek-C<br>K\.Y \(%\)/);
+  assert.match(js, /YKS<br>K\.Y \(%\)/);
+  assert.match(js, /YKS<br>Hibrit P/);
+  assert.match(js, /EK-C<br>Hibrit P/);
+  assert.match(js, /Fark<br>dHP/);
+  assert.match(js, /Max<br>dHP/);
+  assert.match(js, /function formatCompareParticipationCell/);
+  assert.match(js, /compare-ky-ok/);
+  assert.match(js, /compare-ky-fail/);
+  assert.match(js, /COMPARE_AVG_DELTA_LIMITS\s*=\s*\{[^}]*dV:\s*0\.5[^}]*dP:\s*1[^}]*dQ:\s*1[^}]*\}/);
+  assert.match(js, /COMPARE_MAX_DELTA_LIMITS\s*=\s*\{[^}]*dV:\s*3[^}]*dP:\s*10[^}]*dQ:\s*5[^}]*\}/);
+  assert.match(js, /function formatCompareDeltaCell/);
+  assert.match(js, /formatCompareDeltaCell\(row\.avgDeltaV,\s*'dV',\s*'avg'\)/);
+  assert.match(js, /formatCompareDeltaCell\(row\.maxDeltaV,\s*'dV',\s*'max'\)/);
+  assert.match(js, /formatCompareDeltaCell\(row\.avgDeltaP,\s*'dP',\s*'avg'\)/);
+  assert.match(js, /formatCompareDeltaCell\(row\.maxDeltaP,\s*'dP',\s*'max'\)/);
+  assert.match(js, /formatCompareDeltaCell\(row\.avgDeltaQ,\s*'dQ',\s*'avg'\)/);
+  assert.match(js, /formatCompareDeltaCell\(row\.maxDeltaQ,\s*'dQ',\s*'max'\)/);
+  assert.match(js, /function formatCompareDataBarCell/);
+  assert.match(js, /formatCompareDataBarCell\(row\.avgYksP,\s*pDataBarMax\)/);
+  assert.match(js, /formatCompareDataBarCell\(row\.avgEkcP,\s*pDataBarMax\)/);
+  assert.match(js, /formatCompareDataBarCell\(row\.avgYksHybridP,\s*pDataBarMax\)/);
+  assert.match(js, /formatCompareDataBarCell\(row\.avgEkcHybridP,\s*pDataBarMax\)/);
+  assert.match(css, /\.compare-ky-ok/);
+  assert.match(css, /\.compare-ky-fail/);
+  assert.match(css, /\.compare-delta-blue/);
+  assert.match(css, /\.compare-data-bar/);
+  assert.match(css, /#compareTable\s*\{[\s\S]*table-layout:\s*fixed/);
+  assert.match(css, /#compareTable th[\s\S]*white-space:\s*normal/);
+  assert.match(js, /Eşleşen DK|Eslesen DK/);
+  assert.match(js, /Ek-C Değerlendirme|Ek-C Degerlendirme/);
+  assert.match(js, /YKS Değerlendirme|YKS Degerlendirme/);
+  assert.doesNotMatch(js, /'Tarih', 'Saat', 'Varlik'/);
+  assert.doesNotMatch(js, /'Yalniz EK-C', 'Yalniz YKS SCADA'/);
+  assert.doesNotMatch(js, /'DD\/YY\/KY', 'Gecti\/Kaldi'/);
+  assert.doesNotMatch(js, /'YKS Q', 'EK-C Q', 'Ort dQ', 'Max dQ', 'Hibrit'/);
 });
 
 test('manifest injects YKS diagnostics helpers before the main content script', () => {
@@ -125,6 +205,12 @@ test('extension build includes YKS diagnostic bridge file', () => {
   assert.match(buildScript, /yks-rgdh-diagnostic-bridge\.js/);
 });
 
+test('extension build includes RGDH comparison helper loaded by monitor page', () => {
+  const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
+
+  assert.match(buildScript, /rgdh-comparison\.js/);
+});
+
 test('rgdh monitor daily table is date-first without summary and voltage toggle excludes TPYS/live busbar', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
   const charts = fs.readFileSync(path.join(root, 'rgdh-charts.js'), 'utf8');
@@ -143,7 +229,15 @@ test('rgdh monitor daily table is date-first without summary and voltage toggle 
   assert.doesNotMatch(charts, /Bara \[13\] kV\|Bara Set/);
   assert.match(charts, /TPYS Set Gerilim \(kV\)/);
   assert.match(charts, /onHourSelect/);
+  assert.match(js, /Detayli Metrik Goster/);
+  assert.match(charts, /Detayli Metrik Goster/);
+  assert.match(cssSafeRead(), /participation-yy/);
+  assert.match(cssSafeRead(), /participation-dd/);
 });
+
+function cssSafeRead() {
+  return fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
+}
 
 test('rgdh-catalog-data.js is valid JSON with 81 busbar-unit rows', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-catalog-data.js'), 'utf8');

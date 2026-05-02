@@ -26,19 +26,19 @@ function makeRow(minute, overrides = {}) {
   };
 }
 
-test('buildHourlyStatus returns OK for a complete clean hour', () => {
+test('buildHourlyStatus returns SAGLADI for a complete clean hour', () => {
   const rows = Array.from({ length: 60 }, (_, minute) => makeRow(minute));
-  assert.equal(pivot.buildHourlyStatus(rows), 'OK');
+  assert.equal(pivot.buildHourlyStatus(rows), 'SAGLADI');
 });
 
-test('buildHourlyStatus returns WARN for missing minutes and FAIL for fail ratio above threshold', () => {
+test('buildHourlyStatus tolerates up to 12 failed minutes and fails above the YKS threshold', () => {
   const partialRows = Array.from({ length: 55 }, (_, minute) => makeRow(minute));
-  assert.equal(pivot.buildHourlyStatus(partialRows), 'WARN');
+  assert.equal(pivot.buildHourlyStatus(partialRows), 'SAGLADI');
 
   const failedRows = Array.from({ length: 60 }, (_, minute) => makeRow(minute, {
-    flags: { voltageOutOfBand: minute < 7, qOutOfLimit: false, missingCriticalValue: false, platformMismatch: false, partialSource: false }
+    flags: { voltageOutOfBand: minute < 13, qOutOfLimit: false, missingCriticalValue: false, platformMismatch: false, partialSource: false }
   }));
-  assert.equal(pivot.buildHourlyStatus(failedRows), 'FAIL');
+  assert.equal(pivot.buildHourlyStatus(failedRows), 'SAGLAMADI');
 });
 
 test('buildDailyPivot creates 24 hour columns and summary counts per busbar', () => {
@@ -47,10 +47,21 @@ test('buildDailyPivot creates 24 hour columns and summary counts per busbar', ()
 
   assert.equal(result.rows.length, 1);
   assert.equal(result.rows[0].hours.length, 24);
-  assert.equal(result.rows[0].hours[0].status, 'OK');
-  assert.equal(result.rows[0].hours[1].status, 'NO_DATA');
+  assert.equal(result.rows[0].hours[0].status, 'SAGLADI');
+  assert.equal(result.rows[0].hours[1].status, 'KY');
   assert.equal(result.rows[0].summary.okHours, 1);
   assert.equal(result.rows[0].summary.noDataHours, 23);
+});
+
+test('buildPlatformHourStat treats a completely empty hour as KY', () => {
+  const stat = pivot.buildPlatformHourStat([]);
+
+  assert.equal(stat.minuteCount, 0);
+  assert.equal(stat.kyCount, 60);
+  assert.equal(stat.missingCount, 60);
+  assert.equal(stat.failCount, 0);
+  assert.equal(stat.hourResult, 'KY');
+  assert.equal(stat.passRatio, null);
 });
 
 test('buildDailyPivot keeps separate rows per local date for multi-day reports', () => {
@@ -107,9 +118,11 @@ test('buildDailyPivot gives approvalStatus priority when counting successful min
   assert.equal(hour.participationPct, 75);
 });
 
-test('participationClass marks below 80 red, 80 and above green, missing neutral', () => {
-  assert.equal(pivot.participationClass({ minuteCount: 60, participationPct: 79.9 }), 'participation-fail');
-  assert.equal(pivot.participationClass({ minuteCount: 60, participationPct: 80 }), 'participation-ok');
-  assert.equal(pivot.participationClass({ minuteCount: 0, participationPct: 0 }), 'participation-empty');
+test('participationClass follows reactive hour verdicts and distinguishes neutral decisions', () => {
+  assert.equal(pivot.participationClass({ hourResult: 'SAGLAMADI', passRatio: 79.9 }), 'participation-fail');
+  assert.equal(pivot.participationClass({ hourResult: 'SAGLADI', passRatio: 80 }), 'participation-ok');
+  assert.equal(pivot.participationClass({ hourResult: 'DD', passRatio: null }), 'participation-dd');
+  assert.equal(pivot.participationClass({ hourResult: 'YY', passRatio: null }), 'participation-yy');
+  assert.equal(pivot.participationClass({ hourResult: 'KY', passRatio: null }), 'participation-ky');
   assert.equal(pivot.participationClass(null), 'participation-empty');
 });

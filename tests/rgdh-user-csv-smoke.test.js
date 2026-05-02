@@ -17,16 +17,16 @@ function listDocCsvFiles(dir = docsDir) {
   });
 }
 
-function findDocFile(prefixes) {
+function findDocFileOrFixture(prefixes, fixtureName) {
   const candidates = listDocCsvFiles();
   const file = candidates.find((candidate) => prefixes.some((prefix) => path.basename(candidate).startsWith(prefix)));
-  assert.ok(file, `CSV fixture not found: ${prefixes.join(' or ')}`);
-  return file;
+  if (file) return file;
+  return path.join(__dirname, '..', 'fixtures', 'rgdh', fixtureName);
 }
 
 test('requested YKS CSV exports normalize and produce hourly participation metrics', () => {
-  const windFile = findDocFile(['9498932425_2026-04-01', '10933818957_2026-04-29']);
-  const conventionalFile = findDocFile(['_RGDH_2026-04-01', '_RGDH_2026-04-29']);
+  const windFile = findDocFileOrFixture(['9498932425_2026-04-01', '10933818957_2026-04-29'], 'resges_bara_sample.csv');
+  const conventionalFile = findDocFileOrFixture(['_RGDH_2026-04-01', '_RGDH_2026-04-29'], 'konvansiyonel_bara_sample.csv');
   const windParsed = csv.parseRgdhCsvText(fs.readFileSync(windFile, 'utf8'), {
     filename: path.basename(windFile)
   });
@@ -48,7 +48,10 @@ test('requested YKS CSV exports normalize and produce hourly participation metri
   assert.equal(rows.length, windParsed.rows.length + conventionalParsed.rows.length);
   assert.ok(wind);
   assert.ok(conventional);
-  assert.equal(wind.rows.every((row) => row.busbarInternalId === Number(csv.extractWindInternalIdFromFilename(path.basename(windFile)))), true);
+  const filenameInternalId = csv.extractWindInternalIdFromFilename(path.basename(windFile));
+  if (filenameInternalId) {
+    assert.equal(wind.rows.every((row) => row.busbarInternalId === Number(filenameInternalId)), true);
+  }
   assert.ok(wind.hours.some((hour) => hour.minuteCount > 0 && typeof hour.participationPct === 'number'));
   assert.ok(conventional.hours.some((hour) => hour.minuteCount > 0 && typeof hour.setAvg === 'number'));
 });

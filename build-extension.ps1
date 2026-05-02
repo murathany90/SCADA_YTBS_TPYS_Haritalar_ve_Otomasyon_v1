@@ -42,6 +42,7 @@ $files = @(
   'rgdh-api-client.js',
   'rgdh-normalizer.js',
   'rgdh-pivot.js',
+  'rgdh-comparison.js',
   'rgdh-charts.js',
   'rgdh-csv.js',
   'rgdh-storage.js',

@@ -19,6 +19,7 @@ try {
 }
 
 const RGDH_YKS_ORIGIN = 'https://yks.teias.gov.tr';
+const RGDH_YKS_APP_URL = `${RGDH_YKS_ORIGIN}/#/`;
 const RGDH_PAGE_FETCH_TIMEOUT_MS = 60000;
 const RGDH_JOB_TIMEOUT_MS = 60000;
 const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;
@@ -78,6 +79,8 @@ const rgdhFetchJobs = new Map();
 let rgdhFetchJobSeq = 0;
 const rgdhBusbarInternalIdCache = new Map();
 let rgdhLastInternalIdResolution = null;
+let rgdhTemporaryYksTabState = null;
+let rgdhTemporaryYksTabUsers = 0;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'DOWNLOAD_URL_AND_WAIT') {
@@ -2690,7 +2693,7 @@ async function resolveSelectedRgdhBusbarInternalIds(payload, selectedBusbar, sou
     return [String(resolved.id)];
   }
 
-  throw createRgdhError('Secili bara icin YKS ic ID bulunamadi. Bara listesini yenileyip tekrar deneyin.', 'MISSING_BUSBAR_SELECTION');
+  throw createRgdhError('Secili bara icin YKS ic ID bulunamadi. "https://yks.teias.gov.tr/#/ adresinden giriş yapın"', 'MISSING_BUSBAR_SELECTION');
 }
 
 async function resolveRgdhInternalIdFromCatalog(selectedBusbar, sourceType) {
@@ -2887,18 +2890,23 @@ async function safeRgdhDomScrape(payload) {
 
 async function runRgdhPageFetchInYksTab(payload) {
   validateRgdhEndpoint(payload.endpoint);
-  const tab = await findYksTab();
-  await injectRgdhYksDiagnosticsIntoTab(tab.id);
-  const startedAt = Date.now();
-  const [execution] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    world: 'MAIN',
-    func: rgdhPageFetchMainWorld,
-    args: [{ endpoint: payload.endpoint, params: payload.params || {}, baseUrl: RGDH_YKS_ORIGIN, timeoutMs: payload.timeoutMs || RGDH_PAGE_FETCH_TIMEOUT_MS }]
-  });
-  const result = execution?.result || { ok: false, error: 'YKS sekmesinden yanit alinamadi.', errorType: 'PAGE_FETCH_ERROR' };
-  await recordRgdhPageFetchDiagnostic(payload, result, Date.now() - startedAt);
-  return result;
+  let tab = null;
+  try {
+    tab = await findYksTab();
+    await injectRgdhYksDiagnosticsIntoTab(tab.id);
+    const startedAt = Date.now();
+    const [execution] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'MAIN',
+      func: rgdhPageFetchMainWorld,
+      args: [{ endpoint: payload.endpoint, params: payload.params || {}, baseUrl: RGDH_YKS_ORIGIN, timeoutMs: payload.timeoutMs || RGDH_PAGE_FETCH_TIMEOUT_MS }]
+    });
+    const result = execution?.result || { ok: false, error: 'YKS sekmesinden yanit alinamadi.', errorType: 'PAGE_FETCH_ERROR' };
+    await recordRgdhPageFetchDiagnostic(payload, result, Date.now() - startedAt);
+    return result;
+  } finally {
+    await releaseTemporaryYksTab(tab);
+  }
 }
 
 async function injectRgdhYksDiagnosticsIntoTab(tabId) {
@@ -2985,10 +2993,14 @@ async function recordRgdhPageFetchDiagnostic(payload, result, durationMs) {
 async function runRgdhDomScrapeInYksTab(payload) {
   const tab = await findYksTab();
   try {
-    return await sendMessageToTab(tab.id, { type: 'RGDH_DOM_SCRAPE', payload });
-  } catch {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-script.js'] });
-    return sendMessageToTab(tab.id, { type: 'RGDH_DOM_SCRAPE', payload });
+    try {
+      return await sendMessageToTab(tab.id, { type: 'RGDH_DOM_SCRAPE', payload });
+    } catch {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-script.js'] });
+      return await sendMessageToTab(tab.id, { type: 'RGDH_DOM_SCRAPE', payload });
+    }
+  } finally {
+    await releaseTemporaryYksTab(tab);
   }
 }
 
@@ -3007,9 +3019,64 @@ function sendMessageToTab(tabId, message) {
 
 async function findYksTab() {
   const tabs = await chrome.tabs.query({});
-  const tab = tabs.find((item) => /^https:\/\/yks\.teias\.gov\.tr\//i.test(String(item.url || '')));
-  if (!tab?.id) throw createRgdhError('Acik YKS sekmesi bulunamadi. Lutfen YKS sayfasinda oturum acin.', 'NO_YKS_TAB');
-  return tab;
+  const temporaryTabId = rgdhTemporaryYksTabState?.id;
+  const tab = tabs.find((item) => {
+    if (temporaryTabId !== null && temporaryTabId !== undefined && item.id === temporaryTabId) return false;
+    return isRgdhYksTab(item);
+  });
+  if (tab?.id) return tab;
+  return acquireTemporaryYksTab();
+}
+
+function isRgdhYksTab(tab) {
+  return /^https:\/\/yks\.teias\.gov\.tr\//i.test(String(tab?.url || ''));
+}
+
+async function acquireTemporaryYksTab() {
+  if (!rgdhTemporaryYksTabState) {
+    const state = { id: null, ready: null };
+    state.ready = (async () => {
+      const created = await chrome.tabs.create({ url: RGDH_YKS_APP_URL, active: false });
+      if (!created?.id) throw createRgdhError('Acik YKS sekmesi bulunamadi. Lutfen YKS sayfasinda oturum acin.', 'NO_YKS_TAB');
+      state.id = created.id;
+      await waitForTabComplete(created.id, 20000);
+      const loaded = await chrome.tabs.get(created.id).catch(() => created);
+      return { ...(loaded || created), id: created.id, __rgdhCreatedByExtension: true };
+    })();
+    rgdhTemporaryYksTabState = state;
+  }
+  const state = rgdhTemporaryYksTabState;
+  rgdhTemporaryYksTabUsers += 1;
+  try {
+    return await state.ready;
+  } catch (error) {
+    rgdhTemporaryYksTabUsers = Math.max(0, rgdhTemporaryYksTabUsers - 1);
+    if (rgdhTemporaryYksTabUsers === 0 && rgdhTemporaryYksTabState === state) {
+      rgdhTemporaryYksTabState = null;
+      if (state.id !== null && state.id !== undefined) await closeTemporaryYksTab(state.id);
+    }
+    if (error?.errorType) throw error;
+    throw createRgdhError(error?.message || 'YKS sekmesi arka planda acilamadi.', 'NO_YKS_TAB');
+  }
+}
+
+async function releaseTemporaryYksTab(tab) {
+  if (!tab?.__rgdhCreatedByExtension) return;
+  rgdhTemporaryYksTabUsers = Math.max(0, rgdhTemporaryYksTabUsers - 1);
+  if (rgdhTemporaryYksTabUsers > 0) return;
+  const tabId = tab.id;
+  rgdhTemporaryYksTabState = null;
+  if (tabId !== undefined && tabId !== null) {
+    await closeTemporaryYksTab(tabId);
+  }
+}
+
+async function closeTemporaryYksTab(tabId) {
+  try {
+    await chrome.tabs.remove(tabId);
+  } catch {
+    // ignore temporary tab cleanup failures
+  }
 }
 
 function getRgdhApiClient() {

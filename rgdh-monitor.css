@@ -38,9 +38,10 @@
   --chart-voltage-1: #2563eb;
   --chart-voltage-2: #60a5fa;
   --chart-voltage-3: #93c5fd;
-  --chart-voltage-set: #1d4ed8;
+  --chart-voltage-set: #7dd3fc;
   --chart-voltage-band: #38bdf8;
-  --chart-live-voltage: #ef4444;
+  --chart-live-voltage: #1e40af;
+  --chart-voltage-axis: #1d4ed8;
   --chart-upper-limit: #7f1d1d;
   --chart-lower-limit: #15803d;
   font-family: Arial, Helvetica, sans-serif;
@@ -336,6 +337,63 @@ button.ghost {
 .rgdh-table.compact td:nth-child(2),
 .rgdh-table.compact td:nth-child(3) { text-align: left; }
 
+#compareTable {
+  table-layout: fixed;
+  font-size: 10px;
+}
+
+#compareTable th,
+#compareTable td {
+  padding: 2px 3px;
+  line-height: 1.15;
+  text-align: center;
+  vertical-align: middle;
+}
+
+#compareTable th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#compareTable td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+#compareTable td:first-child,
+#compareTable td:nth-child(2) {
+  text-align: left;
+}
+
+#compareTable .rgdh-compare-col-date { width: 5.5%; }
+#compareTable .rgdh-compare-col-hour { width: 3.7%; }
+#compareTable .rgdh-compare-col-minutes { width: 3.6%; }
+#compareTable .rgdh-compare-col-eval { width: 9%; }
+#compareTable .rgdh-compare-col-percent { width: 4.2%; }
+#compareTable .rgdh-compare-col-metric { width: 3.4%; }
+
+.rgdh-table-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--yks-blue);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.rgdh-eval-pass,
+.rgdh-eval-fail,
+.rgdh-eval-neutral {
+  display: inline-block;
+  font-weight: 700;
+}
+
+.rgdh-eval-pass { color: var(--rgdh-ok); }
+.rgdh-eval-fail { color: var(--rgdh-error); }
+.rgdh-eval-neutral { color: var(--yks-muted); }
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -356,9 +414,62 @@ button.ghost {
 .badge.NO_DATA, .status-NO_DATA { background: #eceff1; color: #546e7a; }
 .badge.OFF, .status-OFF { background: #eef1f4; color: var(--rgdh-passive); }
 .badge.MISMATCH { background: #f0e8ff; color: var(--rgdh-purple); }
+.badge.SAGLADI, .status-SAGLADI { background: #e6f4ea; color: var(--rgdh-ok); }
+.badge.SAGLAMADI, .status-SAGLAMADI { background: #fde7e7; color: var(--rgdh-error); }
+.badge.DD, .status-DD { background: #eef1f4; color: var(--rgdh-passive); }
+.badge.YY, .status-YY { background: #fef3c7; color: #92400e; }
+.badge.KY, .status-KY { background: #eceff1; color: #546e7a; }
 .participation-ok { background: #e6f4ea; color: var(--rgdh-ok); font-weight: 700; }
 .participation-fail { background: #fde7e7; color: var(--rgdh-error); font-weight: 700; }
+.participation-dd { background: #eef1f4; color: var(--rgdh-passive); font-weight: 700; }
+.participation-yy { background: #fef3c7; color: #92400e; font-weight: 700; }
+.participation-ky { background: #e5e7eb; color: #374151; font-weight: 700; }
 .participation-empty { background: #eceff1; color: #546e7a; }
+.compare-ky-ok {
+  background: #e6f4ea;
+  color: var(--rgdh-ok);
+  font-weight: 700;
+}
+.compare-ky-fail {
+  background: #fde7e7;
+  color: var(--rgdh-error);
+  font-weight: 700;
+}
+.compare-delta-blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+.compare-ky-neutral {
+  font-weight: 700;
+}
+.compare-data-bar-cell {
+  padding: 0 !important;
+  background: transparent;
+}
+.compare-data-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 17px;
+  padding: 2px 3px;
+  overflow: hidden;
+}
+.compare-data-bar::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  bottom: 3px;
+  width: var(--bar-pct, 0%);
+  border-radius: 2px;
+  background: rgba(107, 114, 128, 0.24);
+}
+.compare-data-bar-value {
+  position: relative;
+  z-index: 1;
+}
 
 .rgdh-name-with-marker {
   display: inline-flex;
@@ -386,9 +497,10 @@ button.ghost {
 
 .rgdh-chart-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 10px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 6px 10px;
   align-items: end;
 }
 
@@ -400,6 +512,7 @@ button.ghost {
   color: #3d4b59;
   font-size: 11px;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .rgdh-chart-toolbar input,
@@ -407,6 +520,33 @@ button.ghost {
 .rgdh-chart-toolbar button {
   min-height: 28px;
   font-size: 12px;
+}
+
+.rgdh-chart-field-busbar { width: 190px; }
+.rgdh-chart-field-ytm { width: 112px; }
+.rgdh-chart-field-date { width: 132px; }
+.rgdh-chart-field-mode { width: 104px; }
+.rgdh-chart-field-hour { width: 92px; }
+.rgdh-chart-range-control { width: 218px; }
+
+.rgdh-hour-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rgdh-hour-slider-row button {
+  width: 28px;
+  padding: 0;
+  flex: 0 0 28px;
+}
+
+.rgdh-hour-slider-row input[type="range"] {
+  width: 150px;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .rgdh-chart-wrap {
@@ -429,6 +569,32 @@ button.ghost {
 
 .rgdh-detail-table[hidden] {
   display: none;
+}
+
+.rgdh-detail-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 6px 0;
+}
+
+.rgdh-detail-toggle-row button {
+  min-height: 28px;
+  font-size: 12px;
+}
+
+.rgdh-diagnostic-row td {
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 700;
+  text-align: left;
+}
+
+.rgdh-empty-state {
+  border: 1px dashed var(--yks-border-dark);
+  background: var(--panel-bg);
+  color: var(--rgdh-passive);
+  padding: 14px;
+  font-size: 13px;
 }
 
 .rgdh-context-label,
@@ -641,9 +807,10 @@ button.ghost {
   --chart-voltage-1: #60a5fa;
   --chart-voltage-2: #93c5fd;
   --chart-voltage-3: #bfdbfe;
-  --chart-voltage-set: #38bdf8;
-  --chart-voltage-band: #7dd3fc;
-  --chart-live-voltage: #f87171;
+  --chart-voltage-set: #7dd3fc;
+  --chart-voltage-band: #38bdf8;
+  --chart-live-voltage: #2563eb;
+  --chart-voltage-axis: #60a5fa;
   --chart-upper-limit: #fca5a5;
   --chart-lower-limit: #86efac;
 }
@@ -765,6 +932,11 @@ button.ghost {
   border-color: #334155;
 }
 
+[data-theme="dark"] .rgdh-diagnostic-row td {
+  background: #422006;
+  color: #fbbf24;
+}
+
 [data-theme="dark"] .badge.API { background: #1e3a5f; color: #93c5fd; }
 [data-theme="dark"] .badge.CSV { background: #374151; color: #d1d5db; }
 [data-theme="dark"] .badge.DOM { background: #422006; color: #fbbf24; }
@@ -773,6 +945,14 @@ button.ghost {
 [data-theme="dark"] .badge.FAIL, [data-theme="dark"] .status-FAIL { background: #450a0a; color: #fca5a5; }
 [data-theme="dark"] .badge.NO_DATA, [data-theme="dark"] .status-NO_DATA { background: #1e293b; color: #64748b; }
 [data-theme="dark"] .badge.OFF, [data-theme="dark"] .status-OFF { background: #1e293b; color: #6b7280; }
+[data-theme="dark"] .badge.SAGLADI, [data-theme="dark"] .status-SAGLADI { background: #052e16; color: #4ade80; }
+[data-theme="dark"] .badge.SAGLAMADI, [data-theme="dark"] .status-SAGLAMADI { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .badge.DD, [data-theme="dark"] .status-DD { background: #1e293b; color: #94a3b8; }
+[data-theme="dark"] .badge.YY, [data-theme="dark"] .status-YY { background: #422006; color: #fbbf24; }
+[data-theme="dark"] .badge.KY, [data-theme="dark"] .status-KY { background: #1e293b; color: #64748b; }
 [data-theme="dark"] .participation-ok { background: #052e16; color: #4ade80; }
 [data-theme="dark"] .participation-fail { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .participation-dd { background: #1e293b; color: #94a3b8; }
+[data-theme="dark"] .participation-yy { background: #422006; color: #fbbf24; }
+[data-theme="dark"] .participation-ky { background: #111827; color: #94a3b8; }
 [data-theme="dark"] .participation-empty { background: #1e293b; color: #64748b; }

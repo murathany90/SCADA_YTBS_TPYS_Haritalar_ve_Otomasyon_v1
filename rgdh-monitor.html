@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RGDH Izleme</title>
+  <title>YKS RGDH Izleme ve Dogrulama Sistemi</title>
   <link rel="stylesheet" href="rgdh-monitor.css">
 </head>
 <body>
@@ -12,19 +12,13 @@
       <div class="yks-brand">
         <span class="yks-logo" aria-hidden="true"></span>
         <div>
-          <strong>YAN HIZMETLER KONTROL SISTEMI</strong>
-          <small>RGDH Izleme</small>
+          <strong>YKS RGDH Izleme ve Dogrulama Sistemi</strong>
         </div>
       </div>
       <button id="btnToggleTheme" class="ghost" type="button" title="Tema degistir">🌙</button>
       <button id="btnErrorDetails" class="ghost" type="button">Eklenti Loglari <span id="extensionLogCount">0</span></button>
       <button id="btnYksLogs" class="ghost" type="button">YKS Loglari <span id="yksLogCount">0</span></button>
     </header>
-
-    <section class="rgdh-page-title">
-      <h1>RGDH Izleme ve Dogrulama Paneli</h1>
-      <p>Yan Hizmetler Analiz Platformu verilerini API, CSV ve DOM kaynaklarindan normalize eder.</p>
-    </section>
 
     <section class="rgdh-toolbar yks-card" aria-label="RGDH filtreleri">
       <label>Tarih <input id="filterDate" type="date"></label>
@@ -44,10 +38,9 @@
       <div class="rgdh-actions">
         <button id="btnFetchYks" class="primary" type="button">YKS'den Cek</button>
         <button id="btnCancelFetch" type="button" hidden>Iptal</button>
-        <button id="btnPickCsv" type="button">CSV Yukle</button>
+        <button id="btnPickCsv" type="button">Ek-C CSV Yukle</button>
         <input id="csvInput" type="file" accept=".csv,text/csv" multiple hidden>
         <button id="btnToggleVoltage" type="button" title="Gerilim kaynaklarini goster/gizle">Gerilim Kaynaklarini Goster</button>
-        <button id="btnCompare" type="button">Karsilastir</button>
         <button id="btnExportCsv" type="button">CSV Disari Aktar</button>
       </div>
     </section>
@@ -66,6 +59,7 @@
       <button class="active" data-tab="raw" type="button">Ham Data</button>
       <button data-tab="daily" type="button">Gunluk RGDH Izleme</button>
       <button data-tab="charts" type="button">RGDH Grafik Rapor</button>
+      <button data-tab="compare" type="button">EK-C / YKS SCADA Karsilastirma</button>
       <button data-tab="tests" type="button">RGDH Testleri</button>
     </nav>
 
@@ -79,11 +73,25 @@
       <div class="rgdh-table-wrap">
         <table id="dailyTable" class="rgdh-table compact"></table>
       </div>
+      <div class="rgdh-detail-toggle-row">
+        <button id="btnToggleDailyMetricTable" type="button">Detayli Metrik Goster</button>
+      </div>
+      <div id="dailyMetricWrap" class="rgdh-detail-table" hidden>
+        <table id="dailyMetricTable" class="rgdh-table compact"></table>
+      </div>
     </section>
 
     <section id="panelCharts" class="rgdh-panel" data-panel="charts">
       <div id="chartContextLabel" class="rgdh-context-label">-</div>
       <div id="chartsRoot" class="rgdh-charts"></div>
+    </section>
+
+    <section id="panelCompare" class="rgdh-panel" data-panel="compare">
+      <div id="compareContextLabel" class="rgdh-context-label">YKS SCADA verisi ile EK-C kullanici dosyasi ayni dakika anahtarinda karsilastirilir.</div>
+      <div id="compareChartsRoot" class="rgdh-charts"></div>
+      <div class="rgdh-table-wrap">
+        <table id="compareTable" class="rgdh-table compact"></table>
+      </div>
     </section>
 
     <section id="panelTests" class="rgdh-panel" data-panel="tests">
@@ -159,6 +167,7 @@
   <script src="rgdh-csv.js"></script>
   <script src="rgdh-normalizer.js"></script>
   <script src="rgdh-pivot.js"></script>
+  <script src="rgdh-comparison.js"></script>
   <script src="rgdh-storage.js"></script>
   <script src="rgdh-diagnostics.js"></script>
   <script src="rgdh-dom-bridge.js"></script>

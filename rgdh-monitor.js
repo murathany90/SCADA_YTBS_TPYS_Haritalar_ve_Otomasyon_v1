@@ -1,14 +1,18 @@
 (function () {
   const state = {
     apiRows: [],
-    csvRows: [],
     domRows: [],
+    ekcRows: [],
+    ekcGroups: [],
+    ekcLoaded: false,
+    ekcBindingTarget: null,
     catalogRows: [],
     discoveredBusbarInternalIds: [],
     comparison: null,
     pivot: { rows: [] },
     activeTab: 'raw',
     chartSelection: { busbarId: null, hour: null, date: null },
+    compareSelection: { busbarId: '', ytm: '', hourMode: 'all', hourStart: null, hourEnd: null, hour: null, date: null },
     selectedTestBusbarKey: '',
     errors: [],
     fetchLogs: [],
@@ -22,6 +26,9 @@
   const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;
   const RGDH_HYBRID_CONTINUATION_TIMEOUT_MS = 900000;
   const RGDH_HYBRID_CONTINUATION_POLL_GRACE_MS = 60000;
+  const COMPARE_KY_THRESHOLD_PCT = 80;
+  const COMPARE_AVG_DELTA_LIMITS = { dV: 0.5, dP: 1, dQ: 1 };
+  const COMPARE_MAX_DELTA_LIMITS = { dV: 3, dP: 10, dQ: 5 };
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -113,9 +120,9 @@
     [
       'filterDate', 'filterEndDate', 'filterSourceType', 'filterSearch', 'filterNotice',
       'btnFetchYks', 'btnCancelFetch', 'btnPickCsv', 'csvInput',
-      'btnCompare', 'btnExportCsv', 'btnToggleTheme', 'btnToggleVoltage',
+      'btnExportCsv', 'btnToggleTheme', 'btnToggleVoltage',
       'statSource', 'statRows', 'statBusbars',
-      'statMismatch', 'statStatus', 'rawTable', 'dailyTable', 'chartContextLabel', 'chartsRoot', 'testsTable', 'testUnitDetailsTable',
+      'statMismatch', 'statStatus', 'rawTable', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable',
       'testCatalogSearchInput', 'testBusbarTypeSelect', 'testBusbarSelect', 'testHybridOnlyCheckbox', 'btnExportTestsCsv',
       'btnErrorDetails', 'extensionLogCount', 'extensionLogPanel', 'btnCloseErrors', 'btnExportExtensionLogCsv', 'btnClearErrorLogs', 'extensionLogList',
       'btnYksLogs', 'yksLogCount', 'yksLogPanel', 'btnRefreshYksLogs', 'btnExportYksLogCsv', 'btnClearYksLogs', 'btnCloseYksLogs', 'yksLogList',
@@ -141,7 +148,7 @@
     el.btnCancelFetch?.addEventListener('click', cancelYksFetch);
     el.btnPickCsv.addEventListener('click', () => el.csvInput.click());
     el.csvInput.addEventListener('change', handleCsvFiles);
-    el.btnCompare.addEventListener('click', compareSources);
+    el.btnToggleDailyMetricTable?.addEventListener('click', toggleDailyMetricTable);
     el.btnExportCsv.addEventListener('click', exportCsv);
     el.btnExportTestsCsv?.addEventListener('click', exportTestsCsv);
     el.btnErrorDetails.addEventListener('click', () => {
@@ -476,38 +483,118 @@
   async function handleCsvFiles(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    const measurementRows = [];
-    let catalogCount = 0;
+    const ekcRows = [];
+    const ekcGroups = [];
+    const bindingTarget = resolveEkcBindingTarget();
 
     for (const file of files) {
       try {
         const text = await file.text();
-        const parsed = RGDH_CSV.parseRgdhCsvText(text, { filename: file.name });
-        if (parsed.type === 'UNKNOWN') throw new Error(`${file.name}: CSV formati taninamadi.`);
-        if (parsed.type === 'BUSBAR_UNIT_CATALOG') {
-          state.catalogRows = mergeCatalogRows([...state.catalogRows, ...parsed.rows]);
-          catalogCount += parsed.rows.length;
-          continue;
-        }
-        measurementRows.push(...RGDH_NORMALIZER.normalizeCsvParseResult(parsed));
+        const parsed = RGDH_CSV.parseEkcCsvText(text, { filename: file.name });
+        ekcRows.push(...(parsed.rows || []));
+        ekcGroups.push(...(parsed.groups || []));
       } catch (error) {
-        pushError('CSV', error.message || String(error), { file: file.name });
+        pushError('EK-C', error.message || String(error), { file: file.name });
       }
     }
 
-    if (measurementRows.length) state.csvRows = measurementRows;
+    if (ekcRows.length) {
+      state.ekcRows = bindEkcRowsToSelectedBusbar(ekcRows, bindingTarget);
+      state.ekcGroups = ekcGroups;
+      state.ekcLoaded = true;
+      state.ekcBindingTarget = bindingTarget || null;
+      syncFiltersToEkcDates(state.ekcRows);
+    }
     rebuildEnrichment();
     syncDynamicOptions();
-    setStatus(`CSV yuklendi: ${state.csvRows.length} kayit, ${state.catalogRows.length} katalog satiri`);
-    pushFetchLog('success', 'CSV', `${measurementRows.length} olcum satiri ve ${catalogCount} katalog satiri okundu.`, {});
-    renderAll();
+    const bindingText = bindingTarget?.busbarId
+      ? ` ${bindingTarget.busbarName || bindingTarget.busbarId} YKS SCADA barasina baglandi.`
+      : ' YKS SCADA barasi otomatik baglanamadi.';
+    setStatus(`EK-C CSV yuklendi: ${state.ekcRows.length} dakika.${bindingText}`);
+    pushFetchLog('success', 'EK-C', `${ekcRows.length} EK-C dakika satiri okundu.${bindingText}`, { fileCount: files.length, bindingTarget });
+    if (state.ekcRows.length) {
+      autoCompareAfterEkcLoad();
+    } else {
+      renderAll();
+    }
     event.target.value = '';
   }
 
+  function bindEkcRowsToSelectedBusbar(rows, target = resolveEkcBindingTarget()) {
+    return RGDH_COMPARISON.bindEkcRowsToSelectedBusbar(rows, target);
+  }
+
+  function resolveEkcBindingTarget() {
+    const filters = readFilters();
+    const selectedBusbar = resolveSelectedBusbar(filters);
+    if (selectedBusbar?.busbarId) return completeEkcBindingTarget(selectedBusbar);
+
+    const filteredTargets = uniqueEkcBindingTargets(getFilteredRows());
+    if (filteredTargets.length === 1) return filteredTargets[0];
+
+    const allTargets = uniqueEkcBindingTargets(allRows());
+    return allTargets.length === 1 ? allTargets[0] : null;
+  }
+
+  function uniqueEkcBindingTargets(rows) {
+    const map = new Map();
+    (rows || []).forEach((row) => {
+      if (row?.busbarId === null || row?.busbarId === undefined || row?.busbarId === '') return;
+      const key = String(row.busbarId);
+      if (!map.has(key)) map.set(key, completeEkcBindingTarget(row));
+    });
+    return [...map.values()];
+  }
+
+  function completeEkcBindingTarget(target) {
+    const busbarId = target?.busbarId === null || target?.busbarId === undefined ? '' : String(target.busbarId);
+    const platformRow = allRows().find((row) => busbarId && String(row.busbarId) === busbarId) || {};
+    return {
+      busbarId,
+      busbarInternalId: target?.busbarInternalId ?? platformRow.busbarInternalId ?? null,
+      busbarName: target?.busbarName || platformRow.busbarName || '',
+      plantName: target?.plantName || platformRow.plantName || '',
+      sourceType: target?.sourceType || platformRow.sourceType || '',
+      ytm: target?.ytm || platformRow.ytm || ''
+    };
+  }
+
+  function syncFiltersToEkcDates(rows) {
+    const update = RGDH_COMPARISON.getEkcDateFilterUpdate(rows, readFilters());
+    if (!update.changed) return update;
+    el.filterDate.value = update.date;
+    el.filterEndDate.value = update.endDate;
+    persistFilters();
+    return update;
+  }
+
+  function dateRangeCovers(filters, dates) {
+    if (!filters?.date) return false;
+    const start = filters.date;
+    const end = filters.endDate || addLocalDays(start, 1);
+    return (dates || []).every((date) => date >= start && date < end);
+  }
+
+  function addLocalDays(localDate, days) {
+    const parts = String(localDate || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return '';
+    const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    date.setUTCDate(date.getUTCDate() + Number(days || 0));
+    return date.toISOString().slice(0, 10);
+  }
+
+  function autoCompareAfterEkcLoad() {
+    state.comparison = buildEkcPlatformComparison(getFilteredRows(), getFilteredEkcRows());
+    const summary = state.comparison.summary || {};
+    setStatus(`EK-C / YKS SCADA: ${summary.both || 0} ortak, ${summary.ekcOnly || 0} yalniz EK-C, ${summary.platformOnly || 0} yalniz YKS SCADA${state.comparison.diagnosis ? ` - ${state.comparison.diagnosis}` : ''}`);
+    switchTab('compare');
+  }
+
   function compareSources() {
-    state.comparison = RGDH_NORMALIZER.compareNormalizedRows(state.apiRows, state.csvRows);
-    setStatus(`Karsilastirma: ${mismatchCount()} fark`);
-    renderAll();
+    state.comparison = buildEkcPlatformComparison(getFilteredRows(), getFilteredEkcRows());
+    const summary = state.comparison.summary || {};
+    setStatus(`EK-C / YKS SCADA: ${summary.both || 0} ortak, ${summary.ekcOnly || 0} yalniz EK-C, ${summary.platformOnly || 0} yalniz YKS SCADA${state.comparison.diagnosis ? ` - ${state.comparison.diagnosis}` : ''}`);
+    switchTab('compare');
   }
 
   function switchTab(tab) {
@@ -524,7 +611,9 @@
     renderStats(rows);
     renderRawTable(rows);
     renderDailyTable(state.pivot.rows);
+    renderDailyMetricTable(state.pivot.rows);
     renderCharts(rows, state.pivot.rows);
+    renderCompareView(rows);
     renderTestsTable();
     renderErrors();
     renderFetchLogs();
@@ -532,7 +621,7 @@
   }
 
   function allRows() {
-    return [...state.apiRows, ...state.csvRows, ...state.domRows];
+    return [...state.apiRows, ...state.domRows];
   }
 
   function getFilteredRows() {
@@ -558,6 +647,337 @@
     });
   }
 
+  function getFilteredEkcRows() {
+    const filters = readFilters();
+    const search = normalizeText(filters.search);
+    const selectedBusbar = resolveSelectedBusbar(filters);
+    return (state.ekcRows || []).filter((row) => {
+      if (filters.date && row.localDate) {
+        if (filters.endDate) {
+          if (row.localDate < filters.date || row.localDate >= filters.endDate) return false;
+        } else if (row.localDate !== filters.date) {
+          return false;
+        }
+      }
+      if (filters.sourceType !== 'ALL' && !sourceTypeMatches(row.sourceType, filters.sourceType)) return false;
+      if (selectedBusbar) {
+        const selectedText = normalizeText(`${selectedBusbar.busbarId || ''} ${selectedBusbar.busbarName || ''} ${selectedBusbar.plantName || ''}`);
+        const rowText = normalizeText(`${row.busbarId || ''} ${row.busbarName || ''} ${row.plantName || ''} ${row.fileName || ''}`);
+        if (!rowText.includes(selectedText) && !selectedText.includes(rowText)) return false;
+      } else if (search) {
+        const text = normalizeText(`${row.busbarInternalId || ''} ${row.busbarId || ''} ${row.busbarName || ''} ${row.plantName || ''} ${row.fileName || ''}`);
+        if (!text.includes(search)) return false;
+      }
+      return true;
+    });
+  }
+
+  function buildEkcPlatformComparison(platformRows, ekcRows) {
+    return RGDH_COMPARISON.buildEkcPlatformComparison(platformRows, ekcRows, {
+      pivot: RGDH_PIVOT,
+      bindingTargetMissing: state.ekcLoaded && !state.ekcBindingTarget?.busbarId,
+      missingBindingDiagnosis: 'Ortak dakika bulunamadi: secili YKS SCADA barasi yok veya EK-C icin otomatik bara eslesmesi yapilamadi'
+    });
+  }
+
+  function buildComparisonDiagnosis(platformRows, ekcRows, summary = {}) {
+    if ((summary.both || 0) > 0) return '';
+    const platform = Array.isArray(platformRows) ? platformRows : [];
+    const ekc = Array.isArray(ekcRows) ? ekcRows : [];
+    if (ekc.length && !platform.length) return 'Ortak dakika bulunamadi: EK-C tarihi icin YKS SCADA verisi yok';
+    if (!ekc.length && platform.length) return 'Ortak dakika bulunamadi: aktif filtrelerde EK-C verisi yok';
+    if (!ekc.length && !platform.length) return 'Ortak dakika bulunamadi: aktif filtrelerde EK-C ve YKS SCADA verisi yok';
+
+    const platformDates = new Set(platform.map((row) => row.localDate).filter(Boolean));
+    const ekcDates = new Set(ekc.map((row) => row.localDate).filter(Boolean));
+    const hasDateOverlap = [...ekcDates].some((date) => platformDates.has(date));
+    if (!hasDateOverlap) return 'Ortak dakika bulunamadi: EK-C ve YKS SCADA tarihleri uyusmuyor';
+
+    const missingEkcFields = ekc.some((row) => !Number.isFinite(Number(row.vBara)) || !Number.isFinite(Number(row.pTotal)) || !Number.isFinite(Number(row.qMeas)));
+    if (missingEkcFields) return 'Ortak dakika bulunamadi: EK-C V/P/Q alanlari eksik veya okunamadi';
+
+    return 'Ortak dakika bulunamadi: secili YKS SCADA barasi ile EK-C dakika anahtarlari eslesmedi';
+  }
+
+  function indexRowsForComparison(rows, kind) {
+    const map = new Map();
+    (rows || []).forEach((row) => {
+      comparisonKeys(row, kind).forEach((key) => {
+        if (key && !map.has(key)) map.set(key, row);
+      });
+    });
+    return map;
+  }
+
+  function buildCompareMinuteRow(key, ekc, platform) {
+    const joinState = ekc && platform ? 'both' : (ekc ? 'ekc_only' : 'platform_only');
+    const platformVerdict = platform ? RGDH_PIVOT.derivePlatformMinuteResult(platform) : null;
+    const ekcResult = normalizeReactiveResult(ekc?.minuteStat?.result);
+    const platformResult = normalizeReactiveResult(platformVerdict?.result);
+    const platformEquivalentLimit = platform ? platformEquivalentQLimit(platform) : null;
+    const ekcLimitComparable = ekc ? ekcComparableLimit(ekc) : null;
+    const measurementDateLocal = ekc?.measurementDateLocal || platform?.measurementDateLocal || '';
+    return {
+      key,
+      joinState,
+      ekc,
+      platform,
+      measurementDateLocal,
+      localDate: ekc?.localDate || platform?.localDate || '',
+      hour: Number(ekc?.hour ?? ekc?.localHour ?? platform?.localHour ?? 0),
+      minuteIndex: Number(ekc?.dakikaIndex ?? platformMinuteIndex(platform)),
+      ekcResult,
+      platformResult,
+      ekcLimitComparable,
+      platformEquivalentLimit,
+      deltaV: deltaNumber(ekc?.vBara, platform?.liveBusbarVoltage),
+      deltaP: deltaNumber(ekc?.pTotal, platform?.pgenMw),
+      deltaQ: deltaNumber(ekc?.qMeas, platform?.qgenMvar),
+      ekcHybridDutyFlag: ekc?.minuteStat?.hybridDutyFlag || '',
+      platformProvidedBy: platform?.auxiliaryApprovalStatus === 1 ? 'AUX' : 'MAIN',
+      hybridConsistency: compareHybridDuty(ekc, platform)
+    };
+  }
+
+  function comparisonKeys(row, kind) {
+    if (!row) return [];
+    const date = row.localDate || '';
+    const minute = kind === 'ekc' ? Number(row.dakikaIndex) : platformMinuteIndex(row);
+    if (!date || !Number.isFinite(minute)) return [];
+    return comparisonEntityKeys(row).map((entity) => `${entity}|${date}|${minute}`).filter(Boolean);
+  }
+
+  function comparisonEntityKey(row) {
+    return comparisonEntityKeys(row)[0] || '';
+  }
+
+  function comparisonEntityKeys(row) {
+    const keys = [];
+    if (row?.catalog?.busbarId) keys.push(`catalog:${row.catalog.busbarId}`);
+    if (row?.busbarInternalId) keys.push(`internal:${row.busbarInternalId}`);
+    if (row?.busbarId) keys.push(`busbar:${row.busbarId}`);
+    const name = normalizeText(row?.busbarName || row?.plantName || row?.fileName || '');
+    if (name) keys.push(`name:${name}`);
+    return [...new Set(keys)];
+  }
+
+  function platformMinuteIndex(row) {
+    if (!row) return null;
+    const explicit = Number(row.minuteIndex ?? row.dakikaIndex);
+    if (Number.isFinite(explicit)) return explicit;
+    const hour = Number(row.localHour);
+    const minute = Number(row.localMinute);
+    return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
+  }
+
+  function platformEquivalentQLimit(row) {
+    const q = Number(row?.qgenMvar);
+    const di = Number(row?.diMvarLimit);
+    const ai = Number(row?.aiMvarLimit);
+    if (Number.isFinite(q) && q < 0 && Number.isFinite(di)) return di;
+    if (Number.isFinite(q) && q > 0 && Number.isFinite(ai)) return ai;
+    if (Number.isFinite(di) && !Number.isFinite(ai)) return di;
+    if (Number.isFinite(ai) && !Number.isFinite(di)) return ai;
+    if (Number.isFinite(q) && Number.isFinite(di) && Number.isFinite(ai)) {
+      return Math.abs(q - di) <= Math.abs(q - ai) ? di : ai;
+    }
+    return null;
+  }
+
+  function ekcComparableLimit(row) {
+    const stat = row?.minuteStat || {};
+    const q = Number(row?.qMeas);
+    if (Number.isFinite(stat.limitValue)) return stat.limitValue;
+    if (Number.isFinite(q) && q < 0 && Number.isFinite(stat.limitHigh)) return stat.limitHigh;
+    if (Number.isFinite(q) && q > 0 && Number.isFinite(stat.limitLow)) return stat.limitLow;
+    if (Number.isFinite(stat.limitLow) && !Number.isFinite(stat.limitHigh)) return stat.limitLow;
+    if (Number.isFinite(stat.limitHigh) && !Number.isFinite(stat.limitLow)) return stat.limitHigh;
+    return null;
+  }
+
+  function buildCompareHourRows(compareRows) {
+    const grouped = new Map();
+    (compareRows || []).forEach((row) => {
+      const entity = comparisonEntityKey(row.ekc || row.platform);
+      const key = `${entity}|${row.localDate}|${row.hour}`;
+      if (!grouped.has(key)) grouped.set(key, { key, entity, localDate: row.localDate, hour: row.hour, rows: [] });
+      grouped.get(key).rows.push(row);
+    });
+    return [...grouped.values()].map((group) => {
+      const bothRows = group.rows.filter((row) => row.joinState === 'both');
+      const ekcSourceRows = group.rows.filter((row) => row.joinState !== 'platform_only');
+      const platformSourceRows = group.rows.filter((row) => row.joinState !== 'ekc_only');
+      const ekcStat = ekcSourceRows.length ? buildHourStatFromResultRows(ekcSourceRows, 'ekcResult') : null;
+      const platformStat = platformSourceRows.length ? buildHourStatFromResultRows(platformSourceRows, 'platformResult') : null;
+      return {
+        ...group,
+        ekcStat,
+        platformStat,
+        commonMinutes: bothRows.length,
+        ekcOnlyMinutes: group.rows.filter((row) => row.joinState === 'ekc_only').length,
+        platformOnlyMinutes: group.rows.filter((row) => row.joinState === 'platform_only').length,
+        ddCount: countResult(group.rows, 'DD'),
+        yyCount: countResult(group.rows, 'YY'),
+        kyCount: countResult(group.rows, 'KY'),
+        passCount: countResult(group.rows, 'SAGLADI'),
+        failCount: countResult(group.rows, 'SAGLAMADI'),
+        avgYksV: average(group.rows.map((row) => row.platform?.liveBusbarVoltage)),
+        avgEkcV: average(group.rows.map((row) => row.ekc?.vBara)),
+        avgYksP: average(group.rows.map((row) => row.platform?.pgenMw)),
+        avgEkcP: average(group.rows.map((row) => row.ekc?.pTotal)),
+        avgYksQ: average(group.rows.map((row) => row.platform?.qgenMvar)),
+        avgEkcQ: average(group.rows.map((row) => row.ekc?.qMeas)),
+        avgDeltaV: average(bothRows.map((row) => row.deltaV)),
+        avgDeltaP: average(bothRows.map((row) => row.deltaP)),
+        avgDeltaQ: average(bothRows.map((row) => row.deltaQ)),
+        maxDeltaV: maxAbs(bothRows.map((row) => row.deltaV)),
+        maxDeltaP: maxAbs(bothRows.map((row) => row.deltaP)),
+        maxDeltaQ: maxAbs(bothRows.map((row) => row.deltaQ)),
+        hybridConsistency: uniqueStrings(bothRows.map((row) => row.hybridConsistency).filter(Boolean)).join(', ')
+      };
+    }).sort((a, b) => `${a.localDate}|${a.hour}`.localeCompare(`${b.localDate}|${b.hour}`));
+  }
+
+  function buildHourStatFromResultRows(rows, field) {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    if (!sourceRows.length) {
+      return RGDH_PIVOT.reactiveHourSummary({
+        passCount: 0,
+        failCount: 0,
+        kyCount: 1,
+        ddCount: 0,
+        yyCount: 0,
+        missingCount: 1,
+        activeLiabilityMinutes: 0
+      }, {
+        expectedMinuteCount: 1,
+        failMinuteThreshold: 0,
+        minActiveLiabilityMinutes: 1,
+        dominantOfflineThreshold: 0,
+        kyMinuteThreshold: 1
+      });
+    }
+    const counts = { passCount: 0, failCount: 0, kyCount: 0, ddCount: 0, yyCount: 0 };
+    sourceRows.forEach((row) => {
+      const result = normalizeReactiveResult(row[field]);
+      if (result === 'SAGLADI') counts.passCount += 1;
+      else if (result === 'SAGLAMADI') counts.failCount += 1;
+      else if (result === 'KY') counts.kyCount += 1;
+      else if (result === 'DD') counts.ddCount += 1;
+      else if (result === 'YY') counts.yyCount += 1;
+    });
+    const expectedMinuteCount = sourceRows.length;
+    return RGDH_PIVOT.reactiveHourSummary({
+      ...counts,
+      missingCount: 0,
+      activeLiabilityMinutes: counts.passCount + counts.failCount + counts.ddCount + counts.yyCount
+    }, {
+      expectedMinuteCount,
+      failMinuteThreshold: Math.floor(expectedMinuteCount * 0.2),
+      minActiveLiabilityMinutes: 1,
+      dominantOfflineThreshold: Math.max(0, expectedMinuteCount - 1),
+      kyMinuteThreshold: expectedMinuteCount
+    });
+  }
+
+  function countResult(rows, result) {
+    return (rows || []).filter((row) => row.ekcResult === result || row.platformResult === result).length;
+  }
+
+  function normalizeReactiveResult(value) {
+    return RGDH_PIVOT.normalizeReactiveResultCode ? RGDH_PIVOT.normalizeReactiveResultCode(value) : String(value || '');
+  }
+
+  function reactiveLabel(value) {
+    return RGDH_PIVOT.reactiveDisplayLabel ? RGDH_PIVOT.reactiveDisplayLabel(value) : (value || '-');
+  }
+
+  function reactiveStatusBadge(value) {
+    const code = normalizeReactiveResult(value);
+    return `<span class="badge ${escapeHtml(code || 'KY')}">${escapeHtml(reactiveLabel(code || 'KY'))}</span>`;
+  }
+
+  function compareStatusBadge(stat) {
+    if (!stat?.hourResult) return '<span class="badge KY">Eslesmedi</span>';
+    return reactiveStatusBadge(stat.hourResult);
+  }
+
+  function formatComparisonEvaluation(stat) {
+    if (!stat) return '<span class="badge KY">Eslesmedi</span>';
+    const pass = Number(stat.passCount || stat.successMinuteCount || 0);
+    const fail = Number(stat.failCount || 0);
+    const dd = Number(stat.ddCount || 0);
+    const yy = Number(stat.yyCount || 0);
+    const ky = Number(stat.kyCount || 0);
+    return [
+      `<span class="rgdh-eval-pass">✓ ${formatNumber(pass)}</span>`,
+      `<span class="rgdh-eval-fail">✕ ${formatNumber(fail)}</span>`,
+      `<span class="rgdh-eval-neutral">DD ${formatNumber(dd)} / YY ${formatNumber(yy)} / KY ${formatNumber(ky)}</span>`
+    ].join(' ');
+  }
+
+  function formatCompareParticipationCell(stat) {
+    const result = normalizeReactiveResult(stat?.hourResult || stat?.status);
+    if (result === 'DD' || result === 'YY' || result === 'KY') {
+      return { html: escapeHtml(result), className: `compare-ky-neutral participation-${result.toLowerCase()}` };
+    }
+    const ratio = Number(stat?.passRatio ?? stat?.participationPct);
+    if (!Number.isFinite(ratio)) return '-';
+    return {
+      html: formatFixedPercent(ratio),
+      className: ratio >= COMPARE_KY_THRESHOLD_PCT ? 'compare-ky-ok' : 'compare-ky-fail'
+    };
+  }
+
+  function formatCompareDeltaCell(value, metric, limitType = 'avg') {
+    const numeric = Number(value);
+    const limits = limitType === 'max' ? COMPARE_MAX_DELTA_LIMITS : COMPARE_AVG_DELTA_LIMITS;
+    const limit = limits[metric];
+    const className = Number.isFinite(numeric) && Number.isFinite(Number(limit)) && numeric > limit
+      ? 'compare-delta-blue'
+      : '';
+    return { html: formatFixedNumber(value), className };
+  }
+
+  function formatCompareDataBarCell(value, maxValue) {
+    const numeric = Number(value);
+    const maxNumeric = Number(maxValue);
+    if (!Number.isFinite(numeric) || !Number.isFinite(maxNumeric) || maxNumeric <= 0) {
+      return formatFixedNumber(value);
+    }
+    const pct = Math.max(0, Math.min(100, (Math.abs(numeric) / maxNumeric) * 100));
+    return {
+      html: `<span class="compare-data-bar" style="--bar-pct: ${pct.toFixed(2)}%;"><span class="compare-data-bar-value">${escapeHtml(formatFixedNumber(value))}</span></span>`,
+      className: 'compare-data-bar-cell'
+    };
+  }
+
+  function compareCellHtml(cell) {
+    if (cell && typeof cell === 'object' && Object.prototype.hasOwnProperty.call(cell, 'html')) {
+      const className = cell.className ? ` class="${escapeHtml(cell.className)}"` : '';
+      return `<td${className}>${cell.html}</td>`;
+    }
+    return `<td>${cell}</td>`;
+  }
+
+  function compareHybridDuty(ekc, platform) {
+    const ekcFlag = ekc?.minuteStat?.hybridDutyFlag || '';
+    if (!ekcFlag) return '';
+    const platformBy = platform?.auxiliaryApprovalStatus === 1 ? 'AUX' : 'MAIN';
+    return ekcFlag === platformBy ? 'uyumlu' : 'kontrol';
+  }
+
+  function deltaNumber(left, right) {
+    const a = Number(left);
+    const b = Number(right);
+    return Number.isFinite(a) && Number.isFinite(b) ? a - b : null;
+  }
+
+  function maxAbs(values) {
+    const clean = (values || []).map(Number).filter(Number.isFinite).map(Math.abs);
+    return clean.length ? Math.max(...clean) : null;
+  }
+
   function renderFilterNotice(rows) {
     const total = allRows().length;
     el.filterNotice.hidden = !(total > 0 && rows.length === 0);
@@ -580,13 +1000,16 @@
   function sourceLabel() {
     const parts = [];
     if (state.apiRows.length) parts.push('API');
-    if (state.csvRows.length) parts.push('CSV');
     if (state.domRows.length) parts.push('DOM');
+    if (state.ekcRows.length) parts.push('EK-C');
     if (state.catalogRows.length) parts.push('KATALOG');
     return parts.join(' + ') || '-';
   }
 
   function mismatchCount() {
+    if (Array.isArray(state.comparison?.rows)) {
+      return state.comparison.rows.filter((row) => row.joinState !== 'both' || (row.ekcResult && row.platformResult && row.ekcResult !== row.platformResult)).length;
+    }
     return (state.comparison?.matches || []).filter((item) => item.fieldDiffs.length).length;
   }
 
@@ -702,15 +1125,19 @@
       row.hours.forEach((hour) => {
         const td = document.createElement('td');
         td.className = RGDH_PIVOT.participationClass(hour);
-        td.textContent = hour.minuteCount ? formatPercent(hour.participationPct) : '-';
+        const resultLabel = reactiveLabel(hour.hourResult || hour.status);
+        td.textContent = formatHourCellText(hour);
         td.title = [
           `${String(hour.hour).padStart(2, '0')}:00`,
+          `Sonuc ${resultLabel}`,
           `Katilim ${formatPercent(hour.participationPct)}`,
           `Set ${formatNumber(hour.setAvg)}`,
           `Gerilim ${formatNumber(hour.voltageAvg)}`,
           `P ${formatNumber(hour.pgenAvg)}`,
           `Q ${formatNumber(hour.qgenAvg)}`,
-          `${hour.successMinuteCount}/${hour.expectedMinuteCount} basarili`
+          `Gecti ${hour.passCount ?? hour.successMinuteCount}/${hour.expectedMinuteCount}`,
+          `Kaldi ${hour.failCount ?? 0}`,
+          `DD ${hour.ddCount ?? 0} | YY ${hour.yyCount ?? 0} | KY ${hour.kyCount ?? 0}`
         ].join(' | ');
         td.addEventListener('click', () => {
           state.chartSelection = { busbarId: row.busbarId, hour: hour.hour, date: row.localDate || null };
@@ -721,6 +1148,57 @@
       tbody.appendChild(tr);
     });
     el.dailyTable.appendChild(tbody);
+  }
+
+  function toggleDailyMetricTable() {
+    if (!el.dailyMetricWrap) return;
+    el.dailyMetricWrap.hidden = !el.dailyMetricWrap.hidden;
+    if (el.btnToggleDailyMetricTable) {
+      el.btnToggleDailyMetricTable.textContent = el.dailyMetricWrap.hidden ? 'Detayli Metrik Goster' : 'Detayli Metrik Gizle';
+    }
+  }
+
+  function renderDailyMetricTable(pivotRows) {
+    if (!el.dailyMetricTable || !RGDH_CHARTS?.buildHourMetricRows) return;
+    const headers = [
+      'Tarih', 'Saat', 'Bara', 'Tip', 'Sonuc', 'Sagladi', 'Saglamadi', 'DD', 'YY', 'KY',
+      'Katilim', 'Pnom', 'Pnom %10', 'Pnom %50', 'MKUD', 'Ort P', 'Ort Q', 'Ort V Set', 'Ort V'
+    ];
+    el.dailyMetricTable.innerHTML = `<thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>`;
+    const tbody = document.createElement('tbody');
+    RGDH_CHARTS.buildHourMetricRows(pivotRows).forEach((row) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = [
+        escapeHtml(row.localDate || '-'),
+        escapeHtml(`${String(row.hour).padStart(2, '0')}:00`),
+        escapeHtml(row.busbarName || '-'),
+        escapeHtml(row.sourceType || '-'),
+        escapeHtml(row.hourResult || '-'),
+        formatNumber(row.passCount),
+        formatNumber(row.failCount),
+        formatNumber(row.ddCount),
+        formatNumber(row.yyCount),
+        formatNumber(row.kyCount),
+        formatPercent(row.participationPct),
+        formatNumber(row.pnomAvg),
+        formatNumber(row.pnomPct10),
+        formatNumber(row.pnomPct50),
+        formatNumber(row.pmkudAvg),
+        formatNumber(row.pgenAvg),
+        formatNumber(row.qgenAvg),
+        formatNumber(row.setAvg),
+        formatNumber(row.voltageAvg)
+      ].map((value) => `<td>${value}</td>`).join('');
+      tbody.appendChild(tr);
+    });
+    el.dailyMetricTable.appendChild(tbody);
+  }
+
+  function formatHourCellText(hour) {
+    if (RGDH_CHARTS?.formatHeatmapCellText) return RGDH_CHARTS.formatHeatmapCellText(hour);
+    const result = normalizeReactiveResult(hour?.hourResult || hour?.status);
+    if (result === 'DD' || result === 'YY' || result === 'KY') return result;
+    return formatPercent(hour?.participationPct ?? hour?.passRatio);
   }
 
   function renderCharts(rows, pivotRows) {
@@ -750,6 +1228,162 @@
     }
     RGDH_CHARTS.renderReport(el.chartsRoot, rows, pivotRows, selection);
     applyVoltageVisibility();
+  }
+
+  function renderCompareView(platformRows) {
+    if (state.activeTab !== 'compare') return;
+    const comparison = buildEkcPlatformComparison(platformRows || getFilteredRows(), getFilteredEkcRows());
+    state.comparison = comparison;
+    state.compareSelection = normalizeCompareSelection(comparison.rows || [], state.compareSelection);
+    const compareDay = state.compareSelection.date;
+    const dayHourRows = (comparison.hourRows || []).filter((row) => !compareDay || row.localDate === compareDay);
+    const summary = comparison.summary || {};
+    if (el.compareContextLabel) {
+      const diagnosis = comparison.diagnosis ? ` ${comparison.diagnosis}.` : '';
+      const datePart = compareDay ? `${compareDay} - ` : '';
+      el.compareContextLabel.textContent = `${datePart}${summary.both || 0} ortak dakika, ${summary.ekcOnly || 0} yalniz EK-C, ${summary.platformOnly || 0} yalniz YKS SCADA, ${summary.resultMismatch || 0} sonuc farki.${diagnosis}`;
+    }
+    if (RGDH_CHARTS.renderComparison) {
+      RGDH_CHARTS.renderComparison(el.compareChartsRoot, comparison.rows, {
+        showVoltage: state.showVoltage,
+        selection: state.compareSelection,
+        onFilterApply: (selection) => {
+          state.compareSelection = { ...state.compareSelection, ...selection };
+          renderCompareView(platformRows || getFilteredRows());
+        }
+      });
+    }
+    renderCompareTable(dayHourRows);
+  }
+
+  function renderCompareTable(hourRows) {
+    if (!el.compareTable) return;
+    const headers = [
+      'Tarih', 'Saat', 'Eşleşen DK', 'Ek-C Değerlendirme', 'YKS Değerlendirme',
+      'YKS V', 'EK-C V', 'Ort dV', 'Max dV',
+      'YKS P', 'EK-C P', 'Ort dP', 'Max dP',
+      'YKS Q', 'EK-C Q', 'Ort dQ', 'Max dQ'
+    ];
+    const compareHeaders = [
+      { html: 'Tarih', cls: 'date' },
+      { html: 'Saat', cls: 'hour' },
+      { html: 'Eslesen<br>DK', cls: 'minutes' },
+      { html: 'Ek-C<br>Deg.', cls: 'eval' },
+      { html: 'YKS<br>Deg.', cls: 'eval' },
+      { html: 'Ek-C<br>K.Y (%)', cls: 'percent' },
+      { html: 'YKS<br>K.Y (%)', cls: 'percent' },
+      { html: 'YKS<br>V Ort', cls: 'metric' },
+      { html: 'EK-C<br>V Ort', cls: 'metric' },
+      { html: 'Fark<br>dV', cls: 'metric' },
+      { html: 'Max<br>dV', cls: 'metric' },
+      { html: 'YKS<br>P Ort', cls: 'metric' },
+      { html: 'EK-C<br>P Ort', cls: 'metric' },
+      { html: 'Fark<br>dP', cls: 'metric' },
+      { html: 'Max<br>dP', cls: 'metric' },
+      { html: 'YKS<br>Q Ort', cls: 'metric' },
+      { html: 'EK-C<br>Q Ort', cls: 'metric' },
+      { html: 'Fark<br>dQ', cls: 'metric' },
+      { html: 'Max<br>dQ', cls: 'metric' },
+      { html: 'YKS<br>Hibrit P', cls: 'metric' },
+      { html: 'EK-C<br>Hibrit P', cls: 'metric' },
+      { html: 'Fark<br>dHP', cls: 'metric' },
+      { html: 'Max<br>dHP', cls: 'metric' }
+    ];
+    el.compareTable.innerHTML = [
+      `<colgroup>${compareHeaders.map((header) => `<col class="rgdh-compare-col-${escapeHtml(header.cls)}">`).join('')}</colgroup>`,
+      `<thead><tr>${compareHeaders.map((header) => `<th>${header.html}</th>`).join('')}</tr></thead>`
+    ].join('');
+    const tbody = document.createElement('tbody');
+    if (state.comparison?.diagnosis && !(state.comparison.summary?.both)) {
+      const tr = document.createElement('tr');
+      tr.className = 'rgdh-diagnostic-row';
+      tr.innerHTML = `<td colspan="${compareHeaders.length}">${escapeHtml(state.comparison.diagnosis)}</td>`;
+      tbody.appendChild(tr);
+    }
+    const visibleRows = hourRows.slice(0, 500);
+    const pDataBarMax = maxAbs(visibleRows.flatMap((row) => [
+      row.avgYksP,
+      row.avgEkcP,
+      row.avgYksHybridP,
+      row.avgEkcHybridP
+    ]));
+    visibleRows.forEach((row) => {
+      const tr = document.createElement('tr');
+      const hourLabel = `${String(row.hour).padStart(2, '0')}:00`;
+      tr.innerHTML = [
+        escapeHtml(row.localDate || '-'),
+        `<button class="rgdh-table-link" type="button" data-compare-date="${escapeHtml(row.localDate || '')}" data-compare-hour="${escapeHtml(row.hour)}">${escapeHtml(hourLabel)}</button>`,
+        formatNumber(row.commonMinutes),
+        formatComparisonEvaluation(row.ekcStat),
+        formatComparisonEvaluation(row.platformStat),
+        formatCompareParticipationCell(row.ekcStat),
+        formatCompareParticipationCell(row.platformStat),
+        formatFixedNumber(row.avgYksV),
+        formatFixedNumber(row.avgEkcV),
+        formatCompareDeltaCell(row.avgDeltaV, 'dV', 'avg'),
+        formatCompareDeltaCell(row.maxDeltaV, 'dV', 'max'),
+        formatCompareDataBarCell(row.avgYksP, pDataBarMax),
+        formatCompareDataBarCell(row.avgEkcP, pDataBarMax),
+        formatCompareDeltaCell(row.avgDeltaP, 'dP', 'avg'),
+        formatCompareDeltaCell(row.maxDeltaP, 'dP', 'max'),
+        formatFixedNumber(row.avgYksQ),
+        formatFixedNumber(row.avgEkcQ),
+        formatCompareDeltaCell(row.avgDeltaQ, 'dQ', 'avg'),
+        formatCompareDeltaCell(row.maxDeltaQ, 'dQ', 'max'),
+        formatCompareDataBarCell(row.avgYksHybridP, pDataBarMax),
+        formatCompareDataBarCell(row.avgEkcHybridP, pDataBarMax),
+        formatFixedNumber(row.avgDeltaHybridP),
+        formatFixedNumber(row.maxDeltaHybridP)
+      ].map(compareCellHtml).join('');
+      const hourButton = tr.querySelector('[data-compare-hour]');
+      hourButton?.addEventListener('click', () => selectCompareHour(row));
+      hourButton?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectCompareHour(row);
+        }
+      });
+      tbody.appendChild(tr);
+    });
+    if (!hourRows.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="${compareHeaders.length}">Karsilastirma icin YKS SCADA verisi ve EK-C CSV bekleniyor.</td>`;
+      tbody.appendChild(tr);
+    }
+    el.compareTable.appendChild(tbody);
+  }
+
+  function normalizeCompareSelection(rows, selection = {}) {
+    const dates = [...new Set((rows || []).map((row) => row.localDate).filter(Boolean))].sort();
+    const filters = readFilters();
+    const preferredDate = selection.date || filters.date;
+    const date = preferredDate && dates.includes(preferredDate) ? preferredDate : (dates[0] || preferredDate || '');
+    const hourMode = selection.hourMode || (selection.hour !== null && selection.hour !== undefined ? 'hours' : 'all');
+    const hourStart = hourMode === 'hours' ? Number(selection.hourStart ?? selection.hour ?? 0) : null;
+    const hourEnd = hourMode === 'hours' ? Number(selection.hourEnd ?? selection.hour ?? hourStart ?? 0) : null;
+    return {
+      busbarId: selection.busbarId || '',
+      ytm: selection.ytm || '',
+      date,
+      hourMode,
+      hourStart,
+      hourEnd,
+      hour: hourMode === 'hours' && hourStart === hourEnd ? hourStart : null
+    };
+  }
+
+  function selectCompareHour(row) {
+    const hour = Number(row?.hour);
+    if (!Number.isFinite(hour)) return;
+    state.compareSelection = {
+      ...state.compareSelection,
+      date: row.localDate || state.compareSelection.date || null,
+      hourMode: 'hours',
+      hourStart: hour,
+      hourEnd: hour,
+      hour
+    };
+    renderCompareView(getFilteredRows());
   }
 
   function resolveChartDate(rows, busbarId, preferredDate) {
@@ -916,7 +1550,6 @@
 
   function rebuildEnrichment() {
     state.apiRows = enrichRows(state.apiRows);
-    state.csvRows = enrichRows(state.csvRows);
     state.domRows = enrichRows(state.domRows);
   }
 
@@ -1011,11 +1644,8 @@
   }
 
   function rowStatus(row) {
-    if (!row) return 'NO_DATA';
-    if (row.flags?.missingCriticalValue) return 'NO_DATA';
-    if (row.flags?.voltageOutOfBand || row.flags?.qOutOfLimit || row.flags?.platformMismatch) return 'FAIL';
-    if (row.flags?.partialSource) return 'WARN';
-    return 'OK';
+    if (!row) return 'KY';
+    return RGDH_PIVOT.derivePlatformMinuteResult(row).result || 'KY';
   }
 
   function sourceTypeMatches(rowSourceType, selectedSourceType) {
@@ -1311,6 +1941,22 @@
     return Number.isFinite(numeric) ? numeric.toLocaleString('tr-TR', { maximumFractionDigits: 3 }) : '-';
   }
 
+  function formatFixedNumber(value) {
+    if (value === null || value === undefined || value === '') return '-';
+    const numeric = Number(value);
+    return Number.isFinite(numeric)
+      ? numeric.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '-';
+  }
+
+  function formatFixedPercent(value) {
+    if (value === null || value === undefined || value === '') return '-';
+    const numeric = Number(value);
+    return Number.isFinite(numeric)
+      ? `${numeric.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+      : '-';
+  }
+
   function formatStatusFlag(value, options = {}) {
     const normalized = normalizeStatusFlag(value);
     if (normalized === null) return '-';
@@ -1400,8 +2046,10 @@
     document.querySelectorAll('.rgdh-voltage-col').forEach((cell) => {
       cell.classList.toggle('hidden-voltage', !state.showVoltage);
     });
-    const chart = typeof Chart !== 'undefined' ? Chart.getChart(document.querySelector('#chartsRoot canvas')) : null;
-    if (chart) {
+    const charts = typeof Chart !== 'undefined'
+      ? Array.from(document.querySelectorAll('#chartsRoot canvas, #compareChartsRoot canvas')).map((canvas) => Chart.getChart(canvas)).filter(Boolean)
+      : [];
+    charts.forEach((chart) => {
       chart.data.datasets.forEach((dataset, index) => {
         const label = dataset.label || '';
         if (isToggleableVoltageDataset(label)) {
@@ -1409,7 +2057,7 @@
         }
       });
       chart.update();
-    }
+    });
   }
 
   function isToggleableVoltageDataset(label) {

@@ -548,7 +548,7 @@ test('resolveSelectedRgdhBusbarInternalIds bounds broad catalog paging when sele
       busbarName: 'AKYEL-1 RES',
       sourceType: 'WIND'
     }, 'WIND'),
-    /YKS ic ID bulunamadi/
+    /YKS ic ID bulunamadi\. "https:\/\/yks\.teias\.gov\.tr\/#\/ adresinden giriş yapın"/
   );
 
   assert.ok(calls.length <= 7, `expected bounded catalog calls, got ${calls.length}`);
@@ -1072,7 +1072,12 @@ test('handleRgdhFetch tries page-less range chunks before hourly page-zero for a
 test('runRgdhPageFetchInYksTab injects YKS instrumentation and records page-fetch diagnostics', async () => {
   const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => [] }) });
   const executeCalls = [];
+  let createCalls = 0;
   context.chrome.tabs.query = async () => [{ id: 77, url: 'https://yks.teias.gov.tr/#/rgdh-wind-busbar-data' }];
+  context.chrome.tabs.create = async () => {
+    createCalls += 1;
+    return { id: 88, url: 'https://yks.teias.gov.tr/#/' };
+  };
   context.chrome.scripting.executeScript = async (payload) => {
     executeCalls.push(payload);
     if (payload.files) return [{ result: undefined }];
@@ -1093,6 +1098,7 @@ test('runRgdhPageFetchInYksTab injects YKS instrumentation and records page-fetc
   const diagnostics = await context.handleRgdhYksLogList({ limit: 5 });
 
   assert.equal(result.ok, true);
+  assert.equal(createCalls, 0);
   assert.deepEqual(Array.from(executeCalls[0].files), ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']);
   assert.deepEqual(Array.from(executeCalls[1].files), ['yks-rgdh-instrumentation.js']);
   assert.equal(executeCalls[1].world, 'MAIN');
@@ -1102,6 +1108,134 @@ test('runRgdhPageFetchInYksTab injects YKS instrumentation and records page-fetc
   assert.equal(diagnostics.events[0].status, 200);
   assert.equal(diagnostics.events[0].detail.rowCount, '1');
   assert.match(diagnostics.events[0].detail.requestUrl, /rgdh-wind-busbar-data/);
+});
+
+test('runRgdhPageFetchInYksTab opens an inactive YKS tab when none is already open', async () => {
+  const context = loadBackground({
+    fetch: async () => ({ ok: true, json: async () => [] }),
+    setTimeout: (fn) => {
+      Promise.resolve().then(fn);
+      return 123;
+    },
+    clearTimeout: () => {}
+  });
+  const createCalls = [];
+  const removedTabs = [];
+  const executeCalls = [];
+  context.chrome.tabs.query = async () => [];
+  context.chrome.tabs.create = async (payload) => {
+    createCalls.push(payload);
+    return { id: 91, url: payload.url, status: 'loading' };
+  };
+  context.chrome.tabs.get = async (tabId) => ({ id: tabId, url: 'https://yks.teias.gov.tr/#/', status: 'complete' });
+  context.chrome.tabs.remove = async (tabId) => {
+    removedTabs.push(tabId);
+  };
+  context.chrome.scripting.executeScript = async (payload) => {
+    executeCalls.push(payload);
+    if (payload.files) return [{ result: undefined }];
+    return [{ result: { ok: true, rows: [], httpStatus: 200, transport: 'page-context' } }];
+  };
+
+  const result = await context.runRgdhPageFetchInYksTab({
+    endpoint: '/api/rgdh-wind-busbar-data',
+    params: { 'busbarId.equals': '10933818956', size: 1, page: 0 },
+    timeoutMs: 15000
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(createCalls.length, 1);
+  assert.equal(createCalls[0].url, 'https://yks.teias.gov.tr/#/');
+  assert.equal(createCalls[0].active, false);
+  assert.equal(executeCalls.every((call) => call.target?.tabId === 91), true);
+  assert.deepEqual(removedTabs, [91]);
+});
+
+test('runRgdhPageFetchInYksTab closes the temporary YKS tab when auth is missing', async () => {
+  const context = loadBackground({
+    fetch: async () => ({ ok: true, json: async () => [] }),
+    setTimeout: (fn) => {
+      Promise.resolve().then(fn);
+      return 124;
+    },
+    clearTimeout: () => {}
+  });
+  const createCalls = [];
+  const removedTabs = [];
+  context.chrome.tabs.query = async () => [];
+  context.chrome.tabs.create = async (payload) => {
+    createCalls.push(payload);
+    return { id: 92, url: payload.url, status: 'complete' };
+  };
+  context.chrome.tabs.get = async (tabId) => ({ id: tabId, url: 'https://yks.teias.gov.tr/#/', status: 'complete' });
+  context.chrome.tabs.remove = async (tabId) => {
+    removedTabs.push(tabId);
+  };
+  context.chrome.scripting.executeScript = async (payload) => {
+    if (payload.files) return [{ result: undefined }];
+    return [{ result: { ok: false, error: 'Unauthorized', errorType: 'AUTH_REQUIRED', httpStatus: 401, transport: 'page-context' } }];
+  };
+
+  const result = await context.runRgdhPageFetchInYksTab({
+    endpoint: '/api/rgdh-wind-busbar-data',
+    params: { 'busbarId.equals': '10933818956', size: 1, page: 0 },
+    timeoutMs: 15000
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.errorType, 'AUTH_REQUIRED');
+  assert.equal(createCalls.length, 1);
+  assert.equal(createCalls[0].url, 'https://yks.teias.gov.tr/#/');
+  assert.equal(createCalls[0].active, false);
+  assert.deepEqual(removedTabs, [92]);
+});
+
+test('runRgdhPageFetchInYksTab shares one temporary YKS tab across concurrent fetches', async () => {
+  const context = loadBackground({
+    fetch: async () => ({ ok: true, json: async () => [] }),
+    setTimeout: (fn) => {
+      Promise.resolve().then(fn);
+      return 125;
+    },
+    clearTimeout: () => {}
+  });
+  const createCalls = [];
+  const removedTabs = [];
+  const executeCalls = [];
+  context.chrome.tabs.query = async () => [];
+  context.chrome.tabs.create = async (payload) => {
+    createCalls.push(payload);
+    return { id: 93, url: payload.url, status: 'loading' };
+  };
+  context.chrome.tabs.get = async (tabId) => ({ id: tabId, url: 'https://yks.teias.gov.tr/#/', status: 'complete' });
+  context.chrome.tabs.remove = async (tabId) => {
+    removedTabs.push(tabId);
+  };
+  context.chrome.scripting.executeScript = async (payload) => {
+    executeCalls.push(payload);
+    if (payload.files) return [{ result: undefined }];
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return [{ result: { ok: true, rows: [], httpStatus: 200, transport: 'page-context' } }];
+  };
+
+  const [first, second] = await Promise.all([
+    context.runRgdhPageFetchInYksTab({
+      endpoint: '/api/rgdh-wind-busbar-data',
+      params: { 'busbarId.equals': '10933818956', size: 1, page: 0 },
+      timeoutMs: 15000
+    }),
+    context.runRgdhPageFetchInYksTab({
+      endpoint: '/api/rgdh-wind-busbar-data',
+      params: { 'busbarId.equals': '10933818957', size: 1, page: 0 },
+      timeoutMs: 15000
+    })
+  ]);
+
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(createCalls.length, 1);
+  assert.equal(executeCalls.every((call) => call.target?.tabId === 93), true);
+  assert.deepEqual(removedTabs, [93]);
 });
 
 test('rgdhPageFetchMainWorld classifies aborted requests as PAGE_FETCH_TIMEOUT', async () => {

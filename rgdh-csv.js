@@ -79,6 +79,10 @@
       lines.push(row);
     }
 
+    if (lines.length && /^sep\s*=/i.test(cleanCell(lines[0][0]))) {
+      lines.shift();
+    }
+
     const headers = (lines.shift() || []).map((value) => cleanCell(value).replace(/^\uFEFF/, ''));
     const rows = lines
       .filter((line) => line.some((value) => cleanCell(value) !== ''))
@@ -94,12 +98,29 @@
   }
 
   function cleanCell(value) {
-    return String(value ?? '').replace(/^\uFEFF/, '').trim();
+    const raw = String(value ?? '').replace(/^\uFEFF/, '').trim();
+    const excelText = raw.match(/^=\s*"([\s\S]*)"$/);
+    if (excelText) {
+      const inner = excelText[1].trim();
+      return inner.startsWith("'") ? inner.slice(1) : inner;
+    }
+    if (/^=[^=]/.test(raw)) {
+      const inner = raw.slice(1).trim();
+      return inner.startsWith("'") ? inner.slice(1) : inner;
+    }
+    return raw;
   }
 
   function normalizeCsvHeader(header) {
     return String(header || '')
       .replace(/^\uFEFF/, '')
+      .replace(/[İIı]/g, 'i')
+      .replace(/[Ğğ]/g, 'g')
+      .replace(/[Üü]/g, 'u')
+      .replace(/[Şş]/g, 's')
+      .replace(/[Öö]/g, 'o')
+      .replace(/[Çç]/g, 'c')
+      .replace(/\uFFFD/g, 'i')
       .normalize('NFKD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[ıI]/g, 'i')
@@ -409,6 +430,328 @@
     return match ? match[1] : '';
   }
 
+  function parseEkcCsvText(text, options = {}) {
+    const normalized = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalized.split('\n').filter((line) => cleanCell(line) !== '');
+    const headerIndex = lines.findIndex((line) => {
+      const cells = splitSemicolonLine(line).map(normalizeCsvHeader);
+      return cells.includes('tarih') && cells.includes('saat');
+    });
+    if (headerIndex < 0) throw new Error(`${options.filename || 'EK-C'}: EK-C TARIH/SAAT basligi bulunamadi.`);
+
+    const meta = parseEkcMeta(lines.slice(0, headerIndex), options);
+    const parsed = parseSemicolonCsv(lines.slice(headerIndex).join('\n'));
+    const templateFamily = detectEkcTemplateFamily(parsed.headers, meta, options);
+    const rows = parsed.rows
+      .map((row, index) => normalizeEkcCsvRow(row, meta, templateFamily, options, index))
+      .filter((row) => row.localDate && Number.isFinite(Number(row.dakikaIndex)));
+    return {
+      type: 'EKC',
+      headers: parsed.headers,
+      rawRows: parsed.rows,
+      rows,
+      groups: buildEkcGroups(rows),
+      meta: { ...meta, templateFamily },
+      templateFamily,
+      fileName: options.filename || options.fileName || ''
+    };
+  }
+
+  function splitSemicolonLine(line) {
+    const result = [];
+    let cell = '';
+    let insideQuotes = false;
+    const raw = String(line || '');
+    for (let i = 0; i < raw.length; i += 1) {
+      const char = raw[i];
+      const next = raw[i + 1];
+      if (char === '"') {
+        if (insideQuotes && next === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+        continue;
+      }
+      if (char === ';' && !insideQuotes) {
+        result.push(cleanCell(cell));
+        cell = '';
+        continue;
+      }
+      cell += char;
+    }
+    result.push(cleanCell(cell));
+    return result;
+  }
+
+  function parseEkcMeta(lines, options = {}) {
+    const meta = {
+      fileName: options.filename || options.fileName || '',
+      plantName: '',
+      busbarName: '',
+      pnomMw: null,
+      pnomMainMw: null,
+      pnomAuxMw: null,
+      qNomHigh: null,
+      qNomLow: null,
+      qNomMainHigh: null,
+      qNomMainLow: null,
+      qNomAuxHigh: null,
+      qNomAuxLow: null,
+      nominalVoltageKv: null,
+      droopPct: null,
+      mode: null
+    };
+    lines.forEach((line) => {
+      const cells = splitSemicolonLine(line);
+      const label = normalizeCsvHeader(cells[0] || '');
+      const first = parseTurkishNumber(cells[1]);
+      const second = parseTurkishNumber(cells[2]);
+      const nums = cells.slice(1).map(parseTurkishNumber).filter(Number.isFinite);
+      if (!meta.plantName && /birimin adi|birim adi|santral/.test(label)) {
+        meta.plantName = cleanCell(cells[1]);
+        meta.busbarName = meta.plantName;
+      }
+      if (/ana kaynak kurulu gucu/.test(label)) meta.pnomMainMw = first;
+      else if (/yardimci kaynak.*kurulu gucu/.test(label)) meta.pnomAuxMw = first;
+      else if (/unitelerinin nominal aktif gucu/.test(label)) meta.pnomMw = sumFinite(nums);
+      else if (/kurulu gucu|ptotal/.test(label)) meta.pnomMw = first;
+      if (/ana kaynak.*asiri.*dusuk.*mvar/.test(label)) {
+        meta.qNomMainHigh = sumPositiveOrFirst(nums, first);
+        meta.qNomMainLow = sumNegativeOrSecond(nums, second);
+      } else if (/yardimci kaynak.*asiri.*dusuk.*mvar/.test(label)) {
+        meta.qNomAuxHigh = sumPositiveOrFirst(nums, first);
+        meta.qNomAuxLow = sumNegativeOrSecond(nums, second);
+      } else if (/asiri.*dusuk.*mvar/.test(label)) {
+        meta.qNomHigh = sumPositiveOrFirst(nums, first);
+        meta.qNomLow = sumNegativeOrSecond(nums, second);
+      }
+      if (/nominal gerilim/.test(label)) meta.nominalVoltageKv = first;
+      if (/gerilim dusumu|droop/.test(label)) meta.droopPct = first;
+      if (/calisma modu/.test(label)) meta.mode = parseInteger(cells[1]);
+    });
+    if (!meta.plantName) {
+      meta.plantName = String(meta.fileName || '').replace(/\.csv$/i, '').replace(/[_.]+/g, ' ').trim();
+      meta.busbarName = meta.plantName;
+    }
+    return meta;
+  }
+
+  function detectEkcTemplateFamily(headers, meta, options = {}) {
+    const headerText = (headers || []).map(normalizeCsvHeader).join(' ');
+    const context = normalizeCsvHeader(`${meta.plantName || ''} ${meta.fileName || ''} ${options.filename || ''}`);
+    if (/top anakaynak aktif|top yrdkaynak aktif|yardimci kaynak/.test(headerText) || /brd cok kynk|yardimci kaynak/.test(context)) {
+      return /uni |unite|konv/.test(headerText + context) ? 'RGDH_HIB_KONV' : 'RGDH_HIB_RESGES';
+    }
+    if (/\bges\b|gunes|solar/.test(context)) return 'RGDH_GES_2021';
+    if (/\bres\b|ruzgar|wind/.test(context)) return 'RGDH_RES_2021';
+    return 'RGDH_KONV_2026';
+  }
+
+  function sumFinite(values) {
+    const clean = (values || []).filter(Number.isFinite);
+    return clean.length ? clean.reduce((sum, value) => sum + value, 0) : null;
+  }
+
+  function sumPositiveOrFirst(values, fallback) {
+    const positives = (values || []).filter((value) => Number.isFinite(value) && value > 0);
+    return positives.length ? positives.reduce((sum, value) => sum + value, 0) : fallback;
+  }
+
+  function sumNegativeOrSecond(values, fallback) {
+    const negatives = (values || []).filter((value) => Number.isFinite(value) && value < 0);
+    return negatives.length ? negatives.reduce((sum, value) => sum + value, 0) : fallback;
+  }
+
+  function normalizeEkcCsvRow(row, meta, templateFamily, options, index) {
+    const tarih = pick(row, ['TARIH', 'Tarih']);
+    const saat = pick(row, ['SAAT', 'Saat']);
+    const dateInfo = parseTurkishDateTime(`${tarih} ${saat}`.trim());
+    const pTotal = firstNumber(row, ['TOP_AKT_CIK_GUCU_MW', 'TOP_AKT_CIKIS_GUCU_MW', 'TOP_AKT_CIKIC_GUCU_MW', 'TOPLAM_AKTIF_GUC_MW']) ?? sumByHeaderPattern(row, /akt.*(cik|cikis|cikic).*mw|_mw$/i);
+    const pMain = firstNumber(row, ['TOP_ANAKAYNAK_AKT_CIK_GUCU_MW', 'TOP_ANA_KAYNAK_AKT_CIK_GUCU_MW']);
+    const pAux = firstNumber(row, ['TOP_YRDKAYNAK_AKT_CIK_GUCU_MW', 'TOP_YARDIMCI_KAYNAK_AKT_CIK_GUCU_MW']);
+    const qMeas = firstNumber(row, [
+      'TOP_REAKT_CIK_GUCU_MVAr',
+      'TOP_REAKT_CIKIS_GUCU_MVAr',
+      'TOP_REAKT_CIKIC_GUCU_MVAr',
+      'TOP_REAKT_CIK_GUCU_MVAR',
+      'TOP_REAKT_CIKIS_GUCU_MVAR',
+      'TOP_REAKT_CIKIC_GUCU_MVAR',
+      'TOP_REAKTIF_CIK_GUCU_MVAr',
+      'TOP_REAKTIF_CIKIS_GUCU_MVAr'
+    ]);
+    const base = {
+      sourceOrigin: 'EKC',
+      sourceType: templateFamily.includes('KONV') ? 'CONVENTIONAL' : 'WIND',
+      templateFamily,
+      fileName: options.filename || options.fileName || '',
+      plantName: meta.plantName,
+      busbarName: meta.busbarName || meta.plantName,
+      busbarId: null,
+      busbarInternalId: null,
+      tarih,
+      saat,
+      ...dateInfo,
+      dakikaIndex: Number(dateInfo.localHour) * 60 + Number(dateInfo.localMinute),
+      hour: Number(dateInfo.localHour),
+      siraNo: parseInteger(pick(row, ['SIRA_NO', 'Sira No', 'SIRA'])),
+      vBara: firstNumber(row, ['BARA_GER_kV', 'BARA_GER_KV', 'BARA_GERILIMI_KV', 'BARA_GERILIMI_kV', 'HAT_GER_kV', 'HAT_GER_KV', 'HAT_GERILIMI_KV']),
+      vSet: firstNumber(row, ['BARA_GER_SET_DEG_kV', 'BARA_GER_SET_DEG_KV', 'HAT_GER_SET_DEG_kV', 'REAKT_GUC_SET_DEG_MVAr']),
+      pTotal,
+      pMain,
+      pAux,
+      qMeas,
+      qSet: firstNumber(row, ['REAKT_GUC_SET_DEG_MVAr', 'REAKTIF_GUC_SET_DEG_MVAr']),
+      pfSet: firstNumber(row, ['GUC_FKTR_SET_COSFI', 'GUC_FAKTORU_SET_COSFI']),
+      pnomMw: meta.pnomMw ?? ((meta.pnomMainMw || 0) + (meta.pnomAuxMw || 0) || null),
+      pnomMainMw: meta.pnomMainMw,
+      pnomAuxMw: meta.pnomAuxMw,
+      nominalVoltageKv: meta.nominalVoltageKv,
+      droopPct: meta.droopPct,
+      raw: row
+    };
+    base.tpysVoltageSet = base.vSet;
+    base.liveBusbarVoltage = base.vBara;
+    base.pgenMw = base.pTotal;
+    base.qgenMvar = base.qMeas;
+    base.auxiliaryMw = base.pAux;
+    base.measurementDateLocal = base.measurementDateLocal || `${tarih} ${saat}`;
+    base.localMinute = Number(dateInfo.localMinute);
+    base.minuteStat = deriveEkcMinuteStat(base, meta, index);
+    return base;
+  }
+
+  function firstNumber(row, names) {
+    for (const name of names) {
+      const value = parseTurkishNumber(pick(row, [name]));
+      if (Number.isFinite(value)) return value;
+    }
+    return null;
+  }
+
+  function sumByHeaderPattern(row, pattern) {
+    const values = Object.entries(row || {})
+      .filter(([key]) => pattern.test(key) && !/reakt|mvar|set|mkud|pmkud/i.test(key))
+      .map(([, value]) => parseTurkishNumber(value))
+      .filter(Number.isFinite);
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0);
+  }
+
+  function deriveEkcMinuteStat(row, meta, index) {
+    const warnings = [];
+    const pnom = row.pnomMw;
+    const p = Number(row.pTotal);
+    const q = Number(row.qMeas);
+    if (!row.localDate || !Number.isFinite(row.localHour)) {
+      return baseMinuteStat('KY', warnings.concat('Zaman bilgisi okunamadi.'));
+    }
+    if (!Number.isFinite(p)) return baseMinuteStat('KY', warnings.concat('Aktif guc okunamadi.'));
+    if (Number.isFinite(pnom) && p < pnom * 0.01) return baseMinuteStat('DD', warnings);
+    if (Number.isFinite(pnom) && p < pnom * 0.10) return baseMinuteStat('YY', warnings);
+    if (!Number.isFinite(q)) return baseMinuteStat('SAGLAMADI', warnings.concat('Reaktif guc okunamadi.'));
+
+    const qTarget = deriveEkcQTarget(row, meta);
+    if (!Number.isFinite(qTarget)) {
+      return {
+        ...baseMinuteStat('SAGLADI', warnings.concat('Q hedefi hesaplanamadi; dakika sadece veri var/yok kuralindan gecti.')),
+        hybridDutyFlag: deriveHybridDuty(row, meta),
+        hybridDutySource: deriveHybridDuty(row, meta)
+      };
+    }
+    const absTarget = Math.abs(qTarget);
+    let limitLow = null;
+    let limitHigh = null;
+    let result = 'SAGLADI';
+    if (absTarget < 1e-9) {
+      limitLow = -0.5;
+      limitHigh = 0.5;
+      result = q >= limitLow && q <= limitHigh ? 'SAGLADI' : 'SAGLAMADI';
+    } else if (qTarget > 0) {
+      limitLow = qTarget * 0.9;
+      result = q >= limitLow ? 'SAGLADI' : 'SAGLAMADI';
+    } else {
+      limitHigh = qTarget * 0.9;
+      result = q <= limitHigh ? 'SAGLADI' : 'SAGLAMADI';
+    }
+    return {
+      result,
+      qTarget,
+      qThreshold: absTarget < 1e-9 ? 0.5 : absTarget * 0.1,
+      limitValue: Number.isFinite(limitLow) ? limitLow : limitHigh,
+      limitLow,
+      limitHigh,
+      hybridDutyFlag: deriveHybridDuty(row, meta),
+      hybridDutySource: deriveHybridDuty(row, meta),
+      warnings
+    };
+  }
+
+  function baseMinuteStat(result, warnings) {
+    return {
+      result,
+      qTarget: null,
+      qThreshold: null,
+      limitValue: null,
+      limitLow: null,
+      limitHigh: null,
+      hybridDutyFlag: '',
+      hybridDutySource: '',
+      warnings: warnings || []
+    };
+  }
+
+  function deriveEkcQTarget(row, meta) {
+    if (Number.isFinite(row.qSet)) return row.qSet;
+    if (Number.isFinite(row.pfSet) && Math.abs(row.pfSet) <= 1 && Math.abs(row.pfSet) > 0) {
+      const pBase = Number.isFinite(row.pnomMw) ? Math.min(Math.abs(row.pTotal), row.pnomMw) : Math.abs(row.pTotal);
+      const sign = row.pfSet < 0 ? -1 : 1;
+      return sign * pBase * Math.tan(Math.acos(Math.abs(row.pfSet)));
+    }
+    if (Number.isFinite(row.vSet) && Number.isFinite(row.vBara) && Math.abs(row.vSet) > 2) {
+      const delta = row.vSet - row.vBara;
+      if (Math.abs(delta) < 1e-6) return 0;
+      const high = firstFinite(meta.qNomHigh, meta.qNomMainHigh, meta.qNomAuxHigh);
+      const low = firstFinite(meta.qNomLow, meta.qNomMainLow, meta.qNomAuxLow);
+      if (delta > 0 && Number.isFinite(high)) return Math.abs(high);
+      if (delta < 0 && Number.isFinite(low)) return -Math.abs(low);
+    }
+    return null;
+  }
+
+  function deriveHybridDuty(row, meta) {
+    if (!Number.isFinite(row.pMain) && !Number.isFinite(row.pAux)) return '';
+    const mainActive = Number.isFinite(row.pMain) && Number.isFinite(meta.pnomMainMw) && row.pMain >= meta.pnomMainMw * 0.10;
+    const auxActive = Number.isFinite(row.pAux) && Number.isFinite(meta.pnomAuxMw) && row.pAux >= meta.pnomAuxMw * 0.10;
+    if (mainActive) return 'MAIN';
+    if (auxActive) return 'AUX';
+    return 'NONE';
+  }
+
+  function firstFinite(...values) {
+    return values.find((value) => Number.isFinite(value));
+  }
+
+  function buildEkcGroups(rows) {
+    const map = new Map();
+    (rows || []).forEach((row) => {
+      const key = `${normalizeCsvHeader(row.busbarName || row.plantName || row.fileName)}|${row.localDate}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          busbarName: row.busbarName || row.plantName || '',
+          plantName: row.plantName || '',
+          localDate: row.localDate,
+          templateFamily: row.templateFamily,
+          rows: []
+        });
+      }
+      map.get(key).rows.push(row);
+    });
+    return [...map.values()];
+  }
+
   function parseRgdhCsvText(text, options = {}) {
     const parsed = parseSemicolonCsv(text);
     const type = detectRgdhCsvType(parsed.headers, parsed.rows);
@@ -556,6 +899,7 @@
     normalizeCatalogCsvRow,
     parseTurkishBoolean,
     extractWindInternalIdFromFilename,
+    parseEkcCsvText,
     parseRgdhCsvText,
     buildExportCsv,
     buildCatalogExportCsv,
