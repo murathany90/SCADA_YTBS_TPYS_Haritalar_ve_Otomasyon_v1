@@ -88,6 +88,16 @@ test('EK-C comparison uses chart filters and compact result columns', () => {
   assert.match(charts, /renderComparison/);
   assert.match(charts, /chartHourStart/);
   assert.match(charts, /chartHourEnd/);
+  assert.match(charts, /rgdh-chart-card-head/);
+  assert.match(charts, /data-chart-action="fullscreen"/);
+  assert.match(charts, /data-chart-action="download-png"/);
+  assert.match(charts, /data-chart-action="diff"/);
+  assert.match(charts, /function downloadChartPng/);
+  assert.match(charts, /function toggleChartDiffMode/);
+  assert.match(charts, /appendChartCanvas\(root, 'EK-C \/ YKS SCADA Gerilim ve Aktif Guc', 'rgdh-compare-top-chart', 300, \{ diffToggle: true \}\)/);
+  assert.match(charts, /appendChartCanvas\(root, 'EK-C \/ YKS SCADA Reaktif Guc ve Limit', 'rgdh-compare-reactive-chart', 300, \{ diffToggle: true \}\)/);
+  assert.doesNotMatch(charts, /id="btnChartFullscreen"/);
+  assert.doesNotMatch(charts, /querySelector\('#btnChartFullscreen'\)/);
   assert.match(js, /compareSelection/);
   assert.match(js, /data-compare-hour/);
   assert.match(js, /Ek-C<br>K\.Y \(%\)/);
@@ -117,6 +127,9 @@ test('EK-C comparison uses chart filters and compact result columns', () => {
   assert.match(css, /\.compare-ky-fail/);
   assert.match(css, /\.compare-delta-blue/);
   assert.match(css, /\.compare-data-bar/);
+  assert.match(css, /\.rgdh-chart-card-head/);
+  assert.match(css, /\.rgdh-chart-actions/);
+  assert.match(css, /\.rgdh-chart-action/);
   assert.match(css, /#compareTable\s*\{[\s\S]*table-layout:\s*fixed/);
   assert.match(css, /#compareTable th[\s\S]*white-space:\s*normal/);
   assert.match(js, /Eşleşen DK|Eslesen DK/);

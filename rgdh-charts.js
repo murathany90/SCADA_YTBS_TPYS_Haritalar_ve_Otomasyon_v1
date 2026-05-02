@@ -68,11 +68,20 @@
     root.appendChild(heatmapPanel);
   }
 
-  function appendChartCanvas(root, title, className, height = 320) {
+  function appendChartCanvas(root, title, className, height = 320, options = {}) {
     const panel = document.createElement('section');
     panel.className = 'rgdh-chart-card';
+    const head = document.createElement('div');
+    head.className = 'rgdh-chart-card-head';
     const heading = document.createElement('h3');
     heading.textContent = title;
+    const actions = document.createElement('div');
+    actions.className = 'rgdh-chart-actions';
+    actions.innerHTML = [
+      options.diffToggle ? '<button class="rgdh-chart-action" type="button" data-chart-action="diff" aria-pressed="false" title="Fark cizgisi modunu ac/kapat">Fark</button>' : '',
+      '<button class="rgdh-chart-action" type="button" data-chart-action="download-png" title="Grafik PNG disari aktar">PNG</button>',
+      '<button class="rgdh-chart-action" type="button" data-chart-action="fullscreen" title="Grafik kartini tam ekran yap">Tam</button>'
+    ].join('');
     const chartWrap = document.createElement('div');
     chartWrap.className = 'rgdh-chart-wrap';
     chartWrap.style.position = 'relative';
@@ -81,10 +90,62 @@
     const canvas = document.createElement('canvas');
     canvas.className = className;
     chartWrap.appendChild(canvas);
-    panel.appendChild(heading);
+    actions.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-chart-action]');
+      if (!button) return;
+      const action = button.dataset.chartAction;
+      if (action === 'fullscreen') {
+        if (panel.requestFullscreen) panel.requestFullscreen();
+      } else if (action === 'download-png') {
+        downloadChartPng(canvas, title);
+      } else if (action === 'diff') {
+        toggleChartDiffMode(canvas, button);
+      }
+    });
+    head.appendChild(heading);
+    head.appendChild(actions);
+    panel.appendChild(head);
     panel.appendChild(chartWrap);
     root.appendChild(panel);
     return canvas;
+  }
+
+  function downloadChartPng(canvas, title) {
+    if (!canvas?.toDataURL || typeof document === 'undefined') return;
+    const link = document.createElement('a');
+    link.download = `${sanitizeFilename(title || 'grafik')}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }
+
+  function sanitizeFilename(value) {
+    const normalized = String(value || 'grafik')
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, '_');
+    return normalized || 'grafik';
+  }
+
+  function toggleChartDiffMode(canvas, button) {
+    if (typeof Chart === 'undefined' || !canvas) return;
+    const chart = Chart.getChart(canvas);
+    if (!chart) return;
+    const datasets = chart.data?.datasets || [];
+    const diffIndexes = [];
+    const sourceIndexes = [];
+    datasets.forEach((dataset, index) => {
+      if (dataset.rgdhDiffDataset) diffIndexes.push(index);
+      if (dataset.rgdhDiffSource) sourceIndexes.push(index);
+    });
+    if (!diffIndexes.length) return;
+    const enableDiff = !diffIndexes.some((index) => chart.isDatasetVisible(index));
+    diffIndexes.forEach((index) => chart.setDatasetVisibility(index, enableDiff));
+    sourceIndexes.forEach((index) => chart.setDatasetVisibility(index, !enableDiff));
+    if (button) {
+      button.classList.toggle('active', enableDiff);
+      button.setAttribute('aria-pressed', String(enableDiff));
+    }
+    chart.update();
   }
 
   function createChartToolbarV2(rows, pivotRows, options, root) {
@@ -108,7 +169,6 @@
       <label class="rgdh-chart-field rgdh-chart-field-hour">Bitis Saat <select id="chartHourEnd" class="rgdh-select">${hourOptions}</select></label>
       <label class="rgdh-chart-field rgdh-chart-range-control">Saat Kaydir <span class="rgdh-hour-slider-row"><button id="chartHourDown" type="button" title="Saat araligini geri al">-</button><input id="chartHourSlider" type="range" min="0" max="23" value="0"><button id="chartHourUp" type="button" title="Saat araligini ileri al">+</button></span></label>
       <button id="btnChartQuery" class="primary" type="button">Sorgula</button>
-      <button id="btnChartFullscreen" type="button">Tam Ekran</button>
     `;
 
     const selectBusbar = toolbar.querySelector('#chartBusbarSelect');
@@ -121,7 +181,6 @@
     const hourDown = toolbar.querySelector('#chartHourDown');
     const hourUp = toolbar.querySelector('#chartHourUp');
     const btnQuery = toolbar.querySelector('#btnChartQuery');
-    const btnFs = toolbar.querySelector('#btnChartFullscreen');
 
     if (options.busbarId) selectBusbar.value = String(options.busbarId);
     if (options.date) inputDate.value = options.date;
@@ -218,10 +277,6 @@
     };
 
     btnQuery.addEventListener('click', applyFilters);
-    btnFs.addEventListener('click', () => {
-      const wrap = root.querySelector('.rgdh-chart-wrap');
-      if (wrap?.requestFullscreen) wrap.requestFullscreen();
-    });
 
     return toolbar;
   }
@@ -858,8 +913,8 @@
     const toolbar = createComparisonChartToolbar(rows, selection, root, options);
     root.appendChild(toolbar);
     const selectedRows = selectComparisonRowsForCharts(rows, selection);
-    const topCanvas = appendChartCanvas(root, 'EK-C / YKS SCADA Gerilim ve Aktif Guc', 'rgdh-compare-top-chart', 300);
-    const reactiveCanvas = appendChartCanvas(root, 'EK-C / YKS SCADA Reaktif Guc ve Limit', 'rgdh-compare-reactive-chart', 300);
+    const topCanvas = appendChartCanvas(root, 'EK-C / YKS SCADA Gerilim ve Aktif Guc', 'rgdh-compare-top-chart', 300, { diffToggle: true });
+    const reactiveCanvas = appendChartCanvas(root, 'EK-C / YKS SCADA Reaktif Guc ve Limit', 'rgdh-compare-reactive-chart', 300, { diffToggle: true });
     const theme = chartTheme(topCanvas);
     renderMixedChart(topCanvas, selectedRows, buildComparisonTopDatasets(selectedRows, theme), options, 'MW', true);
     renderMixedChart(reactiveCanvas, selectedRows, buildComparisonReactiveDatasets(selectedRows, theme), options, 'MVAr', false);
@@ -880,7 +935,6 @@
       <label class="rgdh-chart-field rgdh-chart-field-hour">Bitis Saat <select id="chartHourEnd" class="rgdh-select">${hourOptions}</select></label>
       <label class="rgdh-chart-field rgdh-chart-range-control">Saat Kaydir <span class="rgdh-hour-slider-row"><button id="chartHourDown" type="button" title="Saat araligini geri al">-</button><input id="chartHourSlider" type="range" min="0" max="23" value="0"><button id="chartHourUp" type="button" title="Saat araligini ileri al">+</button></span></label>
       <button id="btnChartQuery" class="primary" type="button">Sorgula</button>
-      <button id="btnChartFullscreen" type="button">Tam Ekran</button>
     `;
     const selectBusbar = toolbar.querySelector('#chartBusbarSelect');
     const selectYtm = toolbar.querySelector('#chartYtmSelect');
@@ -892,7 +946,6 @@
     const hourDown = toolbar.querySelector('#chartHourDown');
     const hourUp = toolbar.querySelector('#chartHourUp');
     const btnQuery = toolbar.querySelector('#btnChartQuery');
-    const btnFs = toolbar.querySelector('#btnChartFullscreen');
 
     if (selection.busbarId) selectBusbar.value = String(selection.busbarId);
     if (selection.ytm) selectYtm.value = String(selection.ytm);
@@ -963,10 +1016,6 @@
       applySelection();
     });
     btnQuery.addEventListener('click', applySelection);
-    btnFs.addEventListener('click', () => {
-      const wrap = root.querySelector('.rgdh-chart-wrap');
-      if (wrap?.requestFullscreen) wrap.requestFullscreen();
-    });
     return toolbar;
   }
 
@@ -976,10 +1025,12 @@
     const ekcVoltage = colors.ekcVoltage || colors.voltage2 || comparisonEkcColor(yksVoltage, '#3b82f6');
     const ekcActive = colors.ekcActivePower || comparisonEkcColor(yksActive, '#4b5563');
     return [
-      lineDataset('YKS SCADA V', rows.map((r) => r.platform?.liveBusbarVoltage), yksVoltage, 'y1', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0 }),
-      lineDataset('EK-C V', rows.map((r) => r.ekc?.vBara), ekcVoltage, 'y1', { borderWidth: 3.5, pointRadius: 0, tension: 0 }),
-      lineDataset('YKS SCADA P', rows.map((r) => r.platform?.pgenMw), yksActive, 'y', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0 }),
-      lineDataset('EK-C P', rows.map((r) => r.ekc?.pTotal), ekcActive, 'y', { borderWidth: 3.5, pointRadius: 0, tension: 0 })
+      lineDataset('YKS SCADA V', rows.map((r) => r.platform?.liveBusbarVoltage), yksVoltage, 'y1', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0, rgdhDiffSource: true }),
+      lineDataset('EK-C V', rows.map((r) => r.ekc?.vBara), ekcVoltage, 'y1', { borderWidth: 3.5, pointRadius: 0, tension: 0, rgdhDiffSource: true }),
+      lineDataset('Fark V', absDeltaSeries(rows, (r) => r.platform?.liveBusbarVoltage, (r) => r.ekc?.vBara), '#0891b2', 'y1', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true }),
+      lineDataset('YKS SCADA P', rows.map((r) => r.platform?.pgenMw), yksActive, 'y', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0, rgdhDiffSource: true }),
+      lineDataset('EK-C P', rows.map((r) => r.ekc?.pTotal), ekcActive, 'y', { borderWidth: 3.5, pointRadius: 0, tension: 0, rgdhDiffSource: true }),
+      lineDataset('Fark P', absDeltaSeries(rows, (r) => r.platform?.pgenMw, (r) => r.ekc?.pTotal), '#64748b', 'y', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true })
     ].filter(hasDatasetValues);
   }
 
@@ -987,9 +1038,24 @@
     const yksReactive = colors.reactivePower || '#facc15';
     const ekcReactive = colors.ekcReactivePower || comparisonEkcColor(yksReactive, '#f59e0b');
     return [
-      lineDataset('YKS SCADA Q', rows.map((r) => r.platform?.qgenMvar), yksReactive, 'y', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0 }),
-      lineDataset('EK-C Q', rows.map((r) => r.ekc?.qMeas), ekcReactive, 'y', { borderWidth: 3.5, pointRadius: 0, tension: 0 })
+      lineDataset('YKS SCADA Q', rows.map((r) => r.platform?.qgenMvar), yksReactive, 'y', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0, rgdhDiffSource: true }),
+      lineDataset('EK-C Q', rows.map((r) => r.ekc?.qMeas), ekcReactive, 'y', { borderWidth: 3.5, pointRadius: 0, tension: 0, rgdhDiffSource: true }),
+      lineDataset('Fark Q', absDeltaSeries(rows, (r) => r.platform?.qgenMvar, (r) => r.ekc?.qMeas), '#ca8a04', 'y', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true })
     ].filter(hasDatasetValues);
+  }
+
+  function absDeltaSeries(rows, leftSelector, rightSelector) {
+    return (rows || []).map((row) => {
+      const rawLeft = leftSelector(row);
+      const rawRight = rightSelector(row);
+      if (rawLeft === null || rawLeft === undefined || rawLeft === '' || rawRight === null || rawRight === undefined || rawRight === '') {
+        return null;
+      }
+      const left = Number(rawLeft);
+      const right = Number(rawRight);
+      if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+      return Number(Math.abs(left - right).toFixed(6));
+    });
   }
 
   function comparisonEkcColor(sourceColor, fallbackColor) {

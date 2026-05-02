@@ -612,10 +612,43 @@ button.ghost {
   padding: 8px;
 }
 
-.rgdh-chart-card h3 {
+.rgdh-chart-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 6px;
+}
+
+.rgdh-chart-card h3 {
+  margin: 0;
   font-size: 13px;
   color: #222;
+}
+
+.rgdh-chart-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.rgdh-chart-action {
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--yks-border-dark);
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #243447;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rgdh-chart-action:hover,
+.rgdh-chart-action.active {
+  border-color: var(--yks-blue);
+  background: #eaf3ff;
+  color: var(--yks-blue);
 }
 
 .rgdh-chart-card svg {
@@ -843,6 +876,23 @@ button.ghost {
 
 [data-theme="dark"] .rgdh-table tbody tr:nth-child(even) td {
   background: var(--table-alt-bg);
+}
+
+[data-theme="dark"] .rgdh-chart-card h3 {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .rgdh-chart-action {
+  background: #111827;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .rgdh-chart-action:hover,
+[data-theme="dark"] .rgdh-chart-action.active {
+  background: #172554;
+  border-color: #60a5fa;
+  color: #bfdbfe;
 }
 
 [data-theme="dark"] .rgdh-table td:first-child {

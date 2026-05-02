@@ -272,8 +272,37 @@ test('comparison dataset builders include EK-C and YKS SCADA values', () => {
   const topLabels = charts.buildComparisonTopDatasets(compareRows).map((dataset) => dataset.label);
   const reactiveLabels = charts.buildComparisonReactiveDatasets(compareRows).map((dataset) => dataset.label);
 
-  assert.deepEqual(topLabels, ['YKS SCADA V', 'EK-C V', 'YKS SCADA P', 'EK-C P']);
-  assert.deepEqual(reactiveLabels, ['YKS SCADA Q', 'EK-C Q']);
+  assert.deepEqual(topLabels, ['YKS SCADA V', 'EK-C V', 'Fark V', 'YKS SCADA P', 'EK-C P', 'Fark P']);
+  assert.deepEqual(reactiveLabels, ['YKS SCADA Q', 'EK-C Q', 'Fark Q']);
+});
+
+test('comparison difference datasets are hidden absolute difference lines by default', () => {
+  const compareRows = [
+    {
+      ekc: { vBara: 159.4, pTotal: 42.5, qMeas: -3 },
+      platform: { liveBusbarVoltage: 158.9, pgenMw: 40, qgenMvar: -4.25 }
+    },
+    {
+      ekc: { vBara: 160, pTotal: null, qMeas: -2 },
+      platform: { liveBusbarVoltage: 159.2, pgenMw: 39, qgenMvar: -2.5 }
+    }
+  ];
+
+  const topDatasets = charts.buildComparisonTopDatasets(compareRows);
+  const reactiveDatasets = charts.buildComparisonReactiveDatasets(compareRows);
+  const farkV = topDatasets.find((dataset) => dataset.label === 'Fark V');
+  const farkP = topDatasets.find((dataset) => dataset.label === 'Fark P');
+  const farkQ = reactiveDatasets.find((dataset) => dataset.label === 'Fark Q');
+
+  assert.equal(farkV.hidden, true);
+  assert.equal(farkP.hidden, true);
+  assert.equal(farkQ.hidden, true);
+  assert.equal(farkV.rgdhDiffDataset, true);
+  assert.equal(farkP.rgdhDiffDataset, true);
+  assert.equal(farkQ.rgdhDiffDataset, true);
+  assert.deepEqual(farkV.data, [0.5, 0.8]);
+  assert.deepEqual(farkP.data, [2.5, null]);
+  assert.deepEqual(farkQ.data, [1.25, 0.5]);
 });
 
 test('comparison dataset builders style EK-C series as solid prominent lines', () => {
@@ -308,6 +337,12 @@ test('comparison dataset builders style EK-C series as solid prominent lines', (
   assert.deepEqual(ekcV.borderDash || [], []);
   assert.deepEqual(ekcP.borderDash || [], []);
   assert.deepEqual(ekcQ.borderDash || [], []);
+  assert.equal(yksV.rgdhDiffSource, true);
+  assert.equal(ekcV.rgdhDiffSource, true);
+  assert.equal(yksP.rgdhDiffSource, true);
+  assert.equal(ekcP.rgdhDiffSource, true);
+  assert.equal(yksQ.rgdhDiffSource, true);
+  assert.equal(ekcQ.rgdhDiffSource, true);
   assert.equal(yksV.borderColor, '#1e40af');
   assert.equal(yksP.borderColor, '#111827');
   assert.equal(yksQ.borderColor, '#facc15');
