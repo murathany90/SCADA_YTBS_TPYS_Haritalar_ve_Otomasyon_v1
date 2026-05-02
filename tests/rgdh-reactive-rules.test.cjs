@@ -74,3 +74,65 @@ test('buildPlatformHourStat keeps completely empty hours as KY instead of failed
   assert.equal(stat.hourResult, 'KY');
   assert.equal(stat.passRatio, null);
 });
+
+test('buildPlatformHourStat detects synchronous condenser hours and averages droop', () => {
+  const skRows = [
+    ...Array.from({ length: 4 }, (_, index) => ({
+      hasSynchronousCondenser: true,
+      pgenMw: 1,
+      qgenMvar: index % 2 ? -18 : 18,
+      approvalStatus: 1,
+      nominalHighExcitation: 20,
+      nominalLowExcitation: -20,
+      droopPct: 4
+    })),
+    {
+      hasSynchronousCondenser: true,
+      pgenMw: 1,
+      qgenMvar: 17,
+      approvalStatus: 1,
+      nominalHighExcitation: 20,
+      nominalLowExcitation: -20,
+      droopPct: 4
+    },
+    ...Array.from({ length: 3 }, () => ({
+      hasSynchronousCondenser: true,
+      pgenMw: 6,
+      qgenMvar: 20,
+      approvalStatus: 1,
+      droopPct: 5
+    }))
+  ];
+
+  const stat = pivot.buildPlatformHourStat(skRows);
+  assert.equal(stat.synchronousCondenserCandidate, true);
+  assert.equal(stat.synchronousCondenserActive, true);
+  assert.equal(stat.synchronousCondenserMinuteCount, 5);
+  assert.equal(stat.synchronousCondenserSuccessMinuteCount, 4);
+  assert.equal(stat.synchronousCondenserFailMinuteCount, 1);
+  assert.equal(stat.synchronousCondenserResult, 'SAGLADI');
+  assert.equal(stat.droopPctAvg, 4.375);
+
+  const inactive = pivot.buildPlatformHourStat(skRows.slice(0, 4));
+  assert.equal(inactive.synchronousCondenserCandidate, true);
+  assert.equal(inactive.synchronousCondenserActive, false);
+  assert.equal(inactive.synchronousCondenserMinuteCount, 4);
+  assert.equal(inactive.synchronousCondenserSuccessMinuteCount, 4);
+  assert.equal(inactive.synchronousCondenserResult, '');
+});
+
+test('buildPlatformHourStat marks active SK hours failed when nominal excitation support is below threshold', () => {
+  const stat = pivot.buildPlatformHourStat(Array.from({ length: 5 }, () => ({
+    hasSynchronousCondenser: true,
+    pgenMw: 1,
+    qgenMvar: 10,
+    approvalStatus: 1,
+    nominalHighExcitation: 20,
+    nominalLowExcitation: -20
+  })));
+
+  assert.equal(stat.synchronousCondenserActive, true);
+  assert.equal(stat.synchronousCondenserSuccessMinuteCount, 0);
+  assert.equal(stat.synchronousCondenserFailMinuteCount, 5);
+  assert.equal(stat.synchronousCondenserResult, 'SAGLAMADI');
+});

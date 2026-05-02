@@ -978,15 +978,39 @@
 
   function formatCompareParticipationCell(stat) {
     const result = normalizeReactiveResult(stat?.hourResult || stat?.status);
+    const skBadge = renderSkBadge(stat, { requireActive: true, showCount: true });
     if (result === 'DD' || result === 'YY' || result === 'KY') {
-      return { html: escapeHtml(result), className: `compare-ky-neutral participation-${result.toLowerCase()}` };
+      return { html: `${escapeHtml(result)}${skBadge}`, className: `compare-ky-neutral participation-${result.toLowerCase()}` };
     }
     const ratio = Number(stat?.passRatio ?? stat?.participationPct);
     if (!Number.isFinite(ratio)) return '-';
     return {
-      html: formatFixedPercent(ratio),
+      html: `${formatFixedPercent(ratio)}${skBadge}`,
       className: ratio >= COMPARE_KY_THRESHOLD_PCT ? 'compare-ky-ok' : 'compare-ky-fail'
     };
+  }
+
+  function renderSkBadge(context = {}, options = {}) {
+    const active = isTruthyFlag(context?.synchronousCondenserActive);
+    const candidate = active
+      || isTruthyFlag(context?.synchronousCondenserCandidate)
+      || hasSynchronousCondenserMarker(context);
+    if (options.requireActive && !active) return '';
+    if (!candidate) return '';
+    const result = normalizeReactiveResult(context?.synchronousCondenserResult || context?.hourResult || context?.status || context?.reactiveResult || context?.result);
+    const className = active
+      ? (result === 'SAGLAMADI'
+        ? 'rgdh-sk-fail'
+        : (result === 'SAGLADI' ? 'rgdh-sk-ok' : 'rgdh-sk-neutral'))
+      : 'rgdh-sk-candidate';
+    const minuteCount = Number(context?.synchronousCondenserMinuteCount || 0);
+    const title = active
+      ? `Senkron kompansator aktif (${formatNumber(minuteCount)} dk, basarili ${formatNumber(context?.synchronousCondenserSuccessMinuteCount)})`
+      : 'Senkron kompansator adayi';
+    const label = active && options.showCount !== false
+      ? `SK(${formatNumber(context?.synchronousCondenserSuccessMinuteCount)})`
+      : 'SK';
+    return `<span class="rgdh-sk-badge ${className}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
   }
 
   function formatCompareDeltaCell(value, metric, limitType = 'avg') {
@@ -1134,20 +1158,44 @@
     });
   }
 
+  function hasSynchronousCondenserMarker(row) {
+    if (!row) return false;
+    if (isTruthyFlag(row.hasSynchronousCondenser) || isTruthyFlag(row.synchronousCondenserCandidate)) return true;
+    if (isTruthyFlag(row.catalog?.hasSynchronousCondenser)) return true;
+    const busbarId = String(row.busbarId ?? '').trim();
+    const busbarName = normalizeText(row.busbarName || row.plantName || '');
+    return getCatalogBusbarSummaries().some((summary) => {
+      if (!isTruthyFlag(summary.hasSynchronousCondenser)) return false;
+      if (busbarId && String(summary.busbarId ?? '').trim() === busbarId) return true;
+      return busbarName && normalizeText(`${summary.busbarName || ''} ${summary.plantName || ''}`).includes(busbarName);
+    });
+  }
+
   function resolveFetchJobTimeoutMs(sourceType, selectedBusbar) {
     return String(sourceType || '').toUpperCase() === 'WIND' && hasAuxiliarySourceMarker(selectedBusbar)
       ? RGDH_HYBRID_JOB_TIMEOUT_MS
       : RGDH_STANDARD_JOB_TIMEOUT_MS;
   }
 
-  function renderHybridNameHtml(value, row) {
+  function renderHybridNameHtml(value, row, options = {}) {
+    const { showSk = true } = options;
     const label = escapeHtml(value || '-');
-    if (!hasAuxiliarySourceMarker(row)) return label;
-    return `<span class="rgdh-name-with-marker">${label}<span class="rgdh-hybrid-dot" title="Yardimci kaynak" aria-label="Yardimci kaynak"></span></span>`;
+    const markers = [];
+    if (hasAuxiliarySourceMarker(row)) {
+      markers.push('<span class="rgdh-hybrid-dot" title="Yardimci kaynak" aria-label="Yardimci kaynak"></span>');
+    }
+    if (showSk && hasSynchronousCondenserMarker(row)) {
+      markers.push(renderSkBadge({ synchronousCondenserCandidate: true }, { showCount: false }));
+    }
+    if (!markers.length) return label;
+    return `<span class="rgdh-name-with-marker">${label}${markers.join('')}</span>`;
   }
 
   function formatHybridOptionLabel(label, row) {
-    return hasAuxiliarySourceMarker(row) ? `${label} [Yardimci kaynak]` : label;
+    const suffixes = [];
+    if (hasAuxiliarySourceMarker(row)) suffixes.push('Yardimci kaynak');
+    if (hasSynchronousCondenserMarker(row)) suffixes.push('SK');
+    return suffixes.length ? `${label} [${suffixes.join(', ')}]` : label;
   }
 
   function renderRawTable(rows) {
@@ -1162,6 +1210,7 @@
       { text: 'Ic ID', cls: '' },
       { text: 'TPYS Set', cls: '' },
       { text: 'TPYS GD', cls: '' },
+      { text: 'Droop %', cls: '' },
       { text: 'Canli Bara', cls: '' },
       { text: 'Pgen MW', cls: '' },
       { text: 'Qgen MVAr', cls: '' },
@@ -1191,18 +1240,19 @@
       if (rawSelection && rawUnitSelectionEquals(state.rawUnitSelection, rawSelection)) {
         tr.classList.add('selected');
       }
-      const cols = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+      const cols = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
       tr.innerHTML = [
         badge(row.sourceOrigin),
         escapeHtml(row.measurementDateLocal || '-'),
         escapeHtml(row.sourceType || '-'),
         escapeHtml(row.ytm || '-'),
-        renderHybridNameHtml(row.plantName || '-', row),
+        renderHybridNameHtml(row.plantName || '-', row, { showSk: false }),
         escapeHtml(row.busbarId ?? '-'),
-        renderHybridNameHtml(row.busbarName || '-', row),
+        renderHybridNameHtml(row.busbarName || '-', row, { showSk: false }),
         escapeHtml(row.busbarInternalId ?? '-'),
         formatNumber(row.tpysVoltageSet),
         formatNumber(row.tpysVoltageDrop),
+        formatNumber(row.droopPct),
         formatNumber(row.liveBusbarVoltage),
         formatNumber(row.pgenMw),
         formatNumber(row.qgenMvar),
@@ -1333,7 +1383,7 @@
     const tbody = document.createElement('tbody');
     pivotRows.forEach((row) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="rgdh-date-drilldown">${escapeHtml(row.localDate || '-')}</td><td>${renderHybridNameHtml(row.busbarName || row.busbarId || '-', row)}</td><td>${escapeHtml(row.sourceType)}</td><td>${escapeHtml(row.controlType)}</td>`;
+      tr.innerHTML = `<td class="rgdh-date-drilldown">${escapeHtml(row.localDate || '-')}</td><td>${renderHybridNameHtml(row.busbarName || row.busbarId || '-', row, { showSk: true })}</td><td>${escapeHtml(row.sourceType)}</td><td>${escapeHtml(row.controlType)}</td>`;
       tr.querySelector('.rgdh-date-drilldown')?.addEventListener('click', () => {
         state.chartSelection = { busbarId: row.busbarId, hour: null, date: row.localDate || null };
         switchTab('charts');
@@ -1342,12 +1392,15 @@
         const td = document.createElement('td');
         td.className = RGDH_PIVOT.participationClass(hour);
         const resultLabel = reactiveLabel(hour.hourResult || hour.status);
-        td.textContent = formatHourCellText(hour);
+        td.innerHTML = `${escapeHtml(formatHourCellText(hour))}${renderSkBadge(hour, { requireActive: true, showCount: true })}`;
         td.title = [
           `${String(hour.hour).padStart(2, '0')}:00`,
           `Sonuc ${resultLabel}`,
           `Katilim ${formatPercent(hour.participationPct)}`,
+          `SK aktif ${hour.synchronousCondenserMinuteCount ?? 0} dk`,
+          `SK basarili ${hour.synchronousCondenserSuccessMinuteCount ?? 0} dk`,
           `Set ${formatNumber(hour.setAvg)}`,
+          `Droop ${formatNumber(hour.droopPctAvg)}`,
           `Gerilim ${formatNumber(hour.voltageAvg)}`,
           `P ${formatNumber(hour.pgenAvg)}`,
           `Q ${formatNumber(hour.qgenAvg)}`,
@@ -1378,7 +1431,7 @@
     if (!el.dailyMetricTable || !RGDH_CHARTS?.buildHourMetricRows) return;
     const headers = [
       'Tarih', 'Saat', 'Bara', 'Tip', 'Sonuc', 'Sagladi', 'Saglamadi', 'DD', 'YY', 'KY',
-      'Katilim', 'Pnom', 'Pnom %10', 'Pnom %50', 'MKUD', 'Ort P', 'Ort Q', 'Ort V Set', 'Ort V'
+      'Katilim', 'Ort Droop %', 'Pnom', 'Pnom %10', 'Pnom %50', 'MKUD', 'Ort P', 'Ort Q', 'Ort V Set', 'Ort V'
     ];
     el.dailyMetricTable.innerHTML = `<thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>`;
     const tbody = document.createElement('tbody');
@@ -1387,15 +1440,16 @@
       tr.innerHTML = [
         escapeHtml(row.localDate || '-'),
         escapeHtml(`${String(row.hour).padStart(2, '0')}:00`),
-        escapeHtml(row.busbarName || '-'),
+        renderHybridNameHtml(row.busbarName || '-', row, { showSk: true }),
         escapeHtml(row.sourceType || '-'),
-        escapeHtml(row.hourResult || '-'),
+        `${escapeHtml(row.hourResult || '-')}${renderSkBadge(row, { requireActive: true, showCount: true })}`,
         formatNumber(row.passCount),
         formatNumber(row.failCount),
         formatNumber(row.ddCount),
         formatNumber(row.yyCount),
         formatNumber(row.kyCount),
         formatPercent(row.participationPct),
+        formatNumber(row.droopPctAvg),
         formatNumber(row.pnomAvg),
         formatNumber(row.pnomPct10),
         formatNumber(row.pnomPct50),
@@ -1411,7 +1465,6 @@
   }
 
   function formatHourCellText(hour) {
-    if (RGDH_CHARTS?.formatHeatmapCellText) return RGDH_CHARTS.formatHeatmapCellText(hour);
     const result = normalizeReactiveResult(hour?.hourResult || hour?.status);
     if (result === 'DD' || result === 'YY' || result === 'KY') return result;
     return formatPercent(hour?.participationPct ?? hour?.passRatio);
@@ -1521,6 +1574,8 @@
       { html: 'YKS<br>Deg.', cls: 'eval', group: 'Kimlik / Sonuc', groupEnd: true },
       { html: 'Ek-C<br>K.Y (%)', cls: 'percent', group: 'Katilim', groupStart: true },
       { html: 'YKS<br>K.Y (%)', cls: 'percent', group: 'Katilim', groupEnd: true },
+      { html: 'YKS Droop %', cls: 'metric', group: 'Droop', groupStart: true },
+      { html: 'EK-C Droop %', cls: 'metric', group: 'Droop', groupEnd: true },
       { html: 'YKS<br>V Ort', cls: 'metric', group: 'Gerilim Karsilastirma', groupStart: true },
       { html: 'EK-C<br>V Ort', cls: 'metric', group: 'Gerilim Karsilastirma' },
       { html: 'Fark<br>dV', cls: 'metric', group: 'Gerilim Karsilastirma' },
@@ -1585,6 +1640,8 @@
         formatComparisonEvaluation(row.platformStat),
         formatCompareParticipationCell(row.ekcStat),
         formatCompareParticipationCell(row.platformStat),
+        formatFixedNumber(row.avgYksDroopPct),
+        formatFixedNumber(row.avgEkcDroopPct),
         formatFixedNumber(row.avgYksV),
         formatFixedNumber(row.avgEkcV),
         formatCompareDeltaBarCell(avgDeltaVCell, row.avgDeltaV, deltaBarMax.avg.dV),
@@ -1650,7 +1707,7 @@
     }
     const text = RGDH_CSV.buildCompareExportCsv(rows || []);
     const datePart = (rows || []).find((row) => row?.localDate)?.localDate || readFilters().date || 'karsilastirma';
-    downloadText(`EKC_YKS_KARSILASTIRMA_${datePart}.csv`, text, 'text/csv;charset=utf-8');
+    downloadCsv(`EKC_YKS_KARSILASTIRMA_${datePart}.csv`, text);
   }
 
   function normalizeCompareSelection(rows, selection = {}) {
@@ -1988,13 +2045,15 @@
     const selected = getCatalogBusbarSummaries().find((row) => catalogBusbarKey(row) === filters.search);
     if (!selected) return null;
     const hasAuxiliarySource = hasAuxiliarySourceMarker(selected);
+    const hasSynchronousCondenser = hasSynchronousCondenserMarker(selected);
     return {
       busbarId: String(selected.busbarId || '').trim(),
       busbarName: selected.busbarName || '',
       sourceType: inferCatalogSourceType(selected),
       ytm: selected.ytm || '',
       plantName: selected.plantName || '',
-      hasAuxiliarySource
+      hasAuxiliarySource,
+      hasSynchronousCondenser
     };
   }
 
@@ -2245,7 +2304,7 @@
       ? RGDH_DIAGNOSTICS.diagnosticEventsToCsv(localEvents)
       : '';
     const merged = mergeCsvTexts(diagnosticsCsv, localCsv);
-    downloadText(response?.filename || `RGDH_EKLENTI_LOGLARI_${readFilters().date}.csv`, merged || '\uFEFFZaman;Seviye;Kategori;Route;Metot;URL;HTTP;Süre(ms);Mesaj\n', 'text/csv;charset=utf-8');
+    downloadCsv(response?.filename || `RGDH_EKLENTI_LOGLARI_${readFilters().date}.csv`, merged || '\uFEFFZaman;Seviye;Kategori;Route;Metot;URL;HTTP;Süre(ms);Mesaj\n');
   }
 
   async function exportYksLogCsv() {
@@ -2255,7 +2314,7 @@
     const localCsv = RGDH_DIAGNOSTICS?.diagnosticEventsToCsv
       ? RGDH_DIAGNOSTICS.diagnosticEventsToCsv(state.yksLogs)
       : '';
-    downloadText(response?.filename || `RGDH_YKS_LOGLARI_${readFilters().date}.csv`, response?.ok ? response.csv : localCsv, 'text/csv;charset=utf-8');
+    downloadCsv(response?.filename || `RGDH_YKS_LOGLARI_${readFilters().date}.csv`, response?.ok ? response.csv : localCsv);
   }
 
   async function clearErrorLogs() {
@@ -2297,22 +2356,31 @@
   function exportCsv() {
     const rows = getFilteredRows();
     const text = RGDH_CSV.buildExportCsv(rows);
-    downloadText(`RGDH_HAM_DATA_${readFilters().date}.csv`, text, 'text/csv;charset=utf-8');
+    downloadCsv(`RGDH_HAM_DATA_${readFilters().date}.csv`, text);
   }
 
   function exportTestsCsv() {
     const text = RGDH_CSV.buildCatalogExportCsv(state.catalogRows);
-    downloadText('rgdh_unite_tanimi_v2.csv', text, 'text/csv;charset=utf-8');
+    downloadCsv('rgdh_unite_tanimi_v2.csv', text);
   }
 
-  function downloadText(filename, text, type) {
-    const blob = new Blob([text], { type });
+  function downloadCsv(filename, text) {
+    const prepared = RGDH_CSV.prepareCsvDownloadText
+      ? RGDH_CSV.prepareCsvDownloadText(text)
+      : { text: String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').join('\r\n'), usedAsciiFallback: false };
+    const bytes = RGDH_CSV.encodeCsvForExcel
+      ? RGDH_CSV.encodeCsvForExcel(prepared.text)
+      : prepared.text;
+    const blob = new Blob([bytes], { type: 'text/csv;charset=utf-16le' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (prepared.usedAsciiFallback) {
+      setStatus('CSV dosyasında karakter bozulması algılandı; ASCII yedek çıktı indirildi.');
+    }
   }
 
   function badge(text) {
@@ -2388,8 +2456,11 @@
 
   function isTruthyFlag(value) {
     if (value === true) return true;
+    if (value === false || value === null || value === undefined || value === '') return false;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric !== 0;
     const text = String(value ?? '').trim().toLowerCase();
-    return text === 'true' || text === '1' || text === 'yes' || text === 'evet';
+    return ['true', '1', 'yes', 'evet', 'on', 'aktif', 'var'].includes(text);
   }
 
   function normalizeText(value) {

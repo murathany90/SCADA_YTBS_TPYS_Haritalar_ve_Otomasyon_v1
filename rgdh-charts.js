@@ -19,6 +19,9 @@
   };
   const TPYS_SET_LEGEND_GROUP = 'tpys-set-voltage';
   const PARTICIPATION_OK_THRESHOLD_PCT = 80;
+  const VIOLATION_POINT_COLOR = '#dc2626';
+  let pivotApiCache = null;
+  let pivotApiChecked = false;
 
   function renderReport(root, rows, pivotRows, options = {}) {
     if (!root) return;
@@ -505,7 +508,7 @@
 
   function buildReactiveDatasets(rows, options = {}, colors = {}) {
     const sourceRows = rows || [];
-    return [
+    const datasets = [
       lineDataset('Q Olc (MVAr)', sourceRows.map((r) => r.qgenMvar ?? r.qMeas), colors.reactivePower || '#facc15', 'y'),
       lineDataset('D.I. MVAr Limit', sourceRows.map((r) => r.diMvarLimit), colors.mvarLimitDi || '#14b8a6', 'y', { borderDash: [4, 3], pointRadius: 0 }),
       lineDataset('A.I. MVAr Limit', sourceRows.map((r) => r.aiMvarLimit), colors.mvarLimitAi || '#f97316', 'y', { borderDash: [4, 3], pointRadius: 0 }),
@@ -516,7 +519,12 @@
       lineDataset('EK-C limit alt', sourceRows.map((r) => r.minuteStat?.limitLow), '#64748b', 'y', { borderDash: [2, 2], pointRadius: 0 }),
       lineDataset('EK-C limit ust', sourceRows.map((r) => r.minuteStat?.limitHigh), '#64748b', 'y', { borderDash: [2, 2], pointRadius: 0 }),
       lineDataset('EK-C limit', sourceRows.map((r) => r.minuteStat?.limitValue), '#475569', 'y', { borderDash: [5, 3], pointRadius: 0 })
-    ].filter(hasDatasetValues);
+    ];
+    datasets.push(
+      violationPointDataset('YKS İhlal Noktası', sourceRows.map((row) => isYksReactiveViolation(row) ? (row.qgenMvar ?? row.qMeas) : null)),
+      violationPointDataset('EK-C İhlal Noktası', sourceRows.map((row) => isEkcReactiveViolation(row) ? (row.qMeas ?? row.qgenMvar) : null))
+    );
+    return datasets.filter(hasDatasetValues);
   }
 
   function lineDataset(label, data, color, yAxisID = 'y', extra = {}) {
@@ -691,7 +699,7 @@
     container.className = 'rgdh-detail-table';
     const headers = [
       'Tarih', 'Saat', 'Bara', 'Tip', 'Sonuc', 'Sagladi', 'Saglamadi', 'DD', 'YY', 'KY',
-      'Katilim', 'Pnom', 'Pnom %10', 'Pnom %50', 'MKUD', 'Ort P', 'Ort Q', 'Ort V Set', 'Ort V'
+      'Katilim', 'Ort Droop %', 'Pnom', 'Pnom %10', 'Pnom %50', 'MKUD', 'Ort P', 'Ort Q', 'Ort V Set', 'Ort V'
     ];
     const table = document.createElement('table');
     table.className = 'rgdh-table compact';
@@ -711,6 +719,7 @@
         formatNumber(row.yyCount),
         formatNumber(row.kyCount),
         formatPercent(row.participationPct),
+        formatNumber(row.droopPctAvg),
         formatNumber(row.pnomAvg),
         formatNumber(row.pnomPct10),
         formatNumber(row.pnomPct50),
@@ -749,6 +758,13 @@
           yyCount: hour.yyCount ?? 0,
           kyCount: hour.kyCount ?? 0,
           participationPct: hour.participationPct ?? hour.passRatio ?? null,
+          synchronousCondenserCandidate: Boolean(hour.synchronousCondenserCandidate),
+          synchronousCondenserActive: Boolean(hour.synchronousCondenserActive),
+          synchronousCondenserMinuteCount: Number(hour.synchronousCondenserMinuteCount || 0),
+          synchronousCondenserSuccessMinuteCount: Number(hour.synchronousCondenserSuccessMinuteCount || 0),
+          synchronousCondenserFailMinuteCount: Number(hour.synchronousCondenserFailMinuteCount || 0),
+          synchronousCondenserResult: hour.synchronousCondenserResult || '',
+          droopPctAvg: finiteOrNull(hour.droopPctAvg),
           pnomAvg,
           pnomPct10: Number.isFinite(pnomAvg) ? roundMetric(pnomAvg * 0.10) : null,
           pnomPct50: isWind && Number.isFinite(pnomAvg) ? roundMetric(pnomAvg * 0.50) : null,
@@ -846,14 +862,19 @@
 
   function formatHeatmapCellText(hour) {
     const result = normalizeReactiveResultCode(hour?.hourResult || hour?.status);
-    if (result === 'DD' || result === 'YY' || result === 'KY') return result;
+    const successCount = Number(hour?.synchronousCondenserSuccessMinuteCount);
+    const skSuffix = hour?.synchronousCondenserActive
+      ? ` SK(${Number.isFinite(successCount) ? formatNumber(successCount) : formatNumber(hour?.synchronousCondenserMinuteCount)})`
+      : '';
+    if (result === 'DD' || result === 'YY' || result === 'KY') return `${result}${skSuffix}`;
     const pct = hour?.participationPct ?? hour?.passRatio;
-    return Number.isFinite(Number(pct)) ? formatPercent(pct) : (result || '-');
+    return Number.isFinite(Number(pct)) ? `${formatPercent(pct)}${skSuffix}` : `${result || '-'}${skSuffix}`;
   }
 
   function normalizeReactiveResultCode(value) {
-    if (typeof RGDH_PIVOT !== 'undefined' && RGDH_PIVOT.normalizeReactiveResultCode) {
-      return RGDH_PIVOT.normalizeReactiveResultCode(value);
+    const pivotApi = getPivotApi();
+    if (pivotApi?.normalizeReactiveResultCode) {
+      return pivotApi.normalizeReactiveResultCode(value);
     }
     if (value === null || value === undefined) return '';
     const code = String(value).trim().toUpperCase()
@@ -1040,15 +1061,20 @@
   function buildComparisonTopDatasets(rows, colors = {}) {
     const yksVoltage = colors.liveVoltage || '#1e40af';
     const yksActive = colors.activePower || '#111827';
+    const yksHybrid = colors.auxiliaryMw || '#eab308';
     const ekcVoltage = colors.ekcVoltage || colors.voltage2 || comparisonEkcColor(yksVoltage, '#3b82f6');
     const ekcActive = colors.ekcActivePower || comparisonEkcColor(yksActive, '#4b5563');
+    const ekcHybrid = colors.ekcHybridPower || comparisonEkcColor(yksHybrid, '#ca8a04');
     return [
       lineDataset('YKS SCADA V', rows.map((r) => r.platform?.liveBusbarVoltage), yksVoltage, 'y1', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0, rgdhDiffSource: true }),
       lineDataset('EK-C V', rows.map((r) => r.ekc?.vBara), ekcVoltage, 'y1', { borderWidth: 3.5, pointRadius: 0, tension: 0, rgdhDiffSource: true }),
       lineDataset('Fark V', absDeltaSeries(rows, (r) => r.platform?.liveBusbarVoltage, (r) => r.ekc?.vBara), '#0891b2', 'y1', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true }),
       lineDataset('YKS SCADA P', rows.map((r) => r.platform?.pgenMw), yksActive, 'y', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0, rgdhDiffSource: true }),
       lineDataset('EK-C P', rows.map((r) => r.ekc?.pTotal), ekcActive, 'y', { borderWidth: 3.5, pointRadius: 0, tension: 0, rgdhDiffSource: true }),
-      lineDataset('Fark P', absDeltaSeries(rows, (r) => r.platform?.pgenMw, (r) => r.ekc?.pTotal), '#64748b', 'y', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true })
+      lineDataset('Fark P', absDeltaSeries(rows, (r) => r.platform?.pgenMw, (r) => r.ekc?.pTotal), '#64748b', 'y', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true }),
+      lineDataset('YKS Hibrit P', rows.map((r) => r.platform?.auxiliaryMw), yksHybrid, 'y', { hidden: true, borderWidth: 2.5, tension: 0, pointRadius: 0, rgdhDiffSource: true }),
+      lineDataset('EK-C Hibrit P', rows.map((r) => ekcHybridPowerForChart(r)), ekcHybrid, 'y', { hidden: true, borderWidth: 2.5, tension: 0, pointRadius: 0, rgdhDiffSource: true }),
+      lineDataset('Fark Hibrit P', absDeltaSeries(rows, (r) => r.platform?.auxiliaryMw, (r) => ekcHybridPowerForChart(r)), '#b45309', 'y', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true })
     ].filter(hasDatasetValues);
   }
 
@@ -1058,8 +1084,87 @@
     return [
       lineDataset('YKS SCADA Q', rows.map((r) => r.platform?.qgenMvar), yksReactive, 'y', { borderWidth: 3, borderDash: [], tension: 0, pointRadius: 0, pointHoverRadius: 0, hitRadius: 0, rgdhDiffSource: true }),
       lineDataset('EK-C Q', rows.map((r) => r.ekc?.qMeas), ekcReactive, 'y', { borderWidth: 3.5, pointRadius: 0, tension: 0, rgdhDiffSource: true }),
-      lineDataset('Fark Q', absDeltaSeries(rows, (r) => r.platform?.qgenMvar, (r) => r.ekc?.qMeas), '#ca8a04', 'y', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true })
+      lineDataset('Fark Q', absDeltaSeries(rows, (r) => r.platform?.qgenMvar, (r) => r.ekc?.qMeas), '#ca8a04', 'y', { hidden: true, borderWidth: 2.5, borderDash: [5, 3], pointRadius: 0, tension: 0, rgdhDiffDataset: true }),
+      violationPointDataset('YKS İhlal Noktası', rows.map((row) => isComparisonYksViolation(row) ? row.platform?.qgenMvar : null)),
+      violationPointDataset('EK-C İhlal Noktası', rows.map((row) => isComparisonEkcViolation(row) ? row.ekc?.qMeas : null))
     ].filter(hasDatasetValues);
+  }
+
+  function violationPointDataset(label, data) {
+    return lineDataset(label, data, VIOLATION_POINT_COLOR, 'y', {
+      hidden: true,
+      showLine: false,
+      borderWidth: 0,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      pointBackgroundColor: VIOLATION_POINT_COLOR,
+      pointBorderColor: '#ffffff',
+      pointBorderWidth: 1.5,
+      tension: 0,
+      rgdhViolationDataset: true
+    });
+  }
+
+  function ekcHybridPowerForChart(row) {
+    const ekc = row?.ekc || row;
+    const candidates = [ekc?.pAux, ekc?.auxiliaryMw, ekc?.hybridP, ekc?.pHybrid];
+    const value = candidates.find((candidate) => Number.isFinite(Number(candidate)));
+    return value === undefined ? null : Number(value);
+  }
+
+  function isYksReactiveViolation(row) {
+    if (!row) return false;
+    const derived = deriveYksReactiveResult(row);
+    if (derived) return derived === 'SAGLAMADI';
+    const approval = Number(row.approvalStatus);
+    const auxiliaryApproval = Number(row.auxiliaryApprovalStatus);
+    if (approval === 1 || auxiliaryApproval === 1) return false;
+    return approval === 0 || auxiliaryApproval === 0;
+  }
+
+  function isEkcReactiveViolation(row) {
+    if (!row) return false;
+    return normalizeReactiveResultCode(row.ekcResult || row.minuteStat?.result) === 'SAGLAMADI';
+  }
+
+  function isComparisonYksViolation(row) {
+    return normalizeReactiveResultCode(row?.platformResult) === 'SAGLAMADI'
+      || isYksReactiveViolation(row?.platform);
+  }
+
+  function isComparisonEkcViolation(row) {
+    return normalizeReactiveResultCode(row?.ekcResult || row?.ekc?.minuteStat?.result) === 'SAGLAMADI';
+  }
+
+  function deriveYksReactiveResult(row) {
+    const pivotApi = getPivotApi();
+    if (pivotApi?.derivePlatformMinuteResult) {
+      const stat = pivotApi.derivePlatformMinuteResult(rowForPlatformMinuteResult(row));
+      const result = normalizeReactiveResultCode(stat?.result);
+      if (result) return result;
+    }
+    return normalizeReactiveResultCode(row?.platformResult || row?.reactiveResult || row?.minuteStat?.result || row?.result || row?.hourResult);
+  }
+
+  function rowForPlatformMinuteResult(row) {
+    if (!row || row.platformResult !== undefined) return row;
+    const explicit = row.reactiveResult ?? row.minuteStat?.result ?? row.result ?? row.hourResult;
+    if (explicit === undefined || explicit === null || explicit === '') return row;
+    return { ...row, platformResult: explicit };
+  }
+
+  function getPivotApi() {
+    if (typeof RGDH_PIVOT !== 'undefined' && RGDH_PIVOT) return RGDH_PIVOT;
+    if (typeof globalThis !== 'undefined' && globalThis.RGDH_PIVOT) return globalThis.RGDH_PIVOT;
+    if (!pivotApiChecked && typeof require === 'function') {
+      pivotApiChecked = true;
+      try {
+        pivotApiCache = require('./rgdh-pivot.js');
+      } catch (error) {
+        pivotApiCache = null;
+      }
+    }
+    return pivotApiCache;
   }
 
   function absDeltaSeries(rows, leftSelector, rightSelector) {

@@ -28,6 +28,10 @@
   const RESULT_DD = 'DD';
   const RESULT_YY = 'YY';
   const RESULT_KY = 'KY';
+  const SK_ACTIVE_P_ABS_MAX_MW = 5;
+  const SK_REACTIVE_TO_ACTIVE_RATIO = 2;
+  const SK_MIN_MINUTES_PER_HOUR = 5;
+  const SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW = 0.1;
 
   function buildHourlyStatus(rowsForHour, rules = RGDH_HOURLY_RULES) {
     return buildPlatformHourStat(rowsForHour, rules).hourResult;
@@ -143,6 +147,7 @@
       pnomAvg: average(rows.map((row) => row.pnomMw)),
       pmkudAvg: average(rows.map((row) => row.pmkudMw)),
       minMkudAvg: average(rows.map((row) => row.minMkudMw)),
+      droopPctAvg: average(rows.map((row) => row.droopPct ?? row.speedDrop ?? row.catalog?.droopPct ?? row.catalog?.speedDrop)),
       auxiliaryMwAvg: average(rows.map((row) => row.auxiliaryMw)),
       auxiliaryMvarAvg: average(rows.map((row) => row.auxiliaryMvar))
     };
@@ -225,9 +230,11 @@
       };
       const hourSummary = reactiveHourSummary(counts, settings);
       const metrics = buildRawHourlyMetrics(rows, settings);
+      const skInfo = synchronousCondenserHourInfo(rows);
       return {
         ...metrics,
         ...hourSummary,
+        ...skInfo,
         minuteResults: [],
         measuredFailCount: 0,
         status: hourSummary.hourResult,
@@ -264,9 +271,11 @@
       activeLiabilityMinutes: counts.passCount + measuredFailCount
     }, settings);
     const metrics = buildRawHourlyMetrics(rows, settings);
+    const skInfo = synchronousCondenserHourInfo(rows);
     return {
       ...metrics,
       ...hourSummary,
+      ...skInfo,
       minuteResults,
       measuredFailCount,
       status: hourSummary.hourResult,
@@ -328,6 +337,69 @@
     const expected = positiveNumber(expectedMinuteCount, RGDH_REACTIVE_SETTINGS.expectedMinuteCount);
     if (isReactiveNeutralResult(result)) return null;
     return pass !== null ? roundMetric(((pass + dd + yy) / expected) * 100) : null;
+  }
+
+  function synchronousCondenserHourInfo(rowsForHour) {
+    const rows = Array.isArray(rowsForHour) ? rowsForHour.filter(Boolean) : [];
+    const candidate = rows.some(isSynchronousCondenserCandidate);
+    const activeRows = rows.filter(isSynchronousCondenserActiveMinute);
+    const minuteCount = activeRows.length;
+    const successMinuteCount = activeRows.filter(isSynchronousCondenserSuccessfulMinute).length;
+    const failMinuteCount = Math.max(0, minuteCount - successMinuteCount);
+    const active = candidate && minuteCount >= SK_MIN_MINUTES_PER_HOUR;
+    return {
+      synchronousCondenserCandidate: candidate,
+      synchronousCondenserActive: active,
+      synchronousCondenserMinuteCount: minuteCount,
+      synchronousCondenserSuccessMinuteCount: successMinuteCount,
+      synchronousCondenserFailMinuteCount: failMinuteCount,
+      synchronousCondenserResult: active ? synchronousCondenserHourResult(successMinuteCount, failMinuteCount, minuteCount) : ''
+    };
+  }
+
+  function isSynchronousCondenserCandidate(row) {
+    return numericFlag(row?.hasSynchronousCondenser ?? row?.catalog?.hasSynchronousCondenser) === 1;
+  }
+
+  function isSynchronousCondenserActiveMinute(row) {
+    if (!isSynchronousCondenserCandidate(row)) return false;
+    const p = finiteOrNull(row?.pgenMw ?? row?.pTotal);
+    const q = finiteOrNull(row?.qgenMvar ?? row?.qMeas);
+    if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
+    const absP = Math.abs(p);
+    const absQ = Math.abs(q);
+    return absP < SK_ACTIVE_P_ABS_MAX_MW
+      && absQ > SK_REACTIVE_TO_ACTIVE_RATIO * Math.max(absP, SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW);
+  }
+
+  function isSynchronousCondenserSuccessfulMinute(row) {
+    if (!isSynchronousCondenserActiveMinute(row)) return false;
+    const q = finiteOrNull(row?.qgenMvar ?? row?.qMeas);
+    const threshold = synchronousCondenserNominalThreshold(row, q);
+    return Number.isFinite(q) && Number.isFinite(threshold) && Math.abs(q) >= threshold * 0.90;
+  }
+
+  function synchronousCondenserHourResult(successMinuteCount, failMinuteCount, minuteCount) {
+    if (!Number.isFinite(Number(minuteCount)) || Number(minuteCount) <= 0) return '';
+    const maxFail = Math.floor(Number(minuteCount) * 0.20);
+    return Number(failMinuteCount || 0) <= maxFail ? RESULT_PASS : RESULT_FAIL;
+  }
+
+  function synchronousCondenserNominalThreshold(row, q) {
+    const high = firstFiniteAbs(
+      row?.nominalHighExcitation,
+      row?.qNomHigh,
+      row?.catalog?.nominalHighExcitation,
+      sumUnitAbs(row?.catalog?.units, ['nominalHighExcitation', 'highExcitationTest', 'highExcitationTest2'])
+    );
+    const low = firstFiniteAbs(
+      row?.nominalLowExcitation,
+      row?.qNomLow,
+      row?.catalog?.nominalLowExcitation,
+      sumUnitAbs(row?.catalog?.units, ['nominalLowExcitation', 'lowExcitationTest', 'lowExcitationTest2'])
+    );
+    if (Number(q) < 0) return Number.isFinite(low) ? low : high;
+    return Number.isFinite(high) ? high : low;
   }
 
   function normalizeReactiveResultCode(value) {
@@ -423,9 +495,36 @@
     return Number.isFinite(numeric) ? numeric : 0;
   }
 
+  function finiteOrNull(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
   function positiveNumber(value, fallback) {
     const numeric = Number(value);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+  }
+
+  function firstFiniteAbs(...values) {
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const numeric = Math.abs(Number(value));
+      if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    }
+    return null;
+  }
+
+  function sumUnitAbs(units, keys) {
+    const values = (Array.isArray(units) ? units : []).map((unit) => {
+      for (const key of keys) {
+        if (unit?.[key] === null || unit?.[key] === undefined || unit?.[key] === '') continue;
+        const numeric = Math.abs(Number(unit[key]));
+        if (Number.isFinite(numeric)) return numeric;
+      }
+      return null;
+    }).filter(Number.isFinite);
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0);
   }
 
   function average(values) {
@@ -449,6 +548,8 @@
     buildHourlyMetrics,
     buildPlatformHourStat,
     derivePlatformMinuteResult,
+    synchronousCondenserHourInfo,
+    isSynchronousCondenserActiveMinute,
     reactiveHourSummary,
     reactiveHourPct,
     normalizeReactiveResultCode,

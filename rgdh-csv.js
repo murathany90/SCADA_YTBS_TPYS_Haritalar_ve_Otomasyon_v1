@@ -1132,6 +1132,97 @@
     { key: 'tpysPlantMkud', header: 'TPYS Santral MKÜD', type: 'number' }
   ];
 
+  const TURKISH_ASCII_MAP = {
+    Ç: 'C', ç: 'c',
+    Ğ: 'G', ğ: 'g',
+    İ: 'I', ı: 'i',
+    Ö: 'O', ö: 'o',
+    Ş: 'S', ş: 's',
+    Ü: 'U', ü: 'u'
+  };
+
+  const MOJIBAKE_REPAIR_PAIRS = [
+    ['\u00c4\u00b0', 'İ'],
+    ['\u00c4\u00b1', 'ı'],
+    ['\u00c3\u00a7', 'ç'],
+    ['\u00c3\u0087', 'Ç'],
+    ['\u00c3\u2021', 'Ç'],
+    ['\u00c3\u00bc', 'ü'],
+    ['\u00c3\u009c', 'Ü'],
+    ['\u00c3\u0153', 'Ü'],
+    ['\u00c3\u00b6', 'ö'],
+    ['\u00c3\u0096', 'Ö'],
+    ['\u00c3\u2013', 'Ö'],
+    ['\u00c4\u2021', 'ç'],
+    ['\u00c4\u0087', 'ç'],
+    ['\u00c4\u0178', 'ğ'],
+    ['\u00c4\u009f', 'ğ'],
+    ['\u00c4\u017d', 'Ğ'],
+    ['\u00c4\u009e', 'Ğ'],
+    ['\u00c5\u0178', 'ş'],
+    ['\u00c5\u009f', 'ş'],
+    ['\u00c5\u017d', 'Ş'],
+    ['\u00c5\u009e', 'Ş']
+  ];
+
+  function normalizeCsvLineEndings(text) {
+    return String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').join('\r\n');
+  }
+
+  function hasCsvMojibake(text) {
+    return /[ÃÄÅ]|\uFFFD/.test(String(text ?? ''));
+  }
+
+  function repairCsvMojibake(text) {
+    let repaired = String(text ?? '');
+    MOJIBAKE_REPAIR_PAIRS.forEach(([broken, fixed]) => {
+      repaired = repaired.split(broken).join(fixed);
+    });
+    return repaired;
+  }
+
+  function repairCsvCellValue(value) {
+    return typeof value === 'string' ? repairCsvMojibake(value) : value;
+  }
+
+  function stripTurkishCharacters(text) {
+    const repaired = repairCsvMojibake(String(text ?? ''));
+    return repaired
+      .replace(/[ÇçĞğİıÖöŞşÜü]/g, (char) => TURKISH_ASCII_MAP[char] || char)
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x00-\x7F]/g, '');
+  }
+
+  function prepareCsvDownloadText(text) {
+    const normalized = normalizeCsvLineEndings(String(text ?? ''));
+    if (!hasCsvMojibake(normalized)) {
+      return { text: normalized, usedAsciiFallback: false };
+    }
+    return {
+      text: normalizeCsvLineEndings(stripTurkishCharacters(normalized)),
+      usedAsciiFallback: true
+    };
+  }
+
+  function encodeCsvForExcel(text) {
+    const prepared = normalizeCsvLineEndings(String(text ?? '')).replace(/^\uFEFF/, '');
+    const bytes = new Uint8Array(2 + prepared.length * 2);
+    bytes[0] = 0xff;
+    bytes[1] = 0xfe;
+    for (let index = 0; index < prepared.length; index += 1) {
+      const code = prepared.charCodeAt(index);
+      const offset = 2 + index * 2;
+      bytes[offset] = code & 0xff;
+      bytes[offset + 1] = code >> 8;
+    }
+    return bytes;
+  }
+
+  function buildCsvText(lines) {
+    return normalizeCsvLineEndings(lines.join('\n'));
+  }
+
   function buildExportCsv(rows, options = {}) {
     const columns = options.columns || RGDH_EXPORT_COLUMNS;
     const lines = [
@@ -1141,7 +1232,7 @@
     (rows || []).forEach((row) => {
       lines.push(columns.map((column) => formatExportCell(row?.[column.key], column)).join(';'));
     });
-    return lines.join('\n');
+    return buildCsvText(lines);
   }
 
   const COMPARE_EXPORT_COLUMNS = [
@@ -1179,7 +1270,7 @@
     (rows || []).forEach((row) => {
       lines.push(columns.map((column) => formatCompareExportCell(row, column)).join(';'));
     });
-    return lines.join('\n');
+    return buildCsvText(lines);
   }
 
   function buildCatalogExportCsv(rows, options = {}) {
@@ -1191,15 +1282,15 @@
     (rows || []).forEach((row) => {
       lines.push(columns.map((column) => formatCatalogExportCell(row, column)).join(';'));
     });
-    return lines.join('\n');
+    return buildCsvText(lines);
   }
 
   function formatCatalogExportCell(row, column = {}) {
     const rawHeader = column.rawHeader || column.header;
     if (row?.raw && Object.prototype.hasOwnProperty.call(row.raw, rawHeader)) {
-      return quoteCsv(row.raw[rawHeader]);
+      return quoteCsv(repairCsvMojibake(row.raw[rawHeader]));
     }
-    const value = row?.[column.key];
+    const value = repairCsvCellValue(row?.[column.key]);
     if (value === null || value === undefined || value === '') return '';
     if (column.type === 'active') {
       if (value === true) return quoteCsv('AKTİF');
@@ -1227,7 +1318,7 @@
     if (column.type === 'ratio') return formatCompareRatio(value);
     if (column.type === 'stat') return quoteCsv(formatCompareStat(value));
     if (value === null || value === undefined || value === '') return '';
-    return quoteCsv(value);
+    return quoteCsv(repairCsvCellValue(value));
   }
 
   function formatCompareStat(stat) {
@@ -1261,7 +1352,7 @@
   function formatExportCell(value, column = {}) {
     if (value === null || value === undefined || value === '') return '';
     if (column.type === 'number') return formatTurkishMetric(value);
-    return excelTextCell(value);
+    return excelTextCell(repairCsvCellValue(value));
   }
 
   function formatTurkishMetric(value) {
@@ -1301,6 +1392,12 @@
     buildExportCsv,
     buildCompareExportCsv,
     buildCatalogExportCsv,
+    normalizeCsvLineEndings,
+    hasCsvMojibake,
+    repairCsvMojibake,
+    stripTurkishCharacters,
+    prepareCsvDownloadText,
+    encodeCsvForExcel,
     formatExportCell,
     RGDH_EXPORT_COLUMNS,
     RGDH_CATALOG_EXPORT_COLUMNS

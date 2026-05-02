@@ -10,6 +10,10 @@
   const RESULT_DD = 'DD';
   const RESULT_YY = 'YY';
   const RESULT_KY = 'KY';
+  const SK_ACTIVE_P_ABS_MAX_MW = 5;
+  const SK_REACTIVE_TO_ACTIVE_RATIO = 2;
+  const SK_MIN_MINUTES_PER_HOUR = 5;
+  const SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW = 0.1;
 
   const DEFAULTS = {
     lowProductionPct: 0.01,
@@ -71,9 +75,14 @@
   }
 
   function buildEkcCalculationRows(ekcRows, catalogIndex, options = {}) {
-    return (ekcRows || []).map((row) => {
-      const catalogContext = resolveCatalogContext(row, catalogIndex);
-      const computedMinuteStat = evaluateEkcMinute(row, catalogContext, options);
+    const items = (ekcRows || []).map((row) => ({
+      row,
+      catalogContext: resolveCatalogContext(row, catalogIndex)
+    }));
+    const skHours = buildSynchronousCondenserHourMap(items);
+    return items.map(({ row, catalogContext }) => {
+      const skInfo = skHours.get(synchronousCondenserHourKey(row)) || synchronousCondenserHourInfo([]);
+      const computedMinuteStat = evaluateEkcMinute(row, catalogContext, skInfo.active ? { ...options, rgkMode: 'SENKOM' } : options);
       const approval = computedMinuteStat.result === RESULT_PASS ? 1
         : computedMinuteStat.result === RESULT_FAIL ? 0
           : null;
@@ -93,6 +102,14 @@
         tpysVoltageSet: finiteOrNull(row.tpysVoltageSet) ?? finiteOrNull(row.vSet),
         pgenMw: finiteOrNull(row.pgenMw) ?? finiteOrNull(row.pTotal),
         qgenMvar: finiteOrNull(row.qgenMvar) ?? finiteOrNull(row.qMeas),
+        droopPct: finiteOrNull(row.droopPct) ?? finiteOrNull(catalogContext?.droopPct) ?? finiteOrNull(catalogContext?.speedDrop),
+        hasSynchronousCondenser: truthyFlag(row.hasSynchronousCondenser ?? catalogContext?.hasSynchronousCondenser),
+        synchronousCondenserCandidate: skInfo.candidate,
+        synchronousCondenserActive: skInfo.active,
+        synchronousCondenserMinuteCount: skInfo.minuteCount,
+        synchronousCondenserSuccessMinuteCount: skInfo.successMinuteCount,
+        synchronousCondenserFailMinuteCount: skInfo.failMinuteCount,
+        synchronousCondenserResult: skInfo.result,
         pnomMw: finiteOrNull(row.pnomMw) ?? finiteOrNull(catalogContext?.totalPnomMw),
         approvalStatus: approval,
         reactiveResult: computedMinuteStat.result,
@@ -111,7 +128,9 @@
     if (!qTarget.ok) return stat(RESULT_KY, qTarget.reason, { rgkMode, warnings: qTarget.warnings || [] });
     return targetStat(row, qTarget.value, settings, rgkMode, {
       dutySource: overrides.dutySource || level.dutySource,
-      qTarget: qTarget.value
+      qTarget: qTarget.value,
+      qBaz: qTarget.qBaz,
+      droopPct: qTarget.droopPct
     });
   }
 
@@ -158,10 +177,15 @@
   function evaluateConventional(row, context, settings, rgkMode, inputUnits) {
     const pTotal = finiteOrNull(row?.pTotal ?? row?.pgenMw);
     const pnom = positiveNumber(row?.pnomMw ?? context?.totalPnomMw);
+    if (!Number.isFinite(pTotal) || !Number.isFinite(pnom)) {
+      return stat(RESULT_KY, 'missing_total_production_or_pnom', { rgkMode, warnings: ['Toplam aktif guc veya Pnom eksik.'] });
+    }
     if (Number.isFinite(pTotal) && Number.isFinite(pnom) && pTotal < pnom * settings.lowProductionPct) {
       return stat(RESULT_DD, 'total_production_below_one_percent', { rgkMode, yyDdSource: 'TOTAL_P_LT_1' });
     }
     const units = inputUnits || mergeUnitMeasurements(row, context);
+    const dutyData = conventionalDutyDataStatus(units, settings);
+    if (!dutyData.ok) return stat(RESULT_KY, dutyData.reason, { rgkMode, warnings: [dutyData.warning] });
     const obligated = obligatedUnits(units, settings);
     if (!obligated.length) return stat(RESULT_YY, 'no_obligated_unit', { rgkMode, yyDdSource: 'NO_OBLIGATED_UNIT' });
 
@@ -200,10 +224,10 @@
   }
 
   function evaluateHybridResGes(row, context, settings, rgkMode) {
-    const pMain = finiteOrNull(row?.pMain ?? row?.pTotal);
-    const pAux = finiteOrNull(row?.pAux ?? row?.auxiliaryMw);
-    const pnomMain = positiveNumber(row?.pnomMainMw ?? context?.pnomMainMw ?? row?.pnomMw ?? context?.totalPnomMw);
-    const pnomAux = positiveNumber(row?.pnomAuxMw ?? context?.pnomAuxMw);
+    const pMain = finiteOrNull(valueWithFallback(row, 'pMain', ['pTotal']));
+    const pAux = finiteOrNull(valueWithFallback(row, 'pAux', ['auxiliaryMw']));
+    const pnomMain = positiveNumber(valueWithFallback(row, 'pnomMainMw', ['pnomMw'], context, ['pnomMainMw', 'totalPnomMw']));
+    const pnomAux = positiveNumber(valueWithFallback(row, 'pnomAuxMw', [], context, ['pnomAuxMw']));
     const mainFamily = sourceFamily(context?.ytbsSourceType || row?.sourceKind || row?.sourceType);
     const auxFamily = sourceFamily(context?.secondarySources || 'GES');
     if (Number.isFinite(pMain) && Number.isFinite(pnomMain) && pMain >= pnomMain * settings.highProductionPct) {
@@ -212,21 +236,29 @@
     if (Number.isFinite(pMain) && Number.isFinite(pnomMain) && pMain >= pnomMain * settings.noObligationPct) {
       return evaluateResGes(row, context, settings, rgkMode, mainFamily, { p: pMain, pnom: pnomMain, dutySource: 'MAIN_10' });
     }
+    if (!Number.isFinite(pMain) || !Number.isFinite(pnomMain)) {
+      return stat(RESULT_KY, 'missing_main_hybrid_power_or_pnom', { rgkMode, dutySource: 'MAIN', warnings: ['Hibrit ana kaynak aktif gucu veya Pnom eksik.'] });
+    }
     if (Number.isFinite(pAux) && Number.isFinite(pnomAux) && pAux >= pnomAux * settings.highProductionPct) {
       return evaluateResGes(row, context, settings, rgkMode, auxFamily, { p: pAux, pnom: pnomAux, dutySource: 'AUX_50' });
     }
     if (Number.isFinite(pAux) && Number.isFinite(pnomAux) && pAux >= pnomAux * settings.noObligationPct) {
       return evaluateResGes(row, context, settings, rgkMode, auxFamily, { p: pAux, pnom: pnomAux, dutySource: 'AUX_10' });
     }
+    if (!Number.isFinite(pAux) || !Number.isFinite(pnomAux)) {
+      return stat(RESULT_KY, 'missing_aux_hybrid_power_or_pnom', { rgkMode, dutySource: 'AUX', warnings: ['Hibrit yardimci kaynak aktif gucu veya Pnom eksik.'] });
+    }
     return stat(RESULT_DD, 'hybrid_no_source_on_duty', { rgkMode, dutySource: 'NONE', yyDdSource: 'HYBRID_ALL_BELOW_10' });
   }
 
   function evaluateHybridConventional(row, context, settings, rgkMode) {
     const units = mergeUnitMeasurements(row, context);
+    const dutyData = conventionalDutyDataStatus(units, settings);
+    if (!dutyData.ok) return stat(RESULT_KY, dutyData.reason, { rgkMode, warnings: [dutyData.warning] });
     const obligated = obligatedUnits(units, settings);
     if (obligated.length) return evaluateConventional(row, context, settings, rgkMode, units);
-    const pAux = finiteOrNull(row?.pAux ?? row?.auxiliaryMw);
-    const pnomAux = positiveNumber(row?.pnomAuxMw ?? context?.pnomAuxMw);
+    const pAux = finiteOrNull(valueWithFallback(row, 'pAux', ['auxiliaryMw']));
+    const pnomAux = positiveNumber(valueWithFallback(row, 'pnomAuxMw', [], context, ['pnomAuxMw']));
     const auxFamily = sourceFamily(context?.secondarySources || 'GES');
     const level = productionLevel(pAux, pnomAux, settings, 'AUX');
     if (level.result) return stat(level.result, level.reason, { rgkMode, dutySource: level.dutySource, yyDdSource: level.reason });
@@ -250,7 +282,7 @@
     if (!Number.isFinite(qBaz)) return { ok: false, reason: 'missing_q_base', warnings: ['Qbaz hesaplanamadi.'] };
     const dV = vSet - vBara;
     const rawTarget = (dV * qBaz * 100) / (droopPct * unom);
-    return { ok: true, value: clamp(rawTarget, -Math.abs(qBaz), Math.abs(qBaz)), qBaz, dutySource: overrides.dutySource };
+    return { ok: true, value: clamp(rawTarget, -Math.abs(qBaz), Math.abs(qBaz)), qBaz, droopPct, dutySource: overrides.dutySource };
   }
 
   function calculateQBase(family, p, pnom, settings) {
@@ -298,6 +330,90 @@
     return { limitLow: null, limitHigh: qTarget * settings.directionalSupportPct };
   }
 
+  function buildSynchronousCondenserHourMap(items) {
+    const grouped = new Map();
+    (items || []).forEach((item) => {
+      const key = synchronousCondenserHourKey(item.row);
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(item);
+    });
+    const result = new Map();
+    grouped.forEach((rows, key) => {
+      result.set(key, synchronousCondenserHourInfo(rows));
+    });
+    return result;
+  }
+
+  function synchronousCondenserHourInfo(items) {
+    const rows = (items || []).map((item) => item.row || item);
+    const candidate = (items || []).some((item) => {
+      const row = item.row || item;
+      const context = item.catalogContext || {};
+      return truthyFlag(row?.hasSynchronousCondenser ?? context?.hasSynchronousCondenser);
+    });
+    const activeItems = (items || []).filter((item) => {
+      const row = item.row || item;
+      const context = item.catalogContext || {};
+      return isSynchronousCondenserActiveMinute(row, context);
+    });
+    const minuteCount = activeItems.length;
+    const successMinuteCount = activeItems.filter((item) => {
+      const row = item.row || item;
+      const context = item.catalogContext || {};
+      return isSynchronousCondenserSuccessfulMinute(row, context);
+    }).length;
+    const failMinuteCount = Math.max(0, minuteCount - successMinuteCount);
+    const active = candidate && minuteCount >= SK_MIN_MINUTES_PER_HOUR;
+    return {
+      candidate,
+      active,
+      minuteCount,
+      successMinuteCount,
+      failMinuteCount,
+      result: active ? synchronousCondenserHourResult(successMinuteCount, failMinuteCount, minuteCount) : '',
+      rowCount: rows.length
+    };
+  }
+
+  function synchronousCondenserHourKey(row) {
+    const entity = firstDefined(row?.busbarId, row?.busbarInternalId, row?.busbarName, row?.plantName, '');
+    const date = firstDefined(row?.localDate, String(row?.measurementDateLocal || '').slice(0, 10), '');
+    const hour = firstDefined(row?.localHour, row?.hour, '');
+    return `${entity}|${date}|${hour}`;
+  }
+
+  function isSynchronousCondenserActiveMinute(row, context = {}) {
+    if (!truthyFlag(row?.hasSynchronousCondenser ?? context?.hasSynchronousCondenser)) return false;
+    const p = finiteOrNull(row?.pTotal ?? row?.pgenMw);
+    const q = finiteOrNull(row?.qMeas ?? row?.qgenMvar);
+    if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
+    const absP = Math.abs(p);
+    const absQ = Math.abs(q);
+    return absP < SK_ACTIVE_P_ABS_MAX_MW
+      && absQ > SK_REACTIVE_TO_ACTIVE_RATIO * Math.max(absP, SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW);
+  }
+
+  function isSynchronousCondenserSuccessfulMinute(row, context = {}) {
+    if (!isSynchronousCondenserActiveMinute(row, context)) return false;
+    const q = finiteOrNull(row?.qMeas ?? row?.qgenMvar);
+    const threshold = synchronousCondenserNominalThreshold(row, context, q);
+    return Number.isFinite(q) && Number.isFinite(threshold) && Math.abs(q) >= threshold * 0.90;
+  }
+
+  function synchronousCondenserHourResult(successMinuteCount, failMinuteCount, minuteCount) {
+    if (!Number.isFinite(Number(minuteCount)) || Number(minuteCount) <= 0) return '';
+    const maxFail = Math.floor(Number(minuteCount) * 0.20);
+    return Number(failMinuteCount || 0) <= maxFail ? RESULT_PASS : RESULT_FAIL;
+  }
+
+  function synchronousCondenserNominalThreshold(row, context, q) {
+    const nominal = nominalLimits(row, context);
+    const high = firstFiniteAbs(row?.nominalHighExcitation, row?.qNomHigh, context?.nominalHighExcitation, nominal.high);
+    const low = firstFiniteAbs(row?.nominalLowExcitation, row?.qNomLow, context?.nominalLowExcitation, nominal.low);
+    if (Number(q) < 0) return Number.isFinite(low) ? low : high;
+    return Number.isFinite(high) ? high : low;
+  }
+
   function mergeUnitMeasurements(row, context) {
     const catalogUnits = Array.isArray(context?.units) ? context.units : [];
     const ekcUnits = Array.isArray(row?.ekcUnits) ? row.ekcUnits : [];
@@ -331,6 +447,25 @@
       const threshold = Number.isFinite(thresholdBase) ? thresholdBase * settings.mkudFactor : null;
       return Number.isFinite(p) && Number.isFinite(threshold) && p > threshold;
     });
+  }
+
+  function conventionalDutyDataStatus(units, settings) {
+    const list = Array.isArray(units) ? units : [];
+    if (!list.length) {
+      return { ok: false, reason: 'missing_unit_duty_data', warning: 'Konvansiyonel unite gorev verisi eksik.' };
+    }
+    const missing = list.some((unit) => {
+      const p = finiteOrNull(unit?.pActiveMw);
+      const thresholdBase = unit?.isBalancingUnit === true
+        ? firstFinite(unit?.tpysUnitMkud, unit?.mkudMw, unit?.unitPmkudMw)
+        : firstFinite(unit?.unitPmkudMw, unit?.mkudMw, unit?.tpysUnitMkud);
+      const threshold = Number.isFinite(thresholdBase) ? thresholdBase * settings.mkudFactor : null;
+      return !Number.isFinite(p) || !Number.isFinite(threshold);
+    });
+    if (missing) {
+      return { ok: false, reason: 'missing_unit_duty_data', warning: 'Unite aktif gucu veya MKUD esigi eksik.' };
+    }
+    return { ok: true };
   }
 
   function nominalLimits(row, context) {
@@ -375,6 +510,8 @@
       rgkMode: extra.rgkMode || '',
       qTarget: finiteOrNull(extra.qTarget),
       qThreshold: finiteOrNull(extra.qThreshold ?? extra.qTarget),
+      qBaz: finiteOrNull(extra.qBaz),
+      droopPct: finiteOrNull(extra.droopPct),
       limitLow: finiteOrNull(extra.limitLow),
       limitHigh: finiteOrNull(extra.limitHigh),
       dutySource: extra.dutySource || '',
@@ -404,6 +541,19 @@
     return /GES|GUNES|SUN/.test(text) ? 'GES' : 'RES';
   }
 
+  function valueWithFallback(primaryObject, primaryKey, primaryFallbackKeys = [], secondaryObject = null, secondaryKeys = []) {
+    if (primaryObject && Object.prototype.hasOwnProperty.call(primaryObject, primaryKey)) {
+      return primaryObject[primaryKey];
+    }
+    for (const key of primaryFallbackKeys) {
+      if (primaryObject && Object.prototype.hasOwnProperty.call(primaryObject, key)) return primaryObject[key];
+    }
+    for (const key of secondaryKeys) {
+      if (secondaryObject && Object.prototype.hasOwnProperty.call(secondaryObject, key)) return secondaryObject[key];
+    }
+    return undefined;
+  }
+
   function firstDefined(...values) {
     return values.find((value) => value !== undefined && value !== null && value !== '');
   }
@@ -416,14 +566,31 @@
     return null;
   }
 
+  function firstFiniteAbs(...values) {
+    for (const value of values) {
+      const numeric = finiteOrNull(value);
+      if (Number.isFinite(numeric) && Math.abs(numeric) > 0) return Math.abs(numeric);
+    }
+    return null;
+  }
+
   function positiveNumber(value) {
     const numeric = finiteOrNull(value);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   }
 
   function finiteOrNull(value) {
+    if (value === null || value === undefined || value === '') return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  function truthyFlag(value) {
+    if (value === true) return true;
+    if (value === false || value === null || value === undefined || value === '') return false;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric !== 0;
+    return /^(true|evet|yes|aktif|var)$/i.test(String(value).trim());
   }
 
   function isFiniteNumber(value) {
@@ -459,6 +626,12 @@
   return {
     resolveRgkMode,
     evaluateEkcMinute,
-    buildEkcCalculationRows
+    buildEkcCalculationRows,
+    isSynchronousCondenserActiveMinute,
+    synchronousCondenserHourInfo,
+    SK_ACTIVE_P_ABS_MAX_MW,
+    SK_REACTIVE_TO_ACTIVE_RATIO,
+    SK_MIN_MINUTES_PER_HOUR,
+    SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW
   };
 });

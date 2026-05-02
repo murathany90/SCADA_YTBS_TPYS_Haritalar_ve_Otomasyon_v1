@@ -242,6 +242,8 @@
         avgEkcP: average(group.rows.map((row) => row.ekc?.pTotal)),
         avgYksQ: average(group.rows.map((row) => row.platform?.qgenMvar)),
         avgEkcQ: average(group.rows.map((row) => row.ekc?.qMeas)),
+        avgYksDroopPct: average(group.rows.map((row) => row.platform?.droopPct ?? row.platform?.speedDrop)),
+        avgEkcDroopPct: average(group.rows.map((row) => row.ekc?.droopPct ?? row.ekc?.speedDrop)),
         avgYksHybridP: average(group.rows.map((row) => row.platform?.auxiliaryMw)),
         avgEkcHybridP: average(group.rows.map((row) => ekcHybridPower(row.ekc))),
         avgDeltaV: averageAbs(bothRows.map((row) => row.deltaV)),
@@ -252,6 +254,12 @@
         maxDeltaP: maxAbs(bothRows.map((row) => row.deltaP)),
         maxDeltaQ: maxAbs(bothRows.map((row) => row.deltaQ)),
         maxDeltaHybridP: maxAbs(bothRows.map((row) => row.deltaHybridP)),
+        synchronousCondenserCandidate: Boolean(ekcStat?.synchronousCondenserCandidate || platformStat?.synchronousCondenserCandidate),
+        synchronousCondenserActive: Boolean(ekcStat?.synchronousCondenserActive || platformStat?.synchronousCondenserActive),
+        synchronousCondenserMinuteCount: Math.max(Number(ekcStat?.synchronousCondenserMinuteCount || 0), Number(platformStat?.synchronousCondenserMinuteCount || 0)),
+        synchronousCondenserSuccessMinuteCount: Math.max(Number(ekcStat?.synchronousCondenserSuccessMinuteCount || 0), Number(platformStat?.synchronousCondenserSuccessMinuteCount || 0)),
+        synchronousCondenserFailMinuteCount: Math.max(Number(ekcStat?.synchronousCondenserFailMinuteCount || 0), Number(platformStat?.synchronousCondenserFailMinuteCount || 0)),
+        synchronousCondenserResult: ekcStat?.synchronousCondenserResult || platformStat?.synchronousCondenserResult || '',
         hybridConsistency: uniqueStrings(bothRows.map((row) => row.hybridConsistency).filter(Boolean)).join(', ')
       };
     }).sort(compareHourRows);
@@ -269,11 +277,11 @@
   }
 
   function buildHourStatFromResultRows(rows, field, pivot) {
-    const sourceRows = Array.isArray(rows) ? rows : [];
+    const compareRows = Array.isArray(rows) ? rows : [];
     const summary = pivot?.reactiveHourSummary || fallbackReactiveHourSummary;
     const expectedMinuteCount = 60;
-    if (!sourceRows.length) {
-      return summary({
+    if (!compareRows.length) {
+      const emptySummary = summary({
         passCount: 0,
         failCount: 0,
         kyCount: expectedMinuteCount,
@@ -288,9 +296,14 @@
         dominantOfflineThreshold: 47,
         kyMinuteThreshold: expectedMinuteCount
       });
+      return {
+        ...emptySummary,
+        droopPctAvg: null,
+        ...(pivot?.synchronousCondenserHourInfo ? pivot.synchronousCondenserHourInfo([]) : fallbackSynchronousCondenserHourInfo([]))
+      };
     }
     const counts = { passCount: 0, failCount: 0, kyCount: 0, ddCount: 0, yyCount: 0 };
-    sourceRows.forEach((row) => {
+    compareRows.forEach((row) => {
       const result = normalizeReactiveResult(row[field], pivot);
       if (result === RESULT_PASS) counts.passCount += 1;
       else if (result === RESULT_FAIL) counts.failCount += 1;
@@ -298,12 +311,13 @@
       else if (result === RESULT_DD) counts.ddCount += 1;
       else if (result === RESULT_YY) counts.yyCount += 1;
     });
-    const missingCount = Math.max(0, expectedMinuteCount - sourceRows.length);
+    const missingCount = Math.max(0, expectedMinuteCount - compareRows.length);
     counts.kyCount += missingCount;
-    return summary({
+    const sourceRows = sourceRowsForResultField(compareRows, field);
+    const hourSummary = summary({
       ...counts,
       missingCount,
-      activeLiabilityMinutes: counts.passCount + counts.failCount + counts.ddCount + counts.yyCount
+      activeLiabilityMinutes: counts.passCount + counts.failCount
     }, {
       expectedMinuteCount,
       failMinuteThreshold: Math.floor(expectedMinuteCount * 0.2),
@@ -311,6 +325,52 @@
       dominantOfflineThreshold: 47,
       kyMinuteThreshold: expectedMinuteCount
     });
+    return {
+      ...hourSummary,
+      droopPctAvg: average(sourceRows.map((row) => row?.droopPct ?? row?.speedDrop)),
+      ...(pivot?.synchronousCondenserHourInfo ? pivot.synchronousCondenserHourInfo(sourceRows) : fallbackSynchronousCondenserHourInfo(sourceRows))
+    };
+  }
+
+  function sourceRowsForResultField(rows, field) {
+    const sourceKey = field === 'ekcResult' ? 'ekc' : 'platform';
+    return (rows || []).map((row) => row?.[sourceKey] || row).filter(Boolean);
+  }
+
+  function fallbackSynchronousCondenserHourInfo(rows) {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const candidate = sourceRows.some((row) => truthyFlag(row?.hasSynchronousCondenser ?? row?.catalog?.hasSynchronousCondenser));
+    const minuteCount = sourceRows.filter((row) => {
+      if (!truthyFlag(row?.hasSynchronousCondenser ?? row?.catalog?.hasSynchronousCondenser)) return false;
+      const p = Number(row?.pgenMw ?? row?.pTotal);
+      const q = Number(row?.qgenMvar ?? row?.qMeas);
+      if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
+      return Math.abs(p) < 5 && Math.abs(q) > 2 * Math.max(Math.abs(p), 0.1);
+    }).length;
+    const activeRows = sourceRows.filter((row) => {
+      if (!truthyFlag(row?.hasSynchronousCondenser ?? row?.catalog?.hasSynchronousCondenser)) return false;
+      const p = Number(row?.pgenMw ?? row?.pTotal);
+      const q = Number(row?.qgenMvar ?? row?.qMeas);
+      if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
+      return Math.abs(p) < 5 && Math.abs(q) > 2 * Math.max(Math.abs(p), 0.1);
+    });
+    const successMinuteCount = activeRows.filter((row) => {
+      const q = Number(row?.qgenMvar ?? row?.qMeas);
+      const high = firstFiniteAbs(row?.nominalHighExcitation, row?.qNomHigh);
+      const low = firstFiniteAbs(row?.nominalLowExcitation, row?.qNomLow);
+      const threshold = q < 0 ? (Number.isFinite(low) ? low : high) : (Number.isFinite(high) ? high : low);
+      return Number.isFinite(threshold) && Math.abs(q) >= threshold * 0.90;
+    }).length;
+    const failMinuteCount = Math.max(0, minuteCount - successMinuteCount);
+    const active = candidate && minuteCount >= 5;
+    return {
+      synchronousCondenserCandidate: candidate,
+      synchronousCondenserActive: active,
+      synchronousCondenserMinuteCount: minuteCount,
+      synchronousCondenserSuccessMinuteCount: successMinuteCount,
+      synchronousCondenserFailMinuteCount: failMinuteCount,
+      synchronousCondenserResult: active ? (failMinuteCount <= Math.floor(minuteCount * 0.20) ? RESULT_PASS : RESULT_FAIL) : ''
+    };
   }
 
   function derivePlatformMinuteResult(row, pivot) {
@@ -418,6 +478,23 @@
   function isFiniteCell(value) {
     if (value === null || value === undefined || value === '') return false;
     return Number.isFinite(Number(value));
+  }
+
+  function truthyFlag(value) {
+    if (value === true) return true;
+    if (value === false || value === null || value === undefined || value === '') return false;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric !== 0;
+    return /^(true|evet|yes|aktif|var)$/i.test(String(value).trim());
+  }
+
+  function firstFiniteAbs(...values) {
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const numeric = Math.abs(Number(value));
+      if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    }
+    return null;
   }
 
   function uniqueStrings(values) {

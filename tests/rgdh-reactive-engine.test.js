@@ -188,6 +188,61 @@ test('conventional modes can fall back to EK-C total excitation when all obligat
   assert.equal(stat.qThreshold, 15.44);
 });
 
+test('missing conventional and hybrid duty data is classified as KY instead of DD or YY', () => {
+  const conventionalContext = {
+    platformRgkType: 'KON_GB_2003S',
+    voltageLevel: 154,
+    units: [
+      { unitName: 'GT-1', isBalancingUnit: true, tpysUnitMkud: 10, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+    ]
+  };
+
+  assert.equal(engine.evaluateEkcMinute({
+    sourceType: 'CONVENTIONAL',
+    pnomMw: 100,
+    vBara: 154,
+    vSet: 160,
+    qMeas: 10
+  }, conventionalContext).result, 'KY');
+
+  assert.equal(engine.evaluateEkcMinute({
+    sourceType: 'CONVENTIONAL',
+    pTotal: 20,
+    vBara: 154,
+    vSet: 160,
+    qMeas: 10,
+    ekcUnits: []
+  }, conventionalContext).result, 'KY');
+
+  assert.equal(engine.evaluateEkcMinute({
+    sourceType: 'CONVENTIONAL',
+    pTotal: 20,
+    pnomMw: 100,
+    vBara: 154,
+    vSet: 160,
+    qMeas: 10,
+    ekcUnits: [{ unitName: 'GT-1' }]
+  }, conventionalContext).result, 'KY');
+
+  const missingMain = engine.evaluateEkcMinute({
+    ...baseEkc,
+    pMain: null,
+    pAux: 20,
+    pnomMainMw: 100,
+    pnomAuxMw: 50
+  }, { platformRgkType: 'HIB_RESGES_GK', ytbsSourceType: 'RES', secondarySources: 'GES' });
+  assert.equal(missingMain.result, 'KY');
+
+  const missingAux = engine.evaluateEkcMinute({
+    ...baseEkc,
+    pMain: 5,
+    pAux: null,
+    pnomMainMw: 100,
+    pnomAuxMw: 50
+  }, { platformRgkType: 'HIB_RESGES_GK', ytbsSourceType: 'RES', secondarySources: 'GES' });
+  assert.equal(missingAux.result, 'KY');
+});
+
 test('hybrid and SENKOM modes follow duty handoff and set availability rules', () => {
   const hibResGes = engine.evaluateEkcMinute({
     ...baseEkc,
@@ -230,6 +285,75 @@ test('hybrid and SENKOM modes follow duty handoff and set availability rules', (
 
   const senkom = engine.evaluateEkcMinute({ qMeas: 9.2, qSyncReqMvar: 10 }, { platformRgkType: 'SENKOM' });
   assert.equal(senkom.result, 'SAGLADI');
+});
+
+test('buildEkcCalculationRows switches flagged SK active hours to SENKOM mode', () => {
+  const context = new Map([['6083', {
+    busbarId: '6083',
+    platformRgkType: 'KON_GB_2003S',
+    hasSynchronousCondenser: true,
+    voltageLevel: 154,
+    units: [
+      { unitName: 'SK-1', isBalancingUnit: true, tpysUnitMkud: 10, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+    ]
+  }]]);
+  const skRows = Array.from({ length: 5 }, (_, minute) => ({
+    sourceType: 'CONVENTIONAL',
+    busbarId: '6083',
+    localDate: '2026-05-01',
+    localHour: 2,
+    localMinute: minute,
+    measurementDateLocal: `2026-05-01T02:${String(minute).padStart(2, '0')}:00+03:00`,
+    pTotal: 1,
+    pnomMw: 100,
+    qMeas: 8,
+    qSyncReqMvar: 8
+  }));
+
+  const rows = engine.buildEkcCalculationRows(skRows, context);
+
+  assert.equal(rows[0].synchronousCondenserActive, true);
+  assert.equal(rows[0].synchronousCondenserMinuteCount, 5);
+  assert.equal(rows[0].synchronousCondenserSuccessMinuteCount, 0);
+  assert.equal(rows[0].synchronousCondenserResult, 'SAGLAMADI');
+  assert.equal(rows.every((row) => row.rgkMode === 'SENKOM'), true);
+  assert.equal(rows.every((row) => row.reactiveResult === 'SAGLADI'), true);
+
+  const missingSetRows = engine.buildEkcCalculationRows(skRows.map(({ qSyncReqMvar, ...row }) => row), context);
+  assert.equal(missingSetRows.every((row) => row.rgkMode === 'SENKOM'), true);
+  assert.equal(missingSetRows.every((row) => row.reactiveResult === 'KY'), true);
+
+  const fourMinuteRows = engine.buildEkcCalculationRows(skRows.slice(0, 4), context);
+  assert.equal(fourMinuteRows.some((row) => row.rgkMode === 'SENKOM'), false);
+});
+
+test('buildEkcCalculationRows counts successful SK minutes against nominal excitation threshold', () => {
+  const context = new Map([['6084', {
+    busbarId: '6084',
+    platformRgkType: 'KON_GB_2003S',
+    hasSynchronousCondenser: true,
+    units: [
+      { unitName: 'SK-1', isBalancingUnit: true, tpysUnitMkud: 10, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+    ]
+  }]]);
+  const qValues = [18, -19, 20, -18, 17];
+  const rows = engine.buildEkcCalculationRows(qValues.map((qMeas, minute) => ({
+    sourceType: 'CONVENTIONAL',
+    busbarId: '6084',
+    localDate: '2026-05-01',
+    localHour: 3,
+    localMinute: minute,
+    pTotal: 1,
+    pnomMw: 100,
+    qMeas,
+    qSyncReqMvar: 1
+  })), context);
+
+  assert.equal(rows[0].synchronousCondenserActive, true);
+  assert.equal(rows[0].synchronousCondenserMinuteCount, 5);
+  assert.equal(rows[0].synchronousCondenserSuccessMinuteCount, 4);
+  assert.equal(rows[0].synchronousCondenserFailMinuteCount, 1);
+  assert.equal(rows[0].synchronousCondenserResult, 'SAGLADI');
 });
 
 test('buildEkcCalculationRows enriches EK-C rows with computed minute statistics', () => {

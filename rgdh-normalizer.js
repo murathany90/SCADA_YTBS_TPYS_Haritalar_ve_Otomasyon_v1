@@ -461,6 +461,9 @@
       sourceKind: row.sourceKind || first.sourceKind,
       pnomMw: row.pnomMw ?? sumNumeric(matches, 'unitPnomMw'),
       pmkudMw: row.pmkudMw ?? sumNumeric(matches, 'unitPmkudMw'),
+      droopPct: row.droopPct ?? averageNumeric(matches, 'speedDrop'),
+      hasSynchronousCondenser: row.hasSynchronousCondenser ?? first.hasSynchronousCondenser,
+      platformRgkType: row.platformRgkType || first.platformRgkType || '',
       catalog: {
         busbarType: first.busbarType || '',
         rgkType: first.rgkType || '',
@@ -469,6 +472,10 @@
         plantName: first.plantName || '',
         unitName: first.unitName || '',
         sourceKind: first.sourceKind || '',
+        hasSynchronousCondenser: first.hasSynchronousCondenser ?? null,
+        platformRgkType: first.platformRgkType || '',
+        droopPct: averageNumeric(matches, 'speedDrop'),
+        speedDrop: averageNumeric(matches, 'speedDrop'),
         units
       },
       raw: row.raw
@@ -534,6 +541,8 @@
       activeUnitCount: summary.units.filter((unit) => unit.unitActive === true).length,
       totalPnomMw: roundMetric(sumNumeric(summary.units, 'unitPnomMw')),
       totalPmkudMw: roundMetric(sumNumeric(summary.units, 'unitPmkudMw')),
+      droopPct: roundMetric(averageNumeric(summary.units, 'speedDrop')),
+      hasSynchronousCondenser: summary.hasSynchronousCondenser === true || summary.units.some((unit) => unit.hasSynchronousCondenser === true),
       hasAuxiliarySource: summary.units.some(isAuxiliaryCatalogUnit)
     }));
   }
@@ -758,6 +767,12 @@
     const values = (rows || []).map((row) => Number(row?.[key])).filter(Number.isFinite);
     if (!values.length) return null;
     return values.reduce((sum, value) => sum + value, 0);
+  }
+
+  function averageNumeric(rows, key) {
+    const values = (rows || []).map((row) => Number(row?.[key])).filter(Number.isFinite);
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
   }
 
   function roundMetric(value) {

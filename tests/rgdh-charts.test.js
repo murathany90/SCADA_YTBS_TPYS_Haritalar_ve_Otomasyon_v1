@@ -289,12 +289,35 @@ test('buildHourMetricRows exposes hourly detail metrics for conventional and win
   assert.equal(metricRows[0].pmkudAvg, 460);
   assert.equal(metricRows[1].pnomPct10, 4.86);
   assert.equal(metricRows[1].pnomPct50, 24.3);
+  assert.equal(metricRows[0].droopPctAvg, null);
+});
+
+test('buildHourMetricRows exposes droop and synchronous condenser metadata', () => {
+  const metricRows = charts.buildHourMetricRows([{
+    localDate: '2026-05-01',
+    busbarName: 'SK TEST',
+    sourceType: 'CONVENTIONAL',
+    hours: [{
+      hour: 4,
+      hourResult: 'SAGLADI',
+      participationPct: 100,
+      droopPctAvg: 4,
+      synchronousCondenserCandidate: true,
+      synchronousCondenserActive: true,
+      synchronousCondenserMinuteCount: 5
+    }]
+  }]);
+
+  assert.equal(metricRows[0].droopPctAvg, 4);
+  assert.equal(metricRows[0].synchronousCondenserCandidate, true);
+  assert.equal(metricRows[0].synchronousCondenserActive, true);
+  assert.equal(metricRows[0].synchronousCondenserMinuteCount, 5);
 });
 
 test('comparison dataset builders include EK-C and YKS SCADA values', () => {
   const compareRows = [{
     ekc: { vBara: 159, vSet: 160, pTotal: 42, pAux: 2, qMeas: -3, minuteStat: { limitLow: -5, limitHigh: 5 } },
-    platform: { liveBusbarVoltage: 158, tpysVoltageSet: 160, pgenMw: 40, qgenMvar: -4 },
+    platform: { liveBusbarVoltage: 158, tpysVoltageSet: 160, pgenMw: 40, auxiliaryMw: 3, qgenMvar: -4 },
     platformEquivalentLimit: -6,
     ekcLimitComparable: -5
   }];
@@ -302,7 +325,7 @@ test('comparison dataset builders include EK-C and YKS SCADA values', () => {
   const topLabels = charts.buildComparisonTopDatasets(compareRows).map((dataset) => dataset.label);
   const reactiveLabels = charts.buildComparisonReactiveDatasets(compareRows).map((dataset) => dataset.label);
 
-  assert.deepEqual(topLabels, ['YKS SCADA V', 'EK-C V', 'Fark V', 'YKS SCADA P', 'EK-C P', 'Fark P']);
+  assert.deepEqual(topLabels, ['YKS SCADA V', 'EK-C V', 'Fark V', 'YKS SCADA P', 'EK-C P', 'Fark P', 'YKS Hibrit P', 'EK-C Hibrit P', 'Fark Hibrit P']);
   assert.deepEqual(reactiveLabels, ['YKS SCADA Q', 'EK-C Q', 'Fark Q']);
 });
 
@@ -333,6 +356,83 @@ test('comparison difference datasets are hidden absolute difference lines by def
   assert.deepEqual(farkV.data, [0.5, 0.8]);
   assert.deepEqual(farkP.data, [2.5, null]);
   assert.deepEqual(farkQ.data, [1.25, 0.5]);
+});
+
+test('comparison top datasets add hidden hybrid P series and hidden absolute hybrid difference', () => {
+  const compareRows = [
+    {
+      ekc: { vBara: 159, pTotal: 42, pAux: 6, qMeas: -3 },
+      platform: { liveBusbarVoltage: 158, pgenMw: 40, auxiliaryMw: 4, qgenMvar: -4 }
+    },
+    {
+      ekc: { vBara: 160, pTotal: 41, auxiliaryMw: 2, qMeas: -2 },
+      platform: { liveBusbarVoltage: 159, pgenMw: 39, auxiliaryMw: 5, qgenMvar: -2.5 }
+    }
+  ];
+
+  const datasets = charts.buildComparisonTopDatasets(compareRows);
+  const yksHybrid = datasets.find((dataset) => dataset.label === 'YKS Hibrit P');
+  const ekcHybrid = datasets.find((dataset) => dataset.label === 'EK-C Hibrit P');
+  const diffHybrid = datasets.find((dataset) => dataset.label === 'Fark Hibrit P');
+
+  assert.deepEqual(yksHybrid.data, [4, 5]);
+  assert.deepEqual(ekcHybrid.data, [6, 2]);
+  assert.deepEqual(diffHybrid.data, [2, 3]);
+  assert.equal(yksHybrid.hidden, true);
+  assert.equal(ekcHybrid.hidden, true);
+  assert.equal(diffHybrid.hidden, true);
+  assert.equal(diffHybrid.rgdhDiffDataset, true);
+});
+
+test('reactive datasets add hidden red violation points for YKS failed minutes', () => {
+  const datasets = charts.buildReactiveDatasets([
+    { qgenMvar: -4, approvalStatus: 0 },
+    { qgenMvar: -2, approvalStatus: 1 }
+  ]);
+  const violations = datasets.find((dataset) => dataset.label === 'YKS İhlal Noktası');
+
+  assert.deepEqual(violations.data, [-4, null]);
+  assert.equal(violations.hidden, true);
+  assert.equal(violations.showLine, false);
+  assert.equal(violations.pointBackgroundColor, '#dc2626');
+});
+
+test('reactive datasets do not mark YKS DD YY or KY minutes as violation points', () => {
+  const datasets = charts.buildReactiveDatasets([
+    { qgenMvar: -5, offBoardStatus: 1, approvalStatus: 0 },
+    { qgenMvar: -4, noObligationStatus: 1, approvalStatus: 0 },
+    { qgenMvar: -3, reactiveResult: 'KY', approvalStatus: 0 },
+    { qgenMvar: -2, approvalStatus: 0 }
+  ]);
+  const violations = datasets.find((dataset) => dataset.label === 'YKS İhlal Noktası');
+
+  assert.deepEqual(violations.data, [null, null, null, -2]);
+});
+
+test('comparison reactive datasets add hidden red violation points for YKS and EK-C failed minutes', () => {
+  const datasets = charts.buildComparisonReactiveDatasets([
+    {
+      platformResult: 'SAGLAMADI',
+      ekcResult: 'SAGLADI',
+      platform: { qgenMvar: -4 },
+      ekc: { qMeas: -3, minuteStat: { result: 'SAGLADI' } }
+    },
+    {
+      platformResult: 'SAGLADI',
+      ekcResult: 'SAGLAMADI',
+      platform: { qgenMvar: -2 },
+      ekc: { qMeas: -5, minuteStat: { result: 'SAGLAMADI' } }
+    }
+  ]);
+  const yksViolations = datasets.find((dataset) => dataset.label === 'YKS İhlal Noktası');
+  const ekcViolations = datasets.find((dataset) => dataset.label === 'EK-C İhlal Noktası');
+
+  assert.deepEqual(yksViolations.data, [-4, null]);
+  assert.deepEqual(ekcViolations.data, [null, -5]);
+  assert.equal(yksViolations.hidden, true);
+  assert.equal(ekcViolations.hidden, true);
+  assert.equal(yksViolations.showLine, false);
+  assert.equal(ekcViolations.showLine, false);
 });
 
 test('comparison dataset builders style EK-C series as solid prominent lines', () => {

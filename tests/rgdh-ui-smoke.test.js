@@ -144,6 +144,12 @@ test('EK-C comparison uses chart filters and compact result columns', () => {
   assert.match(js, /btnExportCompareCsv/);
   assert.match(js, /exportCompareCsv/);
   assert.match(js, /RGDH_CSV\.buildCompareExportCsv/);
+  assert.match(js, /function downloadCsv/);
+  assert.match(js, /RGDH_CSV\.prepareCsvDownloadText/);
+  assert.match(js, /RGDH_CSV\.encodeCsvForExcel/);
+  assert.match(js, /downloadCsv\(`EKC_YKS_KARSILASTIRMA_/);
+  assert.match(js, /downloadCsv\(`RGDH_HAM_DATA_/);
+  assert.match(js, /downloadCsv\('rgdh_unite_tanimi_v2\.csv'/);
   assert.match(js, /YKS<br>Hibrit P/);
   assert.match(js, /EK-C<br>Hibrit P/);
   assert.match(js, /Fark<br>dHP/);
@@ -184,6 +190,10 @@ test('EK-C comparison uses chart filters and compact result columns', () => {
   assert.match(css, /\.rgdh-chart-action/);
   assert.match(css, /#compareTable\s*\{[\s\S]*table-layout:\s*fixed/);
   assert.match(css, /#compareTable th[\s\S]*white-space:\s*normal/);
+  assert.match(css, /#compareTable tbody tr:nth-child\(even\) td\s*\{[\s\S]*background:\s*transparent/);
+  assert.match(css, /#compareTable \.participation-ok\s*\{[\s\S]*background:\s*#e6f4ea/);
+  assert.match(css, /#compareTable \.compare-delta-blue\s*\{[\s\S]*background:\s*#dbeafe/);
+  assert.match(css, /#compareTable \.compare-data-bar-cell\s*\{[\s\S]*background:\s*transparent/);
   assert.match(js, /Eşleşen DK|Eslesen DK/);
   assert.match(js, /Ek-C Değerlendirme|Ek-C Degerlendirme/);
   assert.match(js, /YKS Değerlendirme|YKS Degerlendirme/);
@@ -243,7 +253,7 @@ test('rgdh monitor raw data table exposes original YKS status and approval colum
   const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
 
-  ['TPYS GD', 'Devre Durumu', 'Yukumluluk Durumu', 'D.I MVAR ONAY', 'A.I MVAR ONAY', 'Onay Durum'].forEach((header) => {
+  ['TPYS GD', 'Droop %', 'Devre Durumu', 'Yukumluluk Durumu', 'D.I MVAR ONAY', 'A.I MVAR ONAY', 'Onay Durum'].forEach((header) => {
     assert.match(js, new RegExp(header.replace('.', '\\.')));
   });
   assert.match(js, /formatStatusFlag/);
@@ -309,6 +319,7 @@ test('rgdh monitor daily table is date-first without summary and voltage toggle 
   assert.match(charts, /onHourSelect/);
   assert.match(js, /Detayli Metrik Goster/);
   assert.match(charts, /Detayli Metrik Goster/);
+  assert.match(charts, /Ort Droop %/);
   assert.match(cssSafeRead(), /participation-yy/);
   assert.match(cssSafeRead(), /participation-dd/);
 });
@@ -356,6 +367,28 @@ test('rgdh monitor renders hybrid auxiliary source markers in labels and tables'
   assert.match(js, /Yardimci kaynak/);
   assert.match(css, /\.rgdh-hybrid-dot/);
   assert.match(css, /--rgdh-hybrid/);
+});
+
+test('rgdh monitor renders synchronous condenser SK badges and droop comparison columns', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const charts = fs.readFileSync(path.join(root, 'rgdh-charts.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
+
+  assert.match(js, /renderSkBadge/);
+  assert.match(js, /hasSynchronousCondenser/);
+  assert.match(js, /synchronousCondenserSuccessMinuteCount/);
+  assert.match(js, /renderSkBadge\(hour,\s*\{\s*requireActive:\s*true,\s*showCount:\s*true\s*\}\)/);
+  assert.match(js, /renderHybridNameHtml\(row\.busbarName \|\| row\.busbarId \|\| '-', row,\s*\{\s*showSk:\s*true\s*\}\)/);
+  assert.doesNotMatch(js, /renderSkBadge\(row\) \|\| '-'/);
+  assert.match(js, /YKS Droop %/);
+  assert.match(js, /EK-C Droop %/);
+  assert.match(charts, /synchronousCondenserActive/);
+  assert.doesNotMatch(charts, /'Katilim', 'SK', 'Ort Droop %'/);
+  assert.match(css, /\.rgdh-sk-badge/);
+  assert.match(css, /\.rgdh-sk-candidate/);
+  assert.match(css, /\.rgdh-sk-ok/);
+  assert.match(css, /\.rgdh-sk-fail/);
+  assert.match(css, /\.rgdh-sk-neutral/);
 });
 
 test('rgdh monitor dark theme has explicit readable selected and sticky table colors', () => {

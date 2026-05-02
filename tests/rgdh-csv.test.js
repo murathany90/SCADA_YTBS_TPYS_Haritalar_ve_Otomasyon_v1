@@ -123,9 +123,9 @@ test('rgdh_unite_tanimi catalog loads 81 rows and exports in v2 format', () => {
   assert.equal(akyelAux.nominalLowExcitation, -19.367);
 
   const exported = csv.buildCatalogExportCsv(parsed.rows);
-  const exportedParsed = csv.parseSemicolonCsv(exported.replace(/^\uFEFFsep=;\n/, ''));
+  const exportedParsed = csv.parseSemicolonCsv(exported.replace(/^\uFEFFsep=;\r?\n/, ''));
 
-  assert.ok(exported.startsWith('\uFEFFsep=;\n'));
+  assert.ok(exported.startsWith('\uFEFFsep=;\r\n'));
   assert.doesNotMatch(exported, /Ã|Ä|Å/);
   assert.deepEqual(exportedParsed.headers, [
     'Bara Tipi',
@@ -204,7 +204,7 @@ test('rgdh_unite_tanimi_v2 catalog parses new YTBS detail columns and exports in
   assert.equal(akyel.tpysPlantMkud, 0);
 
   const exported = csv.buildCatalogExportCsv(parsed.rows);
-  const exportedParsed = csv.parseSemicolonCsv(exported.replace(/^\uFEFFsep=;\n/, ''));
+  const exportedParsed = csv.parseSemicolonCsv(exported.replace(/^\uFEFFsep=;\r?\n/, ''));
   const exportedAkyel = exportedParsed.rows.find((row) => row['Bara ID'] === '6002' && row['Ünite Adı'] === 'Ünite 1-12');
 
   assert.doesNotMatch(exported, /Ã|Ä|Å/);
@@ -396,8 +396,9 @@ test('buildExportCsv emits Excel/TR compatible semicolon CSV', () => {
     approvalStatus: 1
   }]);
 
-  assert.ok(text.startsWith('\uFEFFsep=;\n'));
+  assert.ok(text.startsWith('\uFEFFsep=;\r\n'));
   assert.match(text, /Ölçüm Zamanı/);
+  assert.match(text, /YKS İç Bara ID/);
   assert.match(text, /GEYCEK RES \u00c7\u0130\u011eDEM/);
   assert.match(text, /"=""2026-04-01T00:00:00\+03:00"""/);
   assert.match(text, /"=""10933818957"""/);
@@ -431,12 +432,34 @@ test('buildCompareExportCsv emits Turkish Excel compatible comparison rows', () 
     platformStat: { hourResult: 'SAGLADI', passRatio: 100 }
   }]);
 
-  assert.ok(text.startsWith('\uFEFFsep=;\n'));
+  assert.ok(text.startsWith('\uFEFFsep=;\r\n'));
   assert.match(text, /Tarih;Saat;Eşleşen DK/);
+  assert.match(text, /Ek-C Değerlendirme/);
   assert.match(text, /Gerilim Karşılaştırma - YKS V Ort/);
   assert.match(text, /Aktif Güç Karşılaştırma - Fark dP/);
   assert.match(text, /2026-04-27;08:00;60/);
   assert.match(text, /406,66/);
   assert.match(text, /174,31/);
   assert.doesNotMatch(text, /Ã|Ä|Å/);
+});
+
+test('CSV download helpers normalize CRLF and create UTF-16LE bytes with BOM', () => {
+  const text = csv.normalizeCsvLineEndings('\uFEFFsep=;\nÖlçüm Zamanı;Değer\n2026-04-01;12,5');
+  const bytes = csv.encodeCsvForExcel(text);
+
+  assert.equal(text, '\uFEFFsep=;\r\nÖlçüm Zamanı;Değer\r\n2026-04-01;12,5');
+  assert.equal(bytes[0], 0xff);
+  assert.equal(bytes[1], 0xfe);
+  assert.equal(Buffer.from(bytes.slice(2, 10)).toString('hex'), Buffer.from('sep=', 'utf16le').toString('hex'));
+});
+
+test('CSV fallback detects mojibake and strips Turkish characters for ASCII fallback', () => {
+  const broken = 'YKS Ä°Ã§ Bara ID;Ã–lÃ§Ã¼m ZamanÄ±;DeÄŸer\r\n"Ä‡Ä±kÄ±ÅŸ";12,5';
+  const fallback = csv.prepareCsvDownloadText(broken);
+
+  assert.equal(csv.hasCsvMojibake(broken), true);
+  assert.equal(fallback.usedAsciiFallback, true);
+  assert.match(fallback.text, /YKS Ic Bara ID;Olcum Zamani;Deger/);
+  assert.match(fallback.text, /"cikis";12,5/);
+  assert.doesNotMatch(fallback.text, /[^\x00-\x7F]/);
 });

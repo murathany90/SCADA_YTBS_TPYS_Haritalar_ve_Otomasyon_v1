@@ -148,6 +148,84 @@ test('buildEkcPlatformComparison hour rows expose separate EK-C and YKS result c
   }, { passCount: 1, failCount: 1, ddCount: 1, yyCount: 1, kyCount: 56 });
 });
 
+test('buildEkcPlatformComparison carries SK and droop hour metadata', () => {
+  const ekcRows = Array.from({ length: 5 }, (_, minute) => ({
+    busbarId: '2110',
+    localDate: '2026-05-01',
+    localHour: 4,
+    localMinute: minute,
+    dakikaIndex: 240 + minute,
+    measurementDateLocal: `2026-05-01T04:${String(minute).padStart(2, '0')}:00+03:00`,
+    pTotal: 1,
+    qMeas: 19,
+    droopPct: 3,
+    hasSynchronousCondenser: true,
+    nominalHighExcitation: 20,
+    nominalLowExcitation: -20,
+    minuteStat: { result: 'SAGLADI' }
+  }));
+  const platformRows = Array.from({ length: 5 }, (_, minute) => ({
+    busbarId: '2110',
+    localDate: '2026-05-01',
+    localHour: 4,
+    localMinute: minute,
+    measurementDateLocal: `2026-05-01T04:${String(minute).padStart(2, '0')}:00+03:00`,
+    pgenMw: 1,
+    qgenMvar: -19,
+    droopPct: 4,
+    hasSynchronousCondenser: true,
+    nominalHighExcitation: 20,
+    nominalLowExcitation: -20,
+    approvalStatus: 1
+  }));
+
+  const result = comparison.buildEkcPlatformComparison(platformRows, ekcRows, { pivot });
+  const hourRow = result.hourRows[0];
+
+  assert.equal(hourRow.avgYksDroopPct, 4);
+  assert.equal(hourRow.avgEkcDroopPct, 3);
+  assert.equal(hourRow.platformStat.synchronousCondenserActive, true);
+  assert.equal(hourRow.ekcStat.synchronousCondenserActive, true);
+  assert.equal(hourRow.synchronousCondenserActive, true);
+  assert.equal(hourRow.platformStat.synchronousCondenserSuccessMinuteCount, 5);
+  assert.equal(hourRow.ekcStat.synchronousCondenserSuccessMinuteCount, 5);
+});
+
+test('buildEkcPlatformComparison does not count DD YY KY as active liability minutes', () => {
+  const ekcRows = [
+    ...Array.from({ length: 10 }, (_, minute) => ({
+      busbarId: '4772',
+      localDate: '2026-04-28',
+      localHour: 5,
+      localMinute: minute,
+      dakikaIndex: 300 + minute,
+      measurementDateLocal: `2026-04-28T05:${String(minute).padStart(2, '0')}:00+03:00`,
+      pTotal: 5,
+      qMeas: 1,
+      minuteStat: { result: 'SAGLADI' }
+    })),
+    ...Array.from({ length: 45 }, (_, idx) => {
+      const minute = idx + 10;
+      return {
+        busbarId: '4772',
+        localDate: '2026-04-28',
+        localHour: 5,
+        localMinute: minute,
+        dakikaIndex: 300 + minute,
+        measurementDateLocal: `2026-04-28T05:${String(minute).padStart(2, '0')}:00+03:00`,
+        pTotal: 0,
+        qMeas: 0,
+        minuteStat: { result: 'DD' }
+      };
+    })
+  ];
+
+  const result = comparison.buildEkcPlatformComparison([], ekcRows, { pivot });
+
+  assert.equal(result.hourRows[0].ekcStat.activeLiabilityMinutes, 10);
+  assert.equal(result.hourRows[0].ekcStat.hourResult, 'YY');
+});
+
 test('Bayramhacili EK-C comparison hour uses header excitation limits instead of KY', () => {
   const catalogContext = {
     platformRgkType: 'KON_GB_2003S',

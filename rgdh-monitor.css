@@ -422,6 +422,14 @@ button.ghost {
   border-right: 2px solid #9aa9bb;
 }
 
+#compareTable tbody tr:nth-child(even) td {
+  background: transparent;
+}
+
+#compareTable tbody tr:nth-child(even) td:first-child {
+  background: transparent;
+}
+
 .rgdh-table-link {
   min-height: 0;
   padding: 0;
@@ -468,12 +476,50 @@ button.ghost {
 .badge.DD, .status-DD { background: #eef1f4; color: var(--rgdh-passive); }
 .badge.YY, .status-YY { background: #fef3c7; color: #92400e; }
 .badge.KY, .status-KY { background: #eceff1; color: #546e7a; }
+.rgdh-sk-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  margin-left: 4px;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+.rgdh-sk-candidate,
+.rgdh-sk-neutral {
+  background: #e5e7eb;
+  color: #374151;
+}
+.rgdh-sk-ok {
+  background: #dcfce7;
+  color: var(--rgdh-ok);
+}
+.rgdh-sk-fail {
+  background: #fee2e2;
+  color: var(--rgdh-error);
+}
 .participation-ok { background: #e6f4ea; color: var(--rgdh-ok); font-weight: 700; }
 .participation-fail { background: #fde7e7; color: var(--rgdh-error); font-weight: 700; }
 .participation-dd { background: #eef1f4; color: var(--rgdh-passive); font-weight: 700; }
 .participation-yy { background: #fef3c7; color: #92400e; font-weight: 700; }
 .participation-ky { background: #e5e7eb; color: #374151; font-weight: 700; }
 .participation-empty { background: #eceff1; color: #546e7a; }
+#compareTable .participation-ok { background: #e6f4ea; color: var(--rgdh-ok); font-weight: 700; }
+#compareTable .participation-fail { background: #fde7e7; color: var(--rgdh-error); font-weight: 700; }
+#compareTable .participation-dd { background: #eef1f4; color: var(--rgdh-passive); font-weight: 700; }
+#compareTable .participation-yy { background: #fef3c7; color: #92400e; font-weight: 700; }
+#compareTable .participation-ky { background: #e5e7eb; color: #374151; font-weight: 700; }
+#compareTable .participation-empty { background: #eceff1; color: #546e7a; }
+#compareTable tbody tr:nth-child(even) td.participation-ok { background: #e6f4ea; color: var(--rgdh-ok); }
+#compareTable tbody tr:nth-child(even) td.participation-fail { background: #fde7e7; color: var(--rgdh-error); }
+#compareTable tbody tr:nth-child(even) td.participation-dd { background: #eef1f4; color: var(--rgdh-passive); }
+#compareTable tbody tr:nth-child(even) td.participation-yy { background: #fef3c7; color: #92400e; }
+#compareTable tbody tr:nth-child(even) td.participation-ky { background: #e5e7eb; color: #374151; }
+#compareTable tbody tr:nth-child(even) td.participation-empty { background: #eceff1; color: #546e7a; }
 .compare-ky-ok {
   background: #e6f4ea;
   color: var(--rgdh-ok);
@@ -489,11 +535,41 @@ button.ghost {
   color: #1d4ed8;
   font-weight: 700;
 }
+#compareTable .compare-ky-ok {
+  background: #e6f4ea;
+  color: var(--rgdh-ok);
+  font-weight: 700;
+}
+#compareTable .compare-ky-fail {
+  background: #fde7e7;
+  color: var(--rgdh-error);
+  font-weight: 700;
+}
+#compareTable .compare-delta-blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+#compareTable tbody tr:nth-child(even) td.compare-ky-ok {
+  background: #e6f4ea;
+  color: var(--rgdh-ok);
+}
+#compareTable tbody tr:nth-child(even) td.compare-ky-fail {
+  background: #fde7e7;
+  color: var(--rgdh-error);
+}
+#compareTable tbody tr:nth-child(even) td.compare-delta-blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
 .compare-ky-neutral {
   font-weight: 700;
 }
 .compare-data-bar-cell {
   padding: 0 !important;
+  background: transparent;
+}
+#compareTable .compare-data-bar-cell {
   background: transparent;
 }
 .compare-data-bar {
@@ -522,6 +598,9 @@ button.ghost {
 
 .compare-delta-bar-cell {
   padding: 0 !important;
+}
+#compareTable .compare-delta-bar-cell {
+  background: transparent;
 }
 
 .compare-delta-bar {
@@ -1094,6 +1173,10 @@ button.ghost {
 [data-theme="dark"] .badge.DD, [data-theme="dark"] .status-DD { background: #1e293b; color: #94a3b8; }
 [data-theme="dark"] .badge.YY, [data-theme="dark"] .status-YY { background: #422006; color: #fbbf24; }
 [data-theme="dark"] .badge.KY, [data-theme="dark"] .status-KY { background: #1e293b; color: #64748b; }
+[data-theme="dark"] .rgdh-sk-candidate,
+[data-theme="dark"] .rgdh-sk-neutral { background: #1e293b; color: #94a3b8; }
+[data-theme="dark"] .rgdh-sk-ok { background: #052e16; color: #4ade80; }
+[data-theme="dark"] .rgdh-sk-fail { background: #450a0a; color: #fca5a5; }
 [data-theme="dark"] .participation-ok { background: #052e16; color: #4ade80; }
 [data-theme="dark"] .participation-fail { background: #450a0a; color: #fca5a5; }
 [data-theme="dark"] .participation-dd { background: #1e293b; color: #94a3b8; }
