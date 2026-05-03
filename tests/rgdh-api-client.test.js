@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const api = require('../rgdh-api-client.js');
+const YKS_PORTAL_BASE_URL = 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$';
 
 test('buildUtcDayRangeForIstanbul converts local day to UTC boundaries', () => {
   assert.deepEqual(api.buildUtcDayRangeForIstanbul('2026-04-01'), {
@@ -43,6 +44,19 @@ test('buildRgdhUrl allows the YKS wind CSV range endpoint', () => {
   assert.equal(url.searchParams.get('busbarId.equals'), '9490732369');
   assert.equal(url.searchParams.has('size'), false);
   assert.equal(url.searchParams.has('page'), false);
+});
+
+test('buildRgdhUrl preserves portal proxy path when building YKS endpoint URLs', () => {
+  const url = api.buildRgdhUrl('/api/rgdh-wind-busbar-data', {
+    'measurementDate.greaterOrEqualThan': '2026-03-31T21:00:00Z',
+    'busbarId.equals': 10933818954,
+    size: 60,
+    sort: 'measurementDate,asc'
+  }, YKS_PORTAL_BASE_URL);
+
+  assert.equal(url.origin, 'https://portal.teias.gov.tr');
+  assert.equal(url.pathname, '/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/api/rgdh-wind-busbar-data');
+  assert.equal(url.searchParams.get('busbarId.equals'), '10933818954');
 });
 
 test('buildRgdhUrl allows the YKS conventional unit data endpoint', () => {

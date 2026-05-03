@@ -314,6 +314,36 @@ test('rgdhPageFetchMainWorld keeps page zero when caller provides page zero', as
   assert.equal(url.searchParams.get('size'), '60');
 });
 
+test('rgdhPageFetchMainWorld preserves portal proxy path for page-context fetches', async () => {
+  let capturedUrl = '';
+  const context = loadBackground({
+    fetch: async (url) => {
+      capturedUrl = String(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => []
+      };
+    }
+  });
+  context.localStorage = makeStorage({ authenticationToken: 'portal-token' });
+  context.sessionStorage = makeStorage({});
+
+  const result = await context.rgdhPageFetchMainWorld({
+    endpoint: '/api/rgdh-wind-busbar-data',
+    baseUrl: 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$',
+    contextKind: 'portal',
+    params: { size: 60, page: 0 }
+  });
+
+  const url = new URL(capturedUrl);
+  assert.equal(result.ok, true);
+  assert.equal(result.contextKind, 'portal');
+  assert.equal(url.origin, 'https://portal.teias.gov.tr');
+  assert.equal(url.pathname, '/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/api/rgdh-wind-busbar-data');
+});
+
 test('rgdhPageFetchMainWorld keeps auth failures classified as AUTH_REQUIRED', async () => {
   const context = loadBackground({
     fetch: async () => ({
@@ -398,7 +428,8 @@ test('RGDH_YKS_LOG_ATTACH injects bridge and instrumentation into open YKS tabs'
   context.chrome.tabs.query = async () => [
     { id: 11, url: 'https://yks.teias.gov.tr/#/rgdh-wind-busbar-data' },
     { id: 12, url: 'https://example.test/' },
-    { id: 13, url: 'https://yks.teias.gov.tr/#/rgdh-busbar-participant' }
+    { id: 13, url: 'https://yks.teias.gov.tr/#/rgdh-busbar-participant' },
+    { id: 14, url: 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/#/rgdh-wind-busbar-data' }
   ];
   context.chrome.scripting.executeScript = async (payload) => {
     executeCalls.push(payload);
@@ -408,13 +439,16 @@ test('RGDH_YKS_LOG_ATTACH injects bridge and instrumentation into open YKS tabs'
   const result = await context.handleRgdhYksLogAttach();
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.tabIds, [11, 13]);
-  assert.equal(executeCalls.length, 4);
+  assert.deepEqual(result.tabIds, [11, 13, 14]);
+  assert.equal(result.contexts.find((item) => item.tabId === 14).contextKind, 'portal');
+  assert.equal(executeCalls.length, 6);
   assert.deepEqual(Array.from(executeCalls[0].files), ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']);
   assert.equal(executeCalls[1].world, 'MAIN');
   assert.deepEqual(Array.from(executeCalls[1].files), ['yks-rgdh-instrumentation.js']);
   assert.deepEqual(Array.from(executeCalls[2].files), ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']);
   assert.equal(executeCalls[3].world, 'MAIN');
+  assert.deepEqual(Array.from(executeCalls[4].files), ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']);
+  assert.equal(executeCalls[5].world, 'MAIN');
 });
 
 test('sanitizeRgdhBackgroundError classifies message-size failures for diagnostics', () => {
@@ -581,7 +615,7 @@ test('resolveSelectedRgdhBusbarInternalIds bounds broad catalog paging when sele
       busbarName: 'AKYEL-1 RES',
       sourceType: 'WIND'
     }, 'WIND'),
-    /YKS ic ID bulunamadi\. "https:\/\/yks\.teias\.gov\.tr\/#\/ adresinden giriş yapın"/
+    /YKS ic ID bulunamadi\. "https:\/\/yks\.teias\.gov\.tr\/#\/" veya TEIAS portal YKS adresinden giris yapin/
   );
 
   assert.ok(calls.length <= 7, `expected bounded catalog calls, got ${calls.length}`);
@@ -1106,7 +1140,10 @@ test('runRgdhPageFetchInYksTab injects YKS instrumentation and records page-fetc
   const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => [] }) });
   const executeCalls = [];
   let createCalls = 0;
-  context.chrome.tabs.query = async () => [{ id: 77, url: 'https://yks.teias.gov.tr/#/rgdh-wind-busbar-data' }];
+  context.chrome.tabs.query = async () => [
+    { id: 78, url: 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/#/rgdh-wind-busbar-data' },
+    { id: 77, url: 'https://yks.teias.gov.tr/#/rgdh-wind-busbar-data' }
+  ];
   context.chrome.tabs.create = async () => {
     createCalls += 1;
     return { id: 88, url: 'https://yks.teias.gov.tr/#/' };
@@ -1133,14 +1170,46 @@ test('runRgdhPageFetchInYksTab injects YKS instrumentation and records page-fetc
   assert.equal(result.ok, true);
   assert.equal(createCalls, 0);
   assert.deepEqual(Array.from(executeCalls[0].files), ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']);
+  assert.equal(executeCalls[0].target.tabId, 77);
   assert.deepEqual(Array.from(executeCalls[1].files), ['yks-rgdh-instrumentation.js']);
   assert.equal(executeCalls[1].world, 'MAIN');
+  assert.equal(executeCalls[1].target.tabId, 77);
   assert.equal(typeof executeCalls[2].func, 'function');
+  assert.equal(executeCalls[2].target.tabId, 77);
+  assert.equal(executeCalls[2].args[0].baseUrl, 'https://yks.teias.gov.tr');
+  assert.equal(executeCalls[2].args[0].contextKind, 'direct');
   assert.equal(diagnostics.events[0].category, 'network');
   assert.equal(diagnostics.events[0].route, 'rgdh-wind-busbar-data');
   assert.equal(diagnostics.events[0].status, 200);
   assert.equal(diagnostics.events[0].detail.rowCount, '1');
   assert.match(diagnostics.events[0].detail.requestUrl, /rgdh-wind-busbar-data/);
+});
+
+test('runRgdhPageFetchInYksTab uses portal base URL when only portal YKS is open', async () => {
+  const context = loadBackground({ fetch: async () => ({ ok: true, json: async () => [] }) });
+  const executeCalls = [];
+  context.chrome.tabs.query = async () => [
+    { id: 78, url: 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/#/rgdh-wind-busbar-data' }
+  ];
+  context.chrome.scripting.executeScript = async (payload) => {
+    executeCalls.push(payload);
+    if (payload.files) return [{ result: undefined }];
+    return [{ result: { ok: true, rows: [{ id: 1 }], httpStatus: 200, transport: 'page-context' } }];
+  };
+
+  const result = await context.runRgdhPageFetchInYksTab({
+    endpoint: '/api/rgdh-wind-busbar-data',
+    params: { 'busbarId.equals': '10933818956', size: 60, page: 0 },
+    timeoutMs: 15000
+  });
+  const diagnostics = await context.handleRgdhYksLogList({ limit: 5 });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.contextKind, 'portal');
+  assert.equal(executeCalls[2].target.tabId, 78);
+  assert.equal(executeCalls[2].args[0].baseUrl, 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$');
+  assert.equal(executeCalls[2].args[0].contextKind, 'portal');
+  assert.match(diagnostics.events[0].detail.requestUrl, /portal\.teias\.gov\.tr\/f5-w-/);
 });
 
 test('runRgdhPageFetchInYksTab opens an inactive YKS tab when none is already open', async () => {

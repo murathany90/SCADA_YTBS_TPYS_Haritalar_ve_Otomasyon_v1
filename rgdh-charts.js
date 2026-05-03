@@ -757,6 +757,8 @@
           localDate: pivotRow.localDate || '',
           busbarName: pivotRow.busbarName || pivotRow.busbarId || '',
           sourceType: pivotRow.sourceType || '',
+          controlSource: pivotRow.controlSource || '',
+          controlType: pivotRow.controlType || '',
           hour: hour.hour,
           hourResult: normalizeReactiveResultCode(hour.hourResult || hour.status),
           passCount: hour.passCount ?? hour.successMinuteCount ?? 0,

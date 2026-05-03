@@ -80,6 +80,25 @@ test('buildDailyPivot keeps separate rows per local date for multi-day reports',
   assert.equal(result.rows.every((row) => row.hours.length === 24), true);
 });
 
+test('buildDailyPivot keeps YKS and EK-C control rows separate for the same busbar day', () => {
+  const rows = [
+    ...Array.from({ length: 60 }, (_, minute) => makeRow(minute, {
+      controlSource: 'YKS',
+      controlType: 'YKS Kontrol'
+    })),
+    ...Array.from({ length: 60 }, (_, minute) => makeRow(minute, {
+      controlSource: 'EKC',
+      controlType: 'EK-C Kontrol'
+    }))
+  ];
+  const result = pivot.buildDailyPivot(rows, '2026-04-01');
+
+  assert.equal(result.rows.length, 2);
+  assert.deepEqual(result.rows.map((row) => row.controlSource), ['YKS', 'EKC']);
+  assert.deepEqual(result.rows.map((row) => row.controlType), ['YKS Kontrol', 'EK-C Kontrol']);
+  assert.equal(result.rows.every((row) => row.hours[0].status === 'SAGLADI'), true);
+});
+
 test('buildDailyPivot computes hourly averages and participation percentage over 60 minutes', () => {
   const rows = Array.from({ length: 30 }, (_, minute) => makeRow(minute, {
     tpysVoltageSet: 160,

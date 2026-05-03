@@ -294,6 +294,39 @@ button.ghost {
 .rgdh-table-wrap.tests { max-height: calc(100vh - 320px); }
 .rgdh-table-wrap.raw-unit { max-height: 260px; }
 
+.rgdh-raw-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--yks-border-dark);
+  border-top: 0;
+  background: var(--panel-bg);
+  color: var(--yks-muted);
+  font-size: 12px;
+}
+
+.rgdh-raw-page-info {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.rgdh-raw-page-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rgdh-raw-page-actions button {
+  min-height: 26px;
+  min-width: 34px;
+  padding: 2px 8px;
+}
+
 .rgdh-table {
   width: 100%;
   border-collapse: collapse;
@@ -438,6 +471,54 @@ button.ghost {
   color: var(--yks-blue);
   font-weight: 700;
   text-decoration: underline;
+}
+
+.rgdh-date-drilldown {
+  white-space: nowrap;
+}
+
+.rgdh-daily-date-link,
+.rgdh-daily-hour-link {
+  cursor: pointer;
+}
+
+.rgdh-daily-hour-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-decoration: underline;
+}
+
+.rgdh-daily-hour-link:focus-visible,
+.rgdh-daily-date-link:focus-visible {
+  outline: 2px solid var(--yks-blue);
+  outline-offset: 2px;
+}
+
+.rgdh-source-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.rgdh-source-yks {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.rgdh-source-ekc {
+  background: #ffedd5;
+  color: #c2410c;
 }
 
 .rgdh-eval-pass,
@@ -1029,6 +1110,7 @@ button.ghost {
 [data-theme="dark"] .yks-card,
 [data-theme="dark"] .rgdh-status-grid div,
 [data-theme="dark"] .rgdh-table-wrap,
+[data-theme="dark"] .rgdh-raw-pager,
 [data-theme="dark"] .rgdh-chart-card,
 [data-theme="dark"] .rgdh-chart-wrap,
 [data-theme="dark"] .rgdh-detail-table {
@@ -1177,6 +1259,8 @@ button.ghost {
 [data-theme="dark"] .rgdh-sk-neutral { background: #1e293b; color: #94a3b8; }
 [data-theme="dark"] .rgdh-sk-ok { background: #052e16; color: #4ade80; }
 [data-theme="dark"] .rgdh-sk-fail { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .rgdh-source-yks { background: #172554; color: #bfdbfe; }
+[data-theme="dark"] .rgdh-source-ekc { background: #431407; color: #fed7aa; }
 [data-theme="dark"] .participation-ok { background: #052e16; color: #4ade80; }
 [data-theme="dark"] .participation-fail { background: #450a0a; color: #fca5a5; }
 [data-theme="dark"] .participation-dd { background: #1e293b; color: #94a3b8; }

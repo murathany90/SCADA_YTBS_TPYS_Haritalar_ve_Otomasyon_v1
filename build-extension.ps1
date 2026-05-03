@@ -45,6 +45,7 @@ $files = @(
   'rgdh-reactive-engine.js',
   'rgdh-comparison.js',
   'rgdh-charts.js',
+  'rgdh-raw-pagination.js',
   'rgdh-csv.js',
   'rgdh-storage.js',
   'rgdh-dom-bridge.js',

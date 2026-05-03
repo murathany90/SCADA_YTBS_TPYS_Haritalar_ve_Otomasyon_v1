@@ -19,6 +19,9 @@
     '/api/general-parameter-by-name',
     '/api/busbars'
   ];
+  const DIRECT_YKS_HOST = 'yks.teias.gov.tr';
+  const PORTAL_YKS_HOST = 'portal.teias.gov.tr';
+  const PORTAL_YKS_PATH_PREFIX = '/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$';
   const SENSITIVE_KEYS = /authorization|cookie|token|jwt|session|password|credential/i;
   const MAX_BUFFERED_EVENTS = 500;
   const MAX_PREVIEW_LENGTH = 4000;
@@ -252,7 +255,11 @@
       responseLink: sanitizeText(detail.responseLink || '').slice(0, 1000),
       responseKeys: Array.isArray(detail.responseKeys) ? detail.responseKeys.slice(0, 40) : [],
       message: sanitizeText(message),
-      detail: sanitizeDetail(detail)
+      detail: sanitizeDetail({
+        contextKind: getYksContextKind(),
+        requestBaseUrl: getYksRequestBaseUrl(),
+        ...detail
+      })
     };
     if (bridgeReady) {
       postDiagnostic(event);
@@ -283,7 +290,8 @@
     if (hashMatch) return hashMatch[1].replace(/^\/+/, '').split('/')[0];
     try {
       const url = new URL(raw, location.href);
-      const apiPath = TARGET_API_PATHS.find((path) => url.pathname === path);
+      const normalizedPath = normalizedYksApiPath(url);
+      const apiPath = TARGET_API_PATHS.find((path) => normalizedPath === path);
       return apiPath ? apiPath.replace(/^\/api\//, '').replace(/-csv$/, '') : '';
     } catch {
       return '';
@@ -301,7 +309,7 @@
   function isTargetApiUrl(value) {
     try {
       const url = new URL(String(value || ''), location.href);
-      return url.hostname === 'yks.teias.gov.tr' && TARGET_API_PATHS.includes(url.pathname);
+      return isYksHostOrPortal(url) && TARGET_API_PATHS.includes(normalizedYksApiPath(url));
     } catch {
       return false;
     }
@@ -310,9 +318,41 @@
   function isYksApiUrl(value) {
     try {
       const url = new URL(String(value || ''), location.href);
-      return url.hostname === 'yks.teias.gov.tr' && url.pathname.startsWith('/api/');
+      return isYksHostOrPortal(url) && normalizedYksApiPath(url).startsWith('/api/');
     } catch {
       return false;
+    }
+  }
+
+  function isYksHostOrPortal(url) {
+    return url.hostname === DIRECT_YKS_HOST || isPortalYksUrl(url);
+  }
+
+  function isPortalYksUrl(url) {
+    return url.hostname === PORTAL_YKS_HOST
+      && url.pathname.startsWith(`${PORTAL_YKS_PATH_PREFIX}/`);
+  }
+
+  function normalizedYksApiPath(url) {
+    if (url.hostname === DIRECT_YKS_HOST) return url.pathname;
+    if (isPortalYksUrl(url)) return url.pathname.slice(PORTAL_YKS_PATH_PREFIX.length) || '/';
+    return url.pathname;
+  }
+
+  function getYksContextKind() {
+    try {
+      return isPortalYksUrl(new URL(location.href)) ? 'portal' : 'direct';
+    } catch {
+      return 'direct';
+    }
+  }
+
+  function getYksRequestBaseUrl() {
+    try {
+      const url = new URL(location.href);
+      return isPortalYksUrl(url) ? `${url.origin}${PORTAL_YKS_PATH_PREFIX}` : url.origin;
+    } catch {
+      return '';
     }
   }
 

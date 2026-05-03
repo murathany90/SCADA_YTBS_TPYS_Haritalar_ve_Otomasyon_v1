@@ -20,6 +20,8 @@ try {
 
 const RGDH_YKS_ORIGIN = 'https://yks.teias.gov.tr';
 const RGDH_YKS_APP_URL = `${RGDH_YKS_ORIGIN}/#/`;
+const RGDH_YKS_PORTAL_PREFIX = 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$';
+const RGDH_YKS_PORTAL_APP_URL = `${RGDH_YKS_PORTAL_PREFIX}/#/`;
 const RGDH_PAGE_FETCH_TIMEOUT_MS = 60000;
 const RGDH_JOB_TIMEOUT_MS = 180000;
 const RGDH_HYBRID_JOB_TIMEOUT_MS = 300000;
@@ -263,9 +265,11 @@ async function handleRgdhYksLogCsv() {
 
 async function handleRgdhYksLogAttach() {
   const tabs = await chrome.tabs.query({});
-  const yksTabs = (tabs || []).filter((item) => /^https:\/\/yks\.teias\.gov\.tr\//i.test(String(item.url || '')) && item.id);
+  const yksTabs = (tabs || [])
+    .map((item) => ({ tab: item, context: getRgdhYksTabContext(item) }))
+    .filter((item) => item.context && item.tab?.id);
   const errors = [];
-  for (const tab of yksTabs) {
+  for (const { tab } of yksTabs) {
     try {
       await injectRgdhYksDiagnosticsIntoTab(tab.id);
     } catch (error) {
@@ -274,7 +278,8 @@ async function handleRgdhYksLogAttach() {
   }
   return {
     ok: errors.length === 0,
-    tabIds: yksTabs.map((tab) => tab.id),
+    tabIds: yksTabs.map((item) => item.tab.id),
+    contexts: yksTabs.map((item) => ({ tabId: item.tab.id, contextKind: item.context.contextKind, requestBaseUrl: item.context.requestBaseUrl })),
     attachedCount: yksTabs.length - errors.length,
     errors
   };
@@ -2643,9 +2648,9 @@ function buildRgdhChunkLabel(startHour, spanHours) {
   };
 }
 
-function buildSafeRgdhRequestUrl(api, endpoint, params) {
+function buildSafeRgdhRequestUrl(api, endpoint, params, baseUrl = RGDH_YKS_ORIGIN) {
   try {
-    return api.buildRgdhUrl(endpoint, params, RGDH_YKS_ORIGIN).toString();
+    return api.buildRgdhUrl(endpoint, params, baseUrl).toString();
   } catch {
     return endpoint;
   }
@@ -2787,7 +2792,11 @@ async function resolveSelectedRgdhBusbarInternalIds(payload, selectedBusbar, sou
     return [String(resolved.id)];
   }
 
-  throw createRgdhError('Secili bara icin YKS ic ID bulunamadi. "https://yks.teias.gov.tr/#/ adresinden giriş yapın"', 'MISSING_BUSBAR_SELECTION');
+  const resolutionErrorType = String(rgdhLastInternalIdResolution?.errorType || '');
+  if (resolutionErrorType && resolutionErrorType !== 'UNKNOWN' && resolutionErrorType !== 'RGDH_ERROR') {
+    throw createRgdhError(`YKS katalog sorgusu tamamlanamadi (${resolutionErrorType}). YKS veya portal YKS oturumunu kontrol edin; ayrinti icin YKS Loglari sekmesine bakin.`, resolutionErrorType);
+  }
+  throw createRgdhError('Secili bara icin YKS ic ID bulunamadi. "https://yks.teias.gov.tr/#/" veya TEIAS portal YKS adresinden giris yapin.', 'MISSING_BUSBAR_SELECTION');
 }
 
 async function resolveRgdhInternalIdFromCatalog(selectedBusbar, sourceType) {
@@ -2987,16 +2996,27 @@ async function runRgdhPageFetchInYksTab(payload) {
   let tab = null;
   try {
     tab = await findYksTab();
+    const context = tab.__rgdhYksContext || getRgdhYksTabContext(tab) || createDirectRgdhYksContext();
     await injectRgdhYksDiagnosticsIntoTab(tab.id);
     const startedAt = Date.now();
     const [execution] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       world: 'MAIN',
       func: rgdhPageFetchMainWorld,
-      args: [{ endpoint: payload.endpoint, params: payload.params || {}, baseUrl: RGDH_YKS_ORIGIN, timeoutMs: payload.timeoutMs || RGDH_PAGE_FETCH_TIMEOUT_MS }]
+      args: [{
+        endpoint: payload.endpoint,
+        params: payload.params || {},
+        baseUrl: context.requestBaseUrl,
+        contextKind: context.contextKind,
+        timeoutMs: payload.timeoutMs || RGDH_PAGE_FETCH_TIMEOUT_MS
+      }]
     });
-    const result = execution?.result || { ok: false, error: 'YKS sekmesinden yanit alinamadi.', errorType: 'PAGE_FETCH_ERROR' };
-    await recordRgdhPageFetchDiagnostic(payload, result, Date.now() - startedAt);
+    const result = {
+      ...(execution?.result || { ok: false, error: 'YKS sekmesinden yanit alinamadi.', errorType: 'PAGE_FETCH_ERROR' }),
+      contextKind: context.contextKind,
+      requestBaseUrl: context.requestBaseUrl
+    };
+    await recordRgdhPageFetchDiagnostic({ ...payload, contextKind: context.contextKind, requestBaseUrl: context.requestBaseUrl }, result, Date.now() - startedAt);
     return result;
   } finally {
     await releaseTemporaryYksTab(tab);
@@ -3047,7 +3067,9 @@ async function recordRgdhPageFetchDiagnostic(payload, result, durationMs) {
   const api = getRgdhApiClient();
   const endpoint = String(payload?.endpoint || '');
   const params = payload?.params || {};
-  const requestUrl = buildSafeRgdhRequestUrl(api, endpoint, params);
+  const contextKind = String(payload?.contextKind || result?.contextKind || 'direct');
+  const requestBaseUrl = String(payload?.requestBaseUrl || result?.requestBaseUrl || RGDH_YKS_ORIGIN);
+  const requestUrl = buildSafeRgdhRequestUrl(api, endpoint, params, requestBaseUrl);
   const ok = Boolean(result?.ok);
   const httpStatus = Number.isFinite(Number(result?.httpStatus))
     ? Number(result.httpStatus)
@@ -3079,6 +3101,8 @@ async function recordRgdhPageFetchDiagnostic(payload, result, durationMs) {
       errorType: result?.errorType || null,
       errorClass: result?.errorType || null,
       transport: result?.transport || 'page-context',
+      contextKind,
+      requestBaseUrl,
       internalBusbarId: params['busbarId.equals'] || ''
     }
   });
@@ -3114,16 +3138,56 @@ function sendMessageToTab(tabId, message) {
 async function findYksTab() {
   const tabs = await chrome.tabs.query({});
   const temporaryTabId = rgdhTemporaryYksTabState?.id;
-  const tab = tabs.find((item) => {
-    if (temporaryTabId !== null && temporaryTabId !== undefined && item.id === temporaryTabId) return false;
-    return isRgdhYksTab(item);
-  });
-  if (tab?.id) return tab;
+  const candidates = (tabs || [])
+    .filter((item) => !(temporaryTabId !== null && temporaryTabId !== undefined && item.id === temporaryTabId))
+    .map((item) => ({ tab: item, context: getRgdhYksTabContext(item) }))
+    .filter((item) => item.context && item.tab?.id);
+  const direct = candidates.find((item) => item.context.contextKind === 'direct');
+  if (direct?.tab?.id) return withRgdhYksContext(direct.tab, direct.context);
+  const portal = candidates.find((item) => item.context.contextKind === 'portal');
+  if (portal?.tab?.id) return withRgdhYksContext(portal.tab, portal.context);
   return acquireTemporaryYksTab();
 }
 
 function isRgdhYksTab(tab) {
-  return /^https:\/\/yks\.teias\.gov\.tr\//i.test(String(tab?.url || ''));
+  return Boolean(getRgdhYksTabContext(tab));
+}
+
+function createDirectRgdhYksContext() {
+  return {
+    contextKind: 'direct',
+    requestBaseUrl: RGDH_YKS_ORIGIN,
+    appUrl: RGDH_YKS_APP_URL
+  };
+}
+
+function createPortalRgdhYksContext() {
+  return {
+    contextKind: 'portal',
+    requestBaseUrl: RGDH_YKS_PORTAL_PREFIX,
+    appUrl: RGDH_YKS_PORTAL_APP_URL
+  };
+}
+
+function getRgdhYksTabContext(tab) {
+  const url = String(tab?.url || '');
+  if (/^https:\/\/yks\.teias\.gov\.tr\//i.test(url)) return createDirectRgdhYksContext();
+  if (isRgdhPortalYksUrl(url)) return createPortalRgdhYksContext();
+  return null;
+}
+
+function isRgdhPortalYksUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return url.origin.toLowerCase() === 'https://portal.teias.gov.tr'
+      && url.pathname.toLowerCase().startsWith('/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/');
+  } catch {
+    return false;
+  }
+}
+
+function withRgdhYksContext(tab, context) {
+  return { ...(tab || {}), __rgdhYksContext: context || getRgdhYksTabContext(tab) || createDirectRgdhYksContext() };
 }
 
 async function acquireTemporaryYksTab() {
@@ -3135,7 +3199,7 @@ async function acquireTemporaryYksTab() {
       state.id = created.id;
       await waitForTabComplete(created.id, 20000);
       const loaded = await chrome.tabs.get(created.id).catch(() => created);
-      return { ...(loaded || created), id: created.id, __rgdhCreatedByExtension: true };
+      return { ...(loaded || created), id: created.id, __rgdhCreatedByExtension: true, __rgdhYksContext: createDirectRgdhYksContext() };
     })();
     rgdhTemporaryYksTabState = state;
   }
@@ -3316,6 +3380,7 @@ async function rgdhPageFetchMainWorld(request) {
   if (!allowed.includes(endpoint)) return { ok: false, error: 'Endpoint whitelist disinda.', errorType: 'VALIDATION_ERROR' };
 
   const baseUrl = String(request?.baseUrl || 'https://yks.teias.gov.tr').replace(/\/+$/, '');
+  const contextKind = String(request?.contextKind || 'direct');
   const params = request?.params || {};
   const hasPage = params.page !== undefined && params.page !== null && params.page !== '';
   const page = hasPage ? Number(params.page) : undefined;
@@ -3324,7 +3389,7 @@ async function rgdhPageFetchMainWorld(request) {
   const token = readYksBearerToken();
 
   const buildUrl = () => {
-    const url = new URL(endpoint, baseUrl);
+    const url = buildEndpointUrl(baseUrl, endpoint);
     const queryParams = { ...params, size };
     if (hasPage) queryParams.page = Number.isFinite(page) ? page : 0;
     else delete queryParams.page;
@@ -3332,6 +3397,17 @@ async function rgdhPageFetchMainWorld(request) {
       if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
     });
     return url.toString();
+  };
+
+  const buildEndpointUrl = (base, endpointPath) => {
+    const url = new URL(String(base || 'https://yks.teias.gov.tr').replace(/\/+$/, ''));
+    const basePath = url.pathname.replace(/\/+$/, '');
+    url.search = '';
+    url.hash = '';
+    url.pathname = basePath && basePath !== '/'
+      ? `${basePath}${endpointPath}`
+      : endpointPath;
+    return url;
   };
 
   const parseLast = (header) => {
@@ -3395,6 +3471,8 @@ async function rgdhPageFetchMainWorld(request) {
       responseText,
       responseContentType,
       httpStatus: 200,
+      contextKind,
+      requestBaseUrl: baseUrl,
       transport: 'page-context'
     };
   } catch (error) {

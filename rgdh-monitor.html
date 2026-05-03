@@ -67,6 +67,15 @@
       <div class="rgdh-table-wrap">
         <table id="rawTable" class="rgdh-table"></table>
       </div>
+      <div id="rawPager" class="rgdh-raw-pager" aria-label="Ham data sayfalama">
+        <div id="rawPageInfo" class="rgdh-raw-page-info">Sayfa 0/0 - veri yok</div>
+        <div class="rgdh-raw-page-actions">
+          <button id="btnRawFirst" type="button" title="Ilk gun">&lt;&lt;</button>
+          <button id="btnRawPrev" type="button" title="Onceki gun">&lt;</button>
+          <button id="btnRawNext" type="button" title="Sonraki gun">&gt;</button>
+          <button id="btnRawLast" type="button" title="Son gun">&gt;&gt;</button>
+        </div>
+      </div>
       <div id="rawUnitDetail" class="rgdh-raw-unit-detail" hidden>
         <div id="rawUnitTitle" class="rgdh-detail-title">Konvansiyonel Unite Dakika Detayi</div>
         <div class="rgdh-table-wrap raw-unit">
@@ -183,6 +192,7 @@
   <script src="rgdh-diagnostics.js"></script>
   <script src="rgdh-dom-bridge.js"></script>
   <script src="rgdh-charts.js"></script>
+  <script src="rgdh-raw-pagination.js"></script>
   <script src="rgdh-monitor.js"></script>
 </body>
 </html>

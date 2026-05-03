@@ -30,7 +30,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://yks.teias.gov.tr/*"
+        "https://yks.teias.gov.tr/*",
+        "https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/*"
       ],
       "js": [
         "rgdh-diagnostics.js",
@@ -40,7 +41,8 @@
     },
     {
       "matches": [
-        "https://yks.teias.gov.tr/*"
+        "https://yks.teias.gov.tr/*",
+        "https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/*"
       ],
       "js": [
         "yks-rgdh-instrumentation.js"

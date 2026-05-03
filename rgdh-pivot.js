@@ -49,13 +49,27 @@
     return rows.length > 0 && rows.every((row) => row.serviceActive === false || Number(row.offBoardStatus) === 1);
   }
 
+  function normalizeControlSource(value) {
+    const text = String(value || '').trim().toUpperCase();
+    if (text === 'EKC' || text === 'EK-C') return 'EKC';
+    if (text === 'YKS') return 'YKS';
+    return '';
+  }
+
+  function controlTypeForSource(controlSource, fallback = '') {
+    if (controlSource === 'EKC') return 'EK-C Kontrol';
+    if (controlSource === 'YKS') return 'YKS Kontrol';
+    return fallback || 'Nihai RGDH Onay Durumu';
+  }
+
   function buildDailyPivot(rows, localDate, rules = RGDH_HOURLY_RULES) {
     const settings = mergeReactiveSettings(rules);
     const grouped = new Map();
     (rows || [])
       .filter((row) => !localDate || row.localDate === localDate)
       .forEach((row) => {
-        const key = `${row.sourceType || ''}:${row.busbarId ?? ''}:${row.localDate || ''}`;
+        const controlSource = normalizeControlSource(row.controlSource);
+        const key = `${controlSource || ''}:${row.sourceType || ''}:${row.busbarId ?? ''}:${row.localDate || ''}`;
         if (!grouped.has(key)) {
           grouped.set(key, {
             key,
@@ -64,7 +78,8 @@
             busbarName: row.busbarName || '',
             localDate: row.localDate || '',
             ytm: row.ytm || '',
-            controlType: 'Nihai RGDH Onay Durumu',
+            controlSource,
+            controlType: controlTypeForSource(controlSource, row.controlType),
             rows: []
           });
         }

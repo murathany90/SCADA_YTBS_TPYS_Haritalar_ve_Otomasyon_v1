@@ -67,7 +67,7 @@
 
   function buildRgdhUrl(pathname, params = {}, baseUrl = YKS_BASE_URL) {
     assertAllowedPath(pathname);
-    const url = new URL(pathname, normalizeBaseUrl(baseUrl));
+    const url = buildUrlWithBasePath(pathname, baseUrl);
     Object.entries(params || {}).forEach(([key, value]) => {
       if (value === undefined || value === null || value === '') return;
       url.searchParams.set(key, String(value));
@@ -309,6 +309,18 @@
 
   function normalizeBaseUrl(value) {
     return String(value || YKS_BASE_URL).replace(/\/+$/, '');
+  }
+
+  function buildUrlWithBasePath(pathname, baseUrl) {
+    const endpoint = String(pathname || '');
+    const url = new URL(normalizeBaseUrl(baseUrl));
+    const basePath = url.pathname.replace(/\/+$/, '');
+    url.search = '';
+    url.hash = '';
+    url.pathname = basePath && basePath !== '/'
+      ? `${basePath}${endpoint}`
+      : endpoint;
+    return url;
   }
 
   function toIsoNoMs(date) {

@@ -88,12 +88,13 @@ test('RGDH tests table uses updated catalog details and sortable headers', () =>
   assert.match(css, /\.rgdh-sort-button/);
 });
 
-test('EK-C upload automatically compares against YKS SCADA data', () => {
+test('EK-C upload prepares comparison data and opens daily RGDH monitoring', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
 
   assert.match(js, /function autoCompareAfterEkcLoad/);
   assert.match(js, /autoCompareAfterEkcLoad\(\)/);
   assert.match(js, /EK-C \/ YKS SCADA/);
+  assert.match(js, /switchTab\('daily'\)/);
   assert.doesNotMatch(js, /el\.btnCompare\.addEventListener/);
 });
 
@@ -205,6 +206,8 @@ test('EK-C comparison uses chart filters and compact result columns', () => {
 
 test('manifest injects YKS diagnostics helpers before the main content script', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+  const directYksMatch = 'https://yks.teias.gov.tr/*';
+  const portalYksMatch = 'https://portal.teias.gov.tr/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472$$/*';
   const scripts = manifest.content_scripts.flatMap((entry) => entry.js || []);
   const diagnosticsIndex = scripts.indexOf('rgdh-diagnostics.js');
   const bridgeIndex = scripts.indexOf('yks-rgdh-diagnostic-bridge.js');
@@ -213,7 +216,8 @@ test('manifest injects YKS diagnostics helpers before the main content script', 
   const yksBridgeEntry = manifest.content_scripts.find((entry) => {
     return entry.run_at === 'document_start'
       && entry.world !== 'MAIN'
-      && (entry.matches || []).includes('https://yks.teias.gov.tr/*')
+      && (entry.matches || []).includes(directYksMatch)
+      && (entry.matches || []).includes(portalYksMatch)
       && (entry.js || []).includes('yks-rgdh-diagnostic-bridge.js');
   });
 
@@ -224,9 +228,22 @@ test('manifest injects YKS diagnostics helpers before the main content script', 
   assert.ok(yksBridgeEntry, 'YKS isolated bridge content script should load at document_start');
   assert.deepEqual(yksBridgeEntry.js, ['rgdh-diagnostics.js', 'yks-rgdh-diagnostic-bridge.js']);
   assert.ok(mainWorldEntry, 'YKS MAIN-world instrumentation content script should exist');
-  assert.deepEqual(mainWorldEntry.matches, ['https://yks.teias.gov.tr/*']);
+  assert.ok(mainWorldEntry.matches.includes(directYksMatch), 'YKS MAIN-world instrumentation should keep direct YKS match');
+  assert.ok(mainWorldEntry.matches.includes(portalYksMatch), 'YKS MAIN-world instrumentation should include portal YKS match');
   assert.ok(mainWorldEntry.js.includes('yks-rgdh-instrumentation.js'));
   assert.equal(mainWorldEntry.run_at, 'document_start');
+});
+
+test('background and YKS instrumentation include portal context support without replacing direct YKS', () => {
+  const background = fs.readFileSync(path.join(root, 'background.js'), 'utf8');
+  const instrumentation = fs.readFileSync(path.join(root, 'yks-rgdh-instrumentation.js'), 'utf8');
+
+  assert.match(background, /RGDH_YKS_ORIGIN\s*=\s*'https:\/\/yks\.teias\.gov\.tr'/);
+  assert.match(background, /RGDH_YKS_PORTAL_PREFIX\s*=\s*'https:\/\/portal\.teias\.gov\.tr\/f5-w-68747470733a2f2f796b732e74656961732e676f762e7472\$\$'/);
+  assert.match(background, /contextKind/);
+  assert.match(background, /requestBaseUrl/);
+  assert.match(instrumentation, /portal\.teias\.gov\.tr/);
+  assert.match(instrumentation, /contextKind/);
 });
 
 test('rgdh monitor exposes separate extension and YKS log panels', () => {
@@ -260,6 +277,7 @@ test('rgdh monitor raw data table exposes original YKS status and approval colum
   assert.match(js, /formatObligationStatus/);
   assert.match(html, /id="rawUnitDetail"/);
   assert.match(html, /id="rawUnitTable"/);
+  assert.match(html, /rgdh-raw-pagination\.js/);
   assert.match(js, /conventionalUnitRows/);
   assert.match(js, /rawUnitSelection/);
   assert.match(js, /function renderRawUnitDetail/);
@@ -268,6 +286,24 @@ test('rgdh monitor raw data table exposes original YKS status and approval colum
   assert.match(js, /Unite Pgen Aktif/);
   assert.match(js, /Unite Qgen Reaktif/);
   assert.match(css, /\.rgdh-raw-unit-detail/);
+});
+
+test('rgdh monitor raw data table renders one date page with pager controls', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
+
+  assert.match(html, /id="rawPager"/);
+  assert.match(html, /id="btnRawFirst"/);
+  assert.match(html, /id="btnRawPrev"/);
+  assert.match(html, /id="btnRawNext"/);
+  assert.match(html, /id="btnRawLast"/);
+  assert.match(html, /id="rawPageInfo"/);
+  assert.match(js, /rawPageKey:\s*null/);
+  assert.match(js, /RGDH_RAW_PAGINATION\.buildRawDatePages/);
+  assert.match(js, /function renderRawPager/);
+  assert.doesNotMatch(js, /rows\.slice\(0,\s*2000\)\.forEach/);
+  assert.match(css, /rgdh-raw-pager/);
 });
 
 test('rgdh monitor uses 180 second standard budget and caps auxiliary RES/GES polling at five minutes', () => {
@@ -293,17 +329,19 @@ test('extension build includes YKS diagnostic bridge file', () => {
   assert.match(buildScript, /yks-rgdh-diagnostic-bridge\.js/);
 });
 
-test('extension build includes RGDH comparison helper loaded by monitor page', () => {
+test('extension build includes RGDH helper scripts loaded by monitor page', () => {
   const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
 
   assert.match(buildScript, /rgdh-comparison\.js/);
+  assert.match(buildScript, /rgdh-raw-pagination\.js/);
 });
 
 test('rgdh monitor daily table is date-first without summary and voltage toggle excludes TPYS/live busbar', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
   const charts = fs.readFileSync(path.join(root, 'rgdh-charts.js'), 'utf8');
+  const css = cssSafeRead();
 
-  assert.match(js, /<th>Tarih<\/th><th>Bara<\/th><th>Tip<\/th><th>Kontrol<\/th>/);
+  assert.match(js, /<th>Tarih<\/th><th>Bara<\/th><th>Tip<\/th><th>Kaynak Tipi<\/th>/);
   assert.doesNotMatch(js, /<th>Ozet<\/th>/);
   assert.doesNotMatch(js, /OK \$\{row\.summary\.okHours\} \/ WARN/);
   assert.doesNotMatch(js, /TPYS Set', cls: 'rgdh-voltage-col'/);
@@ -320,8 +358,25 @@ test('rgdh monitor daily table is date-first without summary and voltage toggle 
   assert.match(js, /Detayli Metrik Goster/);
   assert.match(charts, /Detayli Metrik Goster/);
   assert.match(charts, /Ort Droop %/);
-  assert.match(cssSafeRead(), /participation-yy/);
-  assert.match(cssSafeRead(), /participation-dd/);
+  assert.match(css, /participation-yy/);
+  assert.match(css, /participation-dd/);
+});
+
+test('rgdh monitor daily table distinguishes YKS and EK-C control sources with drilldown links', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const css = cssSafeRead();
+
+  assert.match(js, /YKS Kontrol/);
+  assert.match(js, /EK-C Kontrol/);
+  assert.match(js, /controlSource:\s*'YKS'/);
+  assert.match(js, /controlSource:\s*'EKC'/);
+  assert.match(js, /state\.calculationMode = dailyCalculationMode\(row\)/);
+  assert.match(js, /switchTab\('daily'\)/);
+  assert.match(js, /rgdh-daily-date-link/);
+  assert.match(js, /rgdh-daily-hour-link/);
+  assert.match(css, /rgdh-source-yks/);
+  assert.match(css, /rgdh-source-ekc/);
+  assert.match(css, /rgdh-daily-hour-link[\s\S]*color:\s*inherit/);
 });
 
 function cssSafeRead() {

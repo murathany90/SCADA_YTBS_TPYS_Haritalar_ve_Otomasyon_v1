@@ -337,6 +337,24 @@ test('buildHourMetricRows exposes droop and synchronous condenser metadata', () 
   assert.equal(metricRows[0].synchronousCondenserMinuteCount, 5);
 });
 
+test('buildHourMetricRows carries daily control source labels for mixed YKS and EK-C rows', () => {
+  const metricRows = charts.buildHourMetricRows([{
+    localDate: '2026-05-01',
+    busbarName: 'ACWA',
+    sourceType: 'CONVENTIONAL',
+    controlSource: 'EKC',
+    controlType: 'EK-C Kontrol',
+    hours: [{
+      hour: 7,
+      hourResult: 'SAGLADI',
+      participationPct: 100
+    }]
+  }]);
+
+  assert.equal(metricRows[0].controlSource, 'EKC');
+  assert.equal(metricRows[0].controlType, 'EK-C Kontrol');
+});
+
 test('comparison dataset builders include EK-C and YKS SCADA values', () => {
   const compareRows = [{
     ekc: { vBara: 159, vSet: 160, pTotal: 42, pAux: 2, qMeas: -3, minuteStat: { limitLow: -5, limitHigh: 5 } },

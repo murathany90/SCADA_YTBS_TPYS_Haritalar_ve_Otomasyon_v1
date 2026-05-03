@@ -16,6 +16,7 @@
     chartSelection: { busbarId: null, hour: null, date: null },
     compareSelection: { busbarId: '', ytm: '', hourMode: 'all', hourStart: null, hourEnd: null, hour: null, date: null },
     compareHourRows: [],
+    rawPageKey: null,
     rawUnitSelection: null,
     selectedTestBusbarKey: '',
     testTableSort: { key: '', direction: 'asc' },
@@ -150,7 +151,7 @@
       'btnFetchYks', 'btnCancelFetch', 'btnPickCsv', 'csvInput',
       'btnExportCsv', 'btnToggleTheme', 'btnToggleVoltage',
       'statSource', 'statRows', 'statBusbars',
-      'statMismatch', 'statStatus', 'rawTable', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
+      'statMismatch', 'statStatus', 'rawTable', 'rawPager', 'rawPageInfo', 'btnRawFirst', 'btnRawPrev', 'btnRawNext', 'btnRawLast', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
       'testCatalogSearchInput', 'testBusbarTypeSelect', 'testBusbarSelect', 'testHybridOnlyCheckbox', 'btnExportTestsCsv',
       'btnErrorDetails', 'extensionLogCount', 'extensionLogPanel', 'btnCloseErrors', 'btnExportExtensionLogCsv', 'btnClearErrorLogs', 'extensionLogList',
       'btnYksLogs', 'yksLogCount', 'yksLogPanel', 'btnRefreshYksLogs', 'btnExportYksLogCsv', 'btnClearYksLogs', 'btnCloseYksLogs', 'yksLogList',
@@ -184,6 +185,12 @@
     el.btnPickCsv.addEventListener('click', () => el.csvInput.click());
     el.csvInput.addEventListener('change', handleCsvFiles);
     el.btnToggleDailyMetricTable?.addEventListener('click', toggleDailyMetricTable);
+    [
+      [el.btnRawFirst, 'first'],
+      [el.btnRawPrev, 'prev'],
+      [el.btnRawNext, 'next'],
+      [el.btnRawLast, 'last']
+    ].forEach(([button, action]) => button?.addEventListener('click', () => moveRawPage(action)));
     el.btnExportCsv.addEventListener('click', exportCsv);
     el.btnExportTestsCsv?.addEventListener('click', exportTestsCsv);
     el.btnErrorDetails.addEventListener('click', () => {
@@ -645,7 +652,7 @@
     state.comparison = buildEkcPlatformComparison(getFilteredRows(), getFilteredEkcRows());
     const summary = state.comparison.summary || {};
     setStatus(`EK-C / YKS SCADA: ${summary.both || 0} ortak, ${summary.ekcOnly || 0} yalniz EK-C, ${summary.platformOnly || 0} yalniz YKS SCADA${state.comparison.diagnosis ? ` - ${state.comparison.diagnosis}` : ''}`);
-    switchTab('compare');
+    switchTab('daily');
   }
 
   function compareSources() {
@@ -664,14 +671,16 @@
 
   function renderAll() {
     const rows = getFilteredRows();
+    const ekcRows = getFilteredEkcRows();
+    const dailyPivotRows = buildDailyControlPivotRows(rows, ekcRows);
     state.pivot = RGDH_PIVOT.buildDailyPivot(rows);
     renderFilterNotice(rows);
     renderStats(rows);
     syncRawUnitSelectionWithRows(rows);
     renderRawTable(rows);
     renderRawUnitDetail();
-    renderDailyTable(state.pivot.rows);
-    renderDailyMetricTable(state.pivot.rows);
+    renderDailyTable(dailyPivotRows);
+    renderDailyMetricTable(dailyPivotRows);
     renderCharts(rows, state.pivot.rows);
     renderCompareView(rows);
     renderTestsTable();
@@ -738,6 +747,58 @@
       bindingTargetMissing: state.ekcLoaded && !state.ekcBindingTarget?.busbarId,
       missingBindingDiagnosis: 'Ortak dakika bulunamadi: secili YKS SCADA barasi yok veya EK-C icin otomatik bara eslesmesi yapilamadi'
     });
+  }
+
+  function buildDailyControlPivotRows(platformRows, ekcRows) {
+    const sourceRows = [
+      ...markDailyControlRows(platformRows, 'YKS'),
+      ...markDailyControlRows(ekcRows, 'EKC')
+    ];
+    return RGDH_PIVOT.buildDailyPivot(sourceRows).rows.sort(compareDailyControlRows);
+  }
+
+  function markDailyControlRows(rows, controlSource) {
+    if (controlSource === 'EKC') {
+      return (rows || []).map((row) => ({
+        ...row,
+        controlSource: 'EKC',
+        controlType: 'EK-C Kontrol'
+      }));
+    }
+    return (rows || []).map((row) => ({
+      ...row,
+      controlSource: 'YKS',
+      controlType: 'YKS Kontrol'
+    }));
+  }
+
+  function compareDailyControlRows(a, b) {
+    const dateCompare = String(a.localDate || '').localeCompare(String(b.localDate || ''));
+    if (dateCompare) return dateCompare;
+    const busbarA = String(a.busbarName || a.busbarId || '');
+    const busbarB = String(b.busbarName || b.busbarId || '');
+    const busbarCompare = busbarA.localeCompare(busbarB);
+    if (busbarCompare) return busbarCompare;
+    const sourceOrder = { YKS: 0, EKC: 1 };
+    return (sourceOrder[a.controlSource] ?? 9) - (sourceOrder[b.controlSource] ?? 9);
+  }
+
+  function dailyCalculationMode(row) {
+    return row?.controlSource === 'EKC' ? 'EKC' : 'YKS';
+  }
+
+  function selectDailyChart(row, hour = null) {
+    state.calculationMode = dailyCalculationMode(row);
+    state.chartSelection = { busbarId: row.busbarId, hour, date: row.localDate || null };
+    switchTab('charts');
+  }
+
+  function renderDailySourceBadge(row) {
+    const controlSource = row?.controlSource === 'EKC' ? 'EKC' : row?.controlSource === 'YKS' ? 'YKS' : '';
+    if (!controlSource) return escapeHtml(row?.controlType || '-');
+    const className = controlSource === 'EKC' ? 'rgdh-source-ekc' : 'rgdh-source-yks';
+    const label = controlSource === 'EKC' ? 'EK-C Kontrol' : 'YKS Kontrol';
+    return `<span class="rgdh-source-badge ${className}">${escapeHtml(label)}</span>`;
   }
 
   function buildComparisonDiagnosis(platformRows, ekcRows, summary = {}) {
@@ -1227,9 +1288,17 @@
       { text: 'Onay Durum', cls: '' },
       { text: 'Kalite', cls: '' }
     ];
+    const rawRows = Array.isArray(rows) ? rows : [];
+    const pages = RGDH_RAW_PAGINATION.buildRawDatePages(rawRows);
+    const preferredKey = state.rawPageKey || readFilters().date || '';
+    const currentPage = RGDH_RAW_PAGINATION.resolveRawPage(pages, preferredKey);
+    state.rawPageKey = currentPage?.key || null;
+    const visibleRows = currentPage?.rows || [];
+    syncRawUnitSelectionWithRows(visibleRows);
+    renderRawPager(pages, currentPage, rawRows.length);
     el.rawTable.innerHTML = `<thead><tr>${headers.map((h) => `<th class="${h.cls}">${h.text}</th>`).join('')}</tr></thead>`;
     const tbody = document.createElement('tbody');
-    rows.slice(0, 2000).forEach((row) => {
+    visibleRows.forEach((row) => {
       const tr = document.createElement('tr');
       const status = rowStatus(row);
       const rawSelection = buildRawUnitSelection(row);
@@ -1273,6 +1342,38 @@
       tbody.appendChild(tr);
     });
     el.rawTable.appendChild(tbody);
+  }
+
+  function renderRawPager(pages, currentPage, totalRows) {
+    if (!el.rawPageInfo) return;
+    const list = Array.isArray(pages) ? pages : [];
+    const currentIndex = currentPage ? list.findIndex((page) => page.key === currentPage.key) : -1;
+    const currentNumber = currentIndex >= 0 ? currentIndex + 1 : 0;
+    const totalPages = list.length;
+    if (!totalPages) {
+      el.rawPageInfo.textContent = 'Sayfa 0/0 - veri yok';
+    } else {
+      el.rawPageInfo.textContent = `Sayfa ${currentNumber}/${totalPages} - ${currentPage.label} - ${currentPage.rowCount} satir / toplam ${totalRows}`;
+    }
+    setRawPagerButtonState(currentIndex, totalPages);
+  }
+
+  function setRawPagerButtonState(currentIndex, totalPages) {
+    const hasPages = totalPages > 0;
+    const atFirst = !hasPages || currentIndex <= 0;
+    const atLast = !hasPages || currentIndex >= totalPages - 1;
+    if (el.btnRawFirst) el.btnRawFirst.disabled = atFirst;
+    if (el.btnRawPrev) el.btnRawPrev.disabled = atFirst;
+    if (el.btnRawNext) el.btnRawNext.disabled = atLast;
+    if (el.btnRawLast) el.btnRawLast.disabled = atLast;
+  }
+
+  function moveRawPage(action) {
+    const rows = getFilteredRows();
+    const pages = RGDH_RAW_PAGINATION.buildRawDatePages(rows);
+    state.rawPageKey = RGDH_RAW_PAGINATION.moveRawPage(pages, state.rawPageKey, action);
+    renderRawTable(rows);
+    renderRawUnitDetail();
   }
 
   function selectRawUnitMinute(row) {
@@ -1379,20 +1480,17 @@
 
   function renderDailyTable(pivotRows) {
     const hourHeaders = Array.from({ length: 24 }, (_, hour) => `<th>${String(hour).padStart(2, '0')}</th>`).join('');
-    el.dailyTable.innerHTML = `<thead><tr><th>Tarih</th><th>Bara</th><th>Tip</th><th>Kontrol</th>${hourHeaders}</tr></thead>`;
+    el.dailyTable.innerHTML = `<thead><tr><th>Tarih</th><th>Bara</th><th>Tip</th><th>Kaynak Tipi</th>${hourHeaders}</tr></thead>`;
     const tbody = document.createElement('tbody');
     pivotRows.forEach((row) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="rgdh-date-drilldown">${escapeHtml(row.localDate || '-')}</td><td>${renderHybridNameHtml(row.busbarName || row.busbarId || '-', row, { showSk: true })}</td><td>${escapeHtml(row.sourceType)}</td><td>${escapeHtml(row.controlType)}</td>`;
-      tr.querySelector('.rgdh-date-drilldown')?.addEventListener('click', () => {
-        state.chartSelection = { busbarId: row.busbarId, hour: null, date: row.localDate || null };
-        switchTab('charts');
-      });
+      tr.innerHTML = `<td class="rgdh-date-drilldown"><button class="rgdh-table-link rgdh-daily-date-link" type="button">${escapeHtml(row.localDate || '-')}</button></td><td>${renderHybridNameHtml(row.busbarName || row.busbarId || '-', row, { showSk: true })}</td><td>${escapeHtml(row.sourceType)}</td><td>${renderDailySourceBadge(row)}</td>`;
+      tr.querySelector('.rgdh-daily-date-link')?.addEventListener('click', () => selectDailyChart(row));
       row.hours.forEach((hour) => {
         const td = document.createElement('td');
         td.className = RGDH_PIVOT.participationClass(hour);
         const resultLabel = reactiveLabel(hour.hourResult || hour.status);
-        td.innerHTML = `${escapeHtml(formatHourCellText(hour))}${renderSkBadge(hour, { requireActive: true, showCount: true })}`;
+        td.innerHTML = `<button class="rgdh-daily-hour-link" type="button">${escapeHtml(formatHourCellText(hour))}</button>${renderSkBadge(hour, { requireActive: true, showCount: true })}`;
         td.title = [
           `${String(hour.hour).padStart(2, '0')}:00`,
           `Sonuc ${resultLabel}`,
@@ -1408,9 +1506,10 @@
           `Kaldi ${hour.failCount ?? 0}`,
           `DD ${hour.ddCount ?? 0} | YY ${hour.yyCount ?? 0} | KY ${hour.kyCount ?? 0}`
         ].join(' | ');
-        td.addEventListener('click', () => {
-          state.chartSelection = { busbarId: row.busbarId, hour: hour.hour, date: row.localDate || null };
-          switchTab('charts');
+        td.querySelector('.rgdh-daily-hour-link')?.addEventListener('click', () => selectDailyChart(row, hour.hour));
+        td.addEventListener('click', (event) => {
+          if (event.target.closest('button')) return;
+          selectDailyChart(row, hour.hour);
         });
         tr.appendChild(td);
       });
@@ -1430,7 +1529,7 @@
   function renderDailyMetricTable(pivotRows) {
     if (!el.dailyMetricTable || !RGDH_CHARTS?.buildHourMetricRows) return;
     const headers = [
-      'Tarih', 'Saat', 'Bara', 'Tip', 'Sonuc', 'Sagladi', 'Saglamadi', 'DD', 'YY', 'KY',
+      'Tarih', 'Saat', 'Bara', 'Tip', 'Kaynak Tipi', 'Sonuc', 'Sagladi', 'Saglamadi', 'DD', 'YY', 'KY',
       'Katilim', 'Ort Droop %', 'Pnom', 'Pnom %10', 'Pnom %50', 'MKUD', 'Ort P', 'Ort Q', 'Ort V Set', 'Ort V'
     ];
     el.dailyMetricTable.innerHTML = `<thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>`;
@@ -1442,6 +1541,7 @@
         escapeHtml(`${String(row.hour).padStart(2, '0')}:00`),
         renderHybridNameHtml(row.busbarName || '-', row, { showSk: true }),
         escapeHtml(row.sourceType || '-'),
+        renderDailySourceBadge(row),
         `${escapeHtml(row.hourResult || '-')}${renderSkBadge(row, { requireActive: true, showCount: true })}`,
         formatNumber(row.passCount),
         formatNumber(row.failCount),
