@@ -6,13 +6,15 @@ const DEFAULT_SETTINGS = {
     X: 'Sağlamadı',
     KY: 'Kontrol Yapılamadı'
   },
-  checkApproval: true,
+  checkApproval: false,
   strictDateCheck: false,
   fastExtMode: true,
   onlyChangedCells: true
 };
 
 const CSV_CACHE_SOFT_LIMIT_BYTES = 3 * 1024 * 1024;
+const TPYS_EXTJS_MAIN_APPLY_FILE = 'tpys-extjs-main-apply.js';
+const TPYS_EXTJS_MAIN_EXPECTED = { modeUsed: 'ext-main-batch' };
 
 const state = {
   mappingRows: [],
@@ -34,13 +36,18 @@ const el = {
   csvDateCount: document.getElementById('csvDateCount'),
   btnAnalyze: document.getElementById('btnAnalyze'),
   btnApply: document.getElementById('btnApply'),
-  btnCommit: document.getElementById('btnCommit'),
   btnOpenMap: document.getElementById('btnOpenMap'),
   btnOpenRgdhMonitor: document.getElementById('btnOpenRgdhMonitor'),
   btnToggleSimplify: document.getElementById('btnToggleSimplify'),
   pageDate: document.getElementById('pageDate'),
   pageBaraCount: document.getElementById('pageBaraCount'),
   matchedCount: document.getElementById('matchedCount'),
+  matchedBaraName: document.getElementById('matchedBaraName'),
+  matchedDateCount: document.getElementById('matchedDateCount'),
+  matchedHourCount: document.getElementById('matchedHourCount'),
+  sameHourCount: document.getElementById('sameHourCount'),
+  differentHourCount: document.getElementById('differentHourCount'),
+  changedHourCount: document.getElementById('changedHourCount'),
   btnAnalyzeDownloadPage: document.getElementById('btnAnalyzeDownloadPage'),
   btnDownloadAllCsvs: document.getElementById('btnDownloadAllCsvs'),
   btnDownloadCsvReport: document.getElementById('btnDownloadCsvReport'),
@@ -57,7 +64,6 @@ const el = {
   labelYY: document.getElementById('labelYY'),
   labelX: document.getElementById('labelX'),
   labelKY: document.getElementById('labelKY'),
-  checkApproval: document.getElementById('checkApproval'),
   strictDateCheck: document.getElementById('strictDateCheck'),
   fastExtMode: document.getElementById('fastExtMode'),
   onlyChangedCells: document.getElementById('onlyChangedCells'),
@@ -85,7 +91,6 @@ function bindEvents() {
   el.fileInput.addEventListener('change', handleFilePick);
   el.btnAnalyze.addEventListener('click', analyzeCurrentTab);
   el.btnApply.addEventListener('click', applyToCurrentTab);
-  el.btnCommit.addEventListener('click', commitCurrentTab);
   el.btnOpenMap.addEventListener('click', openMapPage);
   if (el.btnOpenRgdhMonitor) {
     el.btnOpenRgdhMonitor.addEventListener('click', openRgdhMonitorPage);
@@ -125,7 +130,8 @@ async function loadSettings() {
       statusLabels: {
         ...structuredClone(DEFAULT_SETTINGS.statusLabels),
         ...(stored.tpysReactiveSettings.statusLabels || {})
-      }
+      },
+      checkApproval: false
     };
   }
   syncSettingsToForm();
@@ -140,7 +146,7 @@ async function saveSettings() {
       X: el.labelX.value.trim() || DEFAULT_SETTINGS.statusLabels.X,
       KY: el.labelKY.value.trim() || DEFAULT_SETTINGS.statusLabels.KY
     },
-    checkApproval: el.checkApproval.checked,
+    checkApproval: false,
     strictDateCheck: el.strictDateCheck.checked,
     fastExtMode: el.fastExtMode.checked,
     onlyChangedCells: el.onlyChangedCells.checked
@@ -155,7 +161,6 @@ function syncSettingsToForm() {
   el.labelYY.value = state.settings.statusLabels.YY;
   el.labelX.value = state.settings.statusLabels.X;
   el.labelKY.value = state.settings.statusLabels.KY;
-  el.checkApproval.checked = state.settings.checkApproval;
   el.strictDateCheck.checked = state.settings.strictDateCheck;
   el.fastExtMode.checked = state.settings.fastExtMode;
   el.onlyChangedCells.checked = state.settings.onlyChangedCells;
@@ -188,7 +193,7 @@ async function loadLastCsv() {
 async function handleFilePick(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  const text = await file.text();
+  const text = await readCsvFileText(file);
   const parsed = parseSemicolonCsv(text);
   state.monthlyFileName = file.name;
   state.monthlyHeaders = parsed.headers;
@@ -217,13 +222,18 @@ async function analyzeCurrentTab() {
     if (!context?.ok) throw new Error(context?.error || context?.reason || 'Sayfa bilgisi alınamadı.');
     updatePageContext(context);
 
-    const plan = buildPlanForPage(context.pageDate, state.monthlyRows, state.mappingIndex);
+    const plan = buildPlanForPage(context.pageDate, state.monthlyRows, state.mappingIndex, context.pageRows);
     if (plan.warning) {
       log(`Uyari: ${plan.warning}`);
       if (plan.availableDates.length) log(`CSV tarihleri: ${plan.availableDates.join(', ')}`);
     }
+    if (plan.blockingErrors?.length) {
+      log(`Validasyon hatasi: ${plan.blockingErrors.slice(0, 5).join(' | ')}`);
+    }
     const comparison = comparePlanWithPage(plan, context.pageRows);
     el.matchedCount.textContent = String(comparison.matchedRows.length);
+    updateMatchSummary(plan, comparison);
+    updateStatusComparisonSummary(plan, comparison);
     printComparison(plan, comparison, false);
   } catch (error) {
     log(`Analiz hatası: ${error.message}`);
@@ -240,8 +250,20 @@ async function applyToCurrentTab() {
     if (!context?.ok) throw new Error(context?.error || context?.reason || 'Sayfa bilgisi alınamadı.');
     updatePageContext(context);
 
-    const plan = buildPlanForPage(context.pageDate, state.monthlyRows, state.mappingIndex);
-    if (!plan.operations.length) throw new Error('ERP sayfasındaki tarih için uygulanacak kayıt bulunamadı.');
+    const plan = buildPlanForPage(context.pageDate, state.monthlyRows, state.mappingIndex, context.pageRows);
+    if (plan.blockingErrors?.length) {
+      throw new Error(`CSV sonuc modu validasyon hatasi: ${plan.blockingErrors.slice(0, 3).join(' | ')}`);
+    }
+
+    const comparison = comparePlanWithPage(plan, context.pageRows);
+    el.matchedCount.textContent = String(comparison.matchedRows.length);
+    updateMatchSummary(plan, comparison);
+    updateStatusComparisonSummary(plan, comparison);
+    printComparison(plan, comparison, true);
+    if (!plan.operations.length) {
+      logNoOperationsForPage(plan);
+      return;
+    }
 
     if (plan.warning) {
       if (state.settings.strictDateCheck) {
@@ -254,19 +276,17 @@ async function applyToCurrentTab() {
       }
     }
 
-    if (state.settings.strictDateCheck && context.pageDate && plan.targetDate && normalizeDate(context.pageDate) !== normalizeDate(plan.targetDate)) {
+    if (plan.mode !== 'periodic-daily' && state.settings.strictDateCheck && context.pageDate && plan.targetDate && normalizeDate(context.pageDate) !== normalizeDate(plan.targetDate)) {
       throw new Error(`Sayfa tarihi (${context.pageDate}) ile plan tarihi (${plan.targetDate}) uyuşmuyor.`);
     }
 
-    const comparison = comparePlanWithPage(plan, context.pageRows);
-    el.matchedCount.textContent = String(comparison.matchedRows.length);
-    printComparison(plan, comparison, true);
-
-    const result = await sendMessage(tab.id, {
-      type: 'APPLY_PLAN',
-      payload: { operations: plan.operations, settings: state.settings }
-    });
+    let result = await applyPlanViaMainWorld(tab.id, plan, context);
+    if (!result?.ok && shouldUseDomFallback(result)) {
+      result = await applyPlanViaDomFallback(tab.id, plan);
+    }
+    logMainWorldMappingDiagnostics(result);
     if (!result?.ok) throw new Error(result?.error || result?.reason || 'Uygulama başarısız.');
+    updateStatusComparisonSummary(plan, comparison, result.summary);
 
     log(`Uygulama modu: ${result.modeUsed || 'bilinmiyor'}`);
     log(`Özet: ${JSON.stringify(result.summary, null, 2)}`);
@@ -280,17 +300,84 @@ async function applyToCurrentTab() {
   }
 }
 
-async function commitCurrentTab() {
+async function applyPlanViaMainWorld(tabId, plan, context) {
+  if (!state.settings.fastExtMode) return null;
   try {
-    const tab = await getActiveTab();
-    await ensureContentScript(tab.id);
-    const result = await sendMessage(tab.id, { type: 'CLICK_COMMIT' });
-    if (result?.ok) log('ERP Commit tetiklendi.');
-    else log(`ERP Commit bulunamadı: ${result?.reason || 'bilinmiyor'}`);
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [TPYS_EXTJS_MAIN_APPLY_FILE],
+      world: 'MAIN'
+    });
+
+    const [response] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: (payload) => {
+        try {
+          const api = window.TPYS_EXTJS_MAIN_APPLY;
+          if (!api?.applyPlan) return { ok: false, reason: 'TPYS ExtJS MAIN helper yuklenemedi.' };
+          return api.applyPlan(payload);
+        } catch (error) {
+          return { ok: false, reason: error?.message || String(error) };
+        }
+      },
+      args: [{
+        operations: plan.operations,
+        settings: { ...state.settings, checkApproval: false },
+        pageRows: context.pageRows || [],
+        expected: TPYS_EXTJS_MAIN_EXPECTED
+      }]
+    });
+
+    const result = response?.result;
+    if (result?.ok && result.modeUsed === TPYS_EXTJS_MAIN_EXPECTED.modeUsed) return result;
+    if (result?.reason || result?.error) {
+      log(`MAIN-world ExtJS hızlı mod kullanılamadı: ${result.reason || result.error}`);
+    }
+    return result || null;
   } catch (error) {
-    log(`Commit hatası: ${error.message}`);
-    console.error(error);
+    log(`MAIN-world ExtJS hızlı mod başlatılamadı: ${error.message}`);
+    return null;
   }
+}
+
+function shouldUseDomFallback(result) {
+  if (result === null || result === undefined) return true;
+  if (result.mappingDiagnostics || result.candidateDiagnostics) return false;
+  if (Array.isArray(result.unresolvedLabels) && result.unresolvedLabels.length) return false;
+  const reason = String(result.reason || result.error || '');
+  if (/deger cozulemedi/i.test(reason)) return false;
+  return true;
+}
+
+function logMainWorldMappingDiagnostics(result) {
+  if (!result || (result.modeUsed !== TPYS_EXTJS_MAIN_EXPECTED.modeUsed && !result.mappingDiagnostics && !result.candidateDiagnostics)) return;
+
+  if (result.resolvedStatusMap && Object.keys(result.resolvedStatusMap).length) {
+    const parts = [];
+    for (const [hour, labels] of Object.entries(result.resolvedStatusMap)) {
+      for (const [label, detail] of Object.entries(labels || {})) {
+        parts.push(`${hour}:${label}=${detail.value} (${detail.source})`);
+      }
+    }
+    if (parts.length) log(`Durum mapping: ${parts.slice(0, 12).join(', ')}${parts.length > 12 ? ' ...' : ''}`);
+  }
+
+  if (Array.isArray(result.unresolvedLabels) && result.unresolvedLabels.length) {
+    log(`Çözülemeyen durum etiketleri: ${result.unresolvedLabels.join(', ')}`);
+  }
+
+  const sourceCounts = result.mappingDiagnostics?.sourceCounts || result.candidateDiagnostics?.sourceCounts;
+  if (sourceCounts && Object.keys(sourceCounts).length) {
+    log(`Mapping kaynakları: ${Object.entries(sourceCounts).map(([source, count]) => `${source}=${count}`).join(', ')}`);
+  }
+}
+
+async function applyPlanViaDomFallback(tabId, plan) {
+  return sendMessage(tabId, {
+      type: 'APPLY_PLAN',
+      payload: { operations: plan.operations, settings: { ...state.settings, checkApproval: false, fastExtMode: false } }
+    });
 }
 
 async function analyzeDownloadPage() {
@@ -393,10 +480,10 @@ async function toggleApprovalSimplifyOnCurrentTab() {
     const tab = await getActiveTab();
     await ensureContentScript(tab.id);
     const result = await sendMessage(tab.id, { type: 'TOGGLE_APPROVAL_SIMPLIFY' });
-    if (!result?.ok) throw new Error(result?.reason || result?.error || 'Onay sadeleştirme çalıştırılamadı.');
-    log(`Onay sadeleştir: ${result.hidden ? 'aktif' : 'kapalı'}`);
+    if (!result?.ok) throw new Error(result?.reason || result?.error || 'TPYS sayfa sadeleştirme çalıştırılamadı.');
+    log(`TPYS sayfa sadeleştir: ${result.hidden ? 'aktif' : 'kapalı'}`);
   } catch (error) {
-    log(`Onay sadeleştir hatası: ${error.message}`);
+    log(`TPYS sayfa sadeleştir hatası: ${error.message}`);
     console.error(error);
   }
 }
@@ -406,7 +493,70 @@ function updatePageContext(context) {
   el.pageBaraCount.textContent = String((context.pageRows || []).length);
 }
 
+function updateMatchSummary(plan, comparison) {
+  const matchedBaraName = plan?.matchedBaraName || deriveMatchedBaraName(comparison);
+  const matchedDateCount = Number.isFinite(Number(plan?.matchedDateCount))
+    ? Number(plan.matchedDateCount)
+    : countUniqueMatchedDates(comparison);
+  const matchedHourCount = Number.isFinite(Number(plan?.matchedHourCount))
+    ? Number(plan.matchedHourCount)
+    : countMatchedHours(comparison);
+  if (el.matchedBaraName) el.matchedBaraName.textContent = matchedBaraName || '-';
+  if (el.matchedDateCount) el.matchedDateCount.textContent = String(matchedDateCount || 0);
+  if (el.matchedHourCount) el.matchedHourCount.textContent = String(matchedHourCount || 0);
+}
+
+function updateStatusComparisonSummary(plan, comparison, applySummary = null) {
+  const metrics = calculateStatusComparison(plan, comparison);
+  const changed = Number.isFinite(Number(applySummary?.statusChangedDifferent))
+    ? Number(applySummary.statusChangedDifferent)
+    : 0;
+  if (el.sameHourCount) el.sameHourCount.textContent = String(metrics.same);
+  if (el.differentHourCount) el.differentHourCount.textContent = String(metrics.different);
+  if (el.changedHourCount) el.changedHourCount.textContent = String(changed);
+}
+
+function calculateStatusComparison(plan, comparison) {
+  const metrics = { same: 0, different: 0 };
+  const rows = Array.isArray(comparison?.matchedRows) ? comparison.matchedRows : [];
+  rows.forEach(({ operation, pageRow }) => {
+    const statusByHour = operation?.statusByHour || {};
+    for (const [hour, code] of Object.entries(statusByHour)) {
+      const currentLabel = getPageStatusLabel(pageRow, hour);
+      if (!currentLabel) continue;
+      const desiredLabel = state.settings.statusLabels?.[code] || code;
+      if (MAP_COMMON.normalizeText(currentLabel) === MAP_COMMON.normalizeText(desiredLabel)) metrics.same += 1;
+      else metrics.different += 1;
+    }
+  });
+  return metrics;
+}
+
+function getPageStatusLabel(pageRow, hour) {
+  const labels = pageRow?.statusLabelByHour || {};
+  return String(labels[hour] ?? labels[String(hour)] ?? '').trim();
+}
+
 function printComparison(plan, comparison, verbose) {
+  if (plan?.mode === 'periodic-daily') {
+    log(`Donemlik plan: CSV gun ${plan.csvDayCount || 0} | Sayfa satiri ${plan.pageRowCount || comparison.pageRowCount || 0} | Eslesen gun ${comparison.matchedRows.length}`);
+    log(`Eslesme ozeti: bara ${plan.matchedBaraName || '-'} | tarih ${plan.matchedDateCount || 0} | saat ${plan.matchedHourCount || 0}`);
+    log(`Plan kaydi: ${plan.operations.length} | CSV filtre disi: ${plan.filteredOutCsvRows?.length || 0} | Ambiguous: ${plan.ambiguousRows?.length || 0}`);
+    if (plan.blockingErrors?.length) {
+      log(`Validasyon hatalari (${plan.blockingErrors.length}): ${plan.blockingErrors.slice(0, 25).join(' | ')}`);
+    }
+    if (plan.missingPageRows?.length) {
+      log(`Sayfada olmayan CSV gunleri (${plan.missingPageRows.length}): ${plan.missingPageRows.map((row) => `${row.localDate} ${row.sourceBara}`).join(', ')}`);
+    }
+    if (verbose && plan.missingCsvRows?.length) {
+      log(`CSV'de olmayan TPYS gunleri (${plan.missingCsvRows.length}): ${plan.missingCsvRows.map((row) => `${row.localDate} ${row.baraName}`).join(', ')}`);
+    }
+    if (plan.warnings?.length) {
+      log(`Uyarilar: ${plan.warnings.join(' | ')}`);
+    }
+    return;
+  }
+
   log(`Plan tarihi: ${plan.targetDate || '-'} | Plan bara: ${plan.operations.length}`);
   log(`Sayfa bara: ${comparison.pageRowCount} | Eşleşen: ${comparison.matchedRows.length}`);
   if (comparison.unmatchedPlanRows.length) {
@@ -415,6 +565,45 @@ function printComparison(plan, comparison, verbose) {
   if (verbose && comparison.unmatchedPageRows.length) {
     log(`CSV'de olmayan sayfa baraları (${comparison.unmatchedPageRows.length}): ${comparison.unmatchedPageRows.map((x) => x.baraName).join(', ')}`);
   }
+}
+
+function logNoOperationsForPage(plan) {
+  if (plan?.mode === 'periodic-daily') {
+    log('CSV TPYS eşleşmesi bulunamadı; hücre yazımı yapılmadı.');
+    log(`CSV bara: ${formatList(plan.csvBaras)} | TPYS bara: ${formatList(plan.tpysBaras || plan.pageBaras)}`);
+    log(`CSV filtre dışı satır: ${plan.filteredOutCsvRows?.length || 0} | Sayfada olmayan CSV günü: ${plan.missingPageRows?.length || 0}`);
+    return;
+  }
+  log('CSV TPYS eşleşmesi bulunamadı; hücre yazımı yapılmadı.');
+}
+
+function deriveMatchedBaraName(comparison) {
+  const names = new Set();
+  (comparison?.matchedRows || []).forEach((row) => {
+    const name = row.operation?.tpysBaraAdi || row.pageRow?.baraName || '';
+    if (name) names.add(name);
+  });
+  return names.size ? [...names].join(', ') : '-';
+}
+
+function countUniqueMatchedDates(comparison) {
+  const dates = new Set();
+  (comparison?.matchedRows || []).forEach((row) => {
+    const date = row.operation?.localDate || row.operation?.sourceDate || row.pageRow?.localDate || '';
+    if (date) dates.add(date);
+  });
+  return dates.size;
+}
+
+function countMatchedHours(comparison) {
+  return (comparison?.matchedRows || []).reduce((sum, row) => {
+    return sum + Object.keys(row.operation?.statusByHour || {}).length;
+  }, 0);
+}
+
+function formatList(values) {
+  const list = Array.isArray(values) ? values.filter(Boolean) : [];
+  return list.length ? list.join(', ') : '-';
 }
 
 function assertCsvLoaded() {
@@ -493,6 +682,14 @@ function normalizePopupDateToIso(value) {
   return `${match[3]}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}`;
 }
 
+async function readCsvFileText(file) {
+  if (file?.arrayBuffer && window.TPYS_PERIODIC_RGDH_PLANNER?.decodeCsvTextFromBuffer) {
+    const buffer = await file.arrayBuffer();
+    return window.TPYS_PERIODIC_RGDH_PLANNER.decodeCsvTextFromBuffer(buffer);
+  }
+  return file.text();
+}
+
 function parseSemicolonCsv(text) {
   const rows = [];
   let current = '';
@@ -513,6 +710,9 @@ function parseSemicolonCsv(text) {
     current += char;
   }
   if (current.length || row.length) { row.push(current); rows.push(row); }
+
+  while (rows.length && !rows[0].some((cell) => String(cell || '').trim())) rows.shift();
+  if (rows.length && /^sep\s*=/i.test(String(rows[0][0] || '').replace(/^\uFEFF/, '').trim())) rows.shift();
 
   const headers = (rows.shift() || []).map((value, index) => {
     const cleaned = String(value || '').replace(/^\uFEFF/, '').trim();
@@ -585,7 +785,20 @@ function buildMappingIndex(mappingRows) {
   return { byTpysId, byAlias };
 }
 
-function buildPlanForPage(pageDate, monthlyRows, mappingIndex) {
+function buildPlanForPage(pageDate, monthlyRows, mappingIndex, pageRows = []) {
+  const planner = window.TPYS_PERIODIC_RGDH_PLANNER;
+  if (planner?.buildPeriodicPlanForPage) {
+    return TPYS_PERIODIC_RGDH_PLANNER.buildPeriodicPlanForPage({
+      pageDate,
+      csvRows: monthlyRows,
+      mappingIndex,
+      pageRows
+    });
+  }
+  return buildLegacyPlanForPage(pageDate, monthlyRows, mappingIndex);
+}
+
+function buildLegacyPlanForPage(pageDate, monthlyRows, mappingIndex) {
   const groupedByDate = new Map();
   for (const row of monthlyRows) {
     const date = normalizeDate(row.Tarih);
@@ -697,6 +910,11 @@ function buildStatusByHour(row) {
 }
 
 function comparePlanWithPage(plan, pageRows) {
+  const planner = window.TPYS_PERIODIC_RGDH_PLANNER;
+  if (plan?.mode === 'periodic-daily' && planner?.comparePeriodicPlanWithPage) {
+    return planner.comparePeriodicPlanWithPage(plan, pageRows);
+  }
+
   const pageMap = new Map(pageRows.map((row) => [MAP_COMMON.normalizeText(row.baraName), row]));
   const matchedRows = [];
   const unmatchedPlanRows = [];

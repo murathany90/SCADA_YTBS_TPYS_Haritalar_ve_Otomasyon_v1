@@ -425,6 +425,45 @@ test('buildExportCsv emits Excel/TR compatible semicolon CSV', () => {
   assert.doesNotMatch(text, /Ã|Ä|Å/);
 });
 
+test('buildDailyPivotExportCsv exports hourly percentages in percent mode', () => {
+  const text = csv.buildDailyPivotExportCsv([{
+    localDate: '2026-04-20',
+    busbarName: 'ÇAYIRHAN TES 380',
+    sourceType: 'CONVENTIONAL',
+    controlSource: 'EKC',
+    hours: [
+      { hour: 0, participationPct: 93.3, hourResult: 'SAGLADI' },
+      { hour: 1, participationPct: 61.666, hourResult: 'SAGLAMADI' },
+      { hour: 2, hourResult: 'DD' }
+    ]
+  }], { displayMode: 'percent' });
+
+  assert.ok(text.startsWith('\uFEFFsep=;\r\n'));
+  assert.match(text, /Tarih;Bara;Tip;Kaynak Tipi;00;01;02/);
+  assert.match(text, /2026-04-20;ÇAYIRHAN TES 380;CONVENTIONAL;EK-C Kontrol;93,30%;61,67%;DD/);
+  assert.doesNotMatch(text, /Ãƒ|Ã„|Ã…/);
+});
+
+test('buildDailyPivotExportCsv exports hourly result codes in result mode', () => {
+  const text = csv.buildDailyPivotExportCsv([{
+    localDate: '2026-04-20',
+    busbarName: 'AKSU ÇAMLICA RES',
+    sourceType: 'WIND',
+    controlSource: 'YKS',
+    hours: [
+      { hour: 0, participationPct: 100, hourResult: 'SAGLADI' },
+      { hour: 1, participationPct: 40, hourResult: 'SAGLAMADI' },
+      { hour: 2, hourResult: 'DD' },
+      { hour: 3, hourResult: 'YY' },
+      { hour: 4, hourResult: 'KY' }
+    ]
+  }], { displayMode: 'result' });
+
+  assert.ok(text.startsWith('\uFEFFsep=;\r\n'));
+  assert.match(text, /2026-04-20;AKSU ÇAMLICA RES;WIND;YKS Kontrol;OK;X;DD;YY;KY/);
+  assert.doesNotMatch(text, /Ãƒ|Ã„|Ã…/);
+});
+
 test('buildCompareExportCsv emits Turkish Excel compatible comparison rows', () => {
   const text = csv.buildCompareExportCsv([{
     localDate: '2026-04-27',

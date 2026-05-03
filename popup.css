@@ -27,6 +27,7 @@ h2 { margin: 0 0 8px 0; font-size: 14px; }
 .grid-actions { display: grid; gap: 8px; }
 .grid-actions.two { grid-template-columns: 1fr 1fr; }
 .grid-actions.four { grid-template-columns: 1fr 1fr; }
+.file-row { margin-top: 8px; }
 button {
   border: 1px solid #cfd8e3;
   background: #fff;

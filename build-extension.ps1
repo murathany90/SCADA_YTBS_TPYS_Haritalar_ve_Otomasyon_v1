@@ -38,6 +38,8 @@ $files = @(
   'tpys-csv-planner.js',
   'popup.html',
   'popup.css',
+  'tpys-periodic-rgdh-planner.js',
+  'tpys-extjs-main-apply.js',
   'popup.js',
   'rgdh-monitor.html',
   'rgdh-monitor.css',

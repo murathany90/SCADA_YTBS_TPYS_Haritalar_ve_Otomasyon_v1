@@ -1235,6 +1235,64 @@
     return buildCsvText(lines);
   }
 
+  function buildDailyPivotExportCsv(rows, options = {}) {
+    const displayMode = options.displayMode === 'result' ? 'result' : 'percent';
+    const hourHeaders = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
+    const lines = [
+      '\uFEFFsep=;',
+      ['Tarih', 'Bara', 'Tip', 'Kaynak Tipi', ...hourHeaders].map((header) => quoteCsv(header)).join(';')
+    ];
+    (rows || []).forEach((row) => {
+      const hourMap = new Map();
+      (row?.hours || []).forEach((hour, index) => {
+        const hourNumber = Number.isFinite(Number(hour?.hour)) ? Number(hour.hour) : index;
+        if (hourNumber >= 0 && hourNumber <= 23) hourMap.set(hourNumber, hour);
+      });
+      const cells = [
+        row?.localDate || '',
+        repairCsvCellValue(row?.busbarName || row?.busbarId || row?.ekcOriginalName || ''),
+        repairCsvCellValue(row?.sourceType || ''),
+        formatDailyControlSource(row),
+        ...hourHeaders.map((_, hour) => formatDailyHourExportCell(hourMap.get(hour), displayMode))
+      ];
+      lines.push(cells.map((cell) => (cell === null || cell === undefined ? '' : quoteCsv(repairCsvCellValue(cell)))).join(';'));
+    });
+    return buildCsvText(lines);
+  }
+
+  function formatDailyControlSource(row) {
+    const controlSource = String(row?.controlSource || '').toUpperCase();
+    if (controlSource === 'EKC') return 'EK-C Kontrol';
+    if (controlSource === 'YKS') return 'YKS Kontrol';
+    return repairCsvCellValue(row?.controlType || row?.controlSource || '');
+  }
+
+  function formatDailyHourExportCell(hour, displayMode = 'percent') {
+    if (!hour) return '';
+    const result = dailyResultCode(hour?.hourResult || hour?.status);
+    if (displayMode === 'result') return result || '-';
+    if (result === 'DD' || result === 'YY' || result === 'KY') return result;
+    const ratio = Number(hour?.participationPct ?? hour?.passRatio);
+    return Number.isFinite(ratio) ? `${formatTurkishFixed(ratio, 2)}%` : '-';
+  }
+
+  function dailyResultCode(value) {
+    const raw = repairCsvMojibake(String(value || '')).trim().toUpperCase();
+    const normalized = raw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[İI]/g, 'I')
+      .replace(/Ğ/g, 'G')
+      .replace(/Ü/g, 'U')
+      .replace(/Ş/g, 'S')
+      .replace(/Ö/g, 'O')
+      .replace(/Ç/g, 'C');
+    if (normalized === 'SAGLADI' || normalized === 'OK') return 'OK';
+    if (normalized === 'SAGLAMADI' || normalized === 'X' || normalized === 'FAIL') return 'X';
+    if (normalized === 'DD' || normalized === 'YY' || normalized === 'KY') return normalized;
+    return raw;
+  }
+
   const COMPARE_EXPORT_COLUMNS = [
     { key: 'localDate', header: 'Tarih', type: 'text' },
     { key: 'hour', header: 'Saat', type: 'hour' },
@@ -1390,6 +1448,7 @@
     parseEkcCsvText,
     parseRgdhCsvText,
     buildExportCsv,
+    buildDailyPivotExportCsv,
     buildCompareExportCsv,
     buildCatalogExportCsv,
     normalizeCsvLineEndings,

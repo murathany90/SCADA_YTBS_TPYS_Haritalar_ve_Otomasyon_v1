@@ -16,6 +16,8 @@
     chartSelection: { busbarId: null, hour: null, date: null },
     compareSelection: { busbarId: '', ytm: '', hourMode: 'all', hourStart: null, hourEnd: null, hour: null, date: null },
     dailyFilters: { busbarId: '', ytm: '', date: '', controlSource: '' },
+    dailyDisplayMode: 'percent',
+    dailyMetricSort: { key: '', direction: 'asc' },
     compareHourRows: [],
     rawPageKey: null,
     rawUnitSelection: null,
@@ -53,6 +55,30 @@
     { key: 'busbar2Ta', label: 'Bara 2 TA' },
     { key: 'busbar2Setnum', label: 'Bara 2 Setnum' },
     { key: 'busbar3Ta', label: 'Bara 3 TA' }
+  ];
+
+  const DAILY_METRIC_COLUMNS = [
+    { key: 'localDate', label: 'Tarih', html: (row) => escapeHtml(row.localDate || '-') },
+    { key: 'hour', label: 'Saat', html: (row) => escapeHtml(`${String(row.hour).padStart(2, '0')}:00`) },
+    { key: 'busbarName', label: 'Bara', html: (row) => renderHybridNameHtml(row.busbarName || '-', row, { showSk: true }) },
+    { key: 'sourceType', label: 'Tip', html: (row) => escapeHtml(row.sourceType || '-') },
+    { key: 'controlSource', label: 'Kaynak Tipi', html: (row) => renderDailySourceBadge(row) },
+    { key: 'hourResult', label: 'Sonuc', html: (row) => `${escapeHtml(row.hourResult || '-')}${renderSkBadge(row, { requireActive: true, showCount: true })}` },
+    { key: 'passCount', label: 'Sagladi', html: (row) => formatNumber(row.passCount) },
+    { key: 'failCount', label: 'Saglamadi', html: (row) => formatNumber(row.failCount) },
+    { key: 'ddCount', label: 'DD', html: (row) => formatNumber(row.ddCount) },
+    { key: 'yyCount', label: 'YY', html: (row) => formatNumber(row.yyCount) },
+    { key: 'kyCount', label: 'KY', html: (row) => formatNumber(row.kyCount) },
+    { key: 'participationPct', label: 'Katilim', html: (row) => formatPercent(row.participationPct) },
+    { key: 'droopPctAvg', label: 'Ort Droop %', html: (row) => formatNumber(row.droopPctAvg) },
+    { key: 'pnomAvg', label: 'Pnom', html: (row) => formatNumber(row.pnomAvg) },
+    { key: 'pnomPct10', label: 'Pnom %10', html: (row) => formatNumber(row.pnomPct10) },
+    { key: 'pnomPct50', label: 'Pnom %50', html: (row) => formatNumber(row.pnomPct50) },
+    { key: 'pmkudAvg', label: 'MKUD', html: (row) => formatNumber(row.pmkudAvg) },
+    { key: 'pgenAvg', label: 'Ort P', html: (row) => formatNumber(row.pgenAvg) },
+    { key: 'qgenAvg', label: 'Ort Q', html: (row) => formatNumber(row.qgenAvg) },
+    { key: 'setAvg', label: 'Ort V Set', html: (row) => formatNumber(row.setAvg) },
+    { key: 'voltageAvg', label: 'Ort V', html: (row) => formatNumber(row.voltageAvg) }
   ];
 
   document.addEventListener('DOMContentLoaded', init);
@@ -154,7 +180,7 @@
       'btnFetchYks', 'btnCancelFetch', 'btnPickCsv', 'csvInput', 'btnLoadLocalEkc', 'localEkcDirectoryInput',
       'btnExportCsv', 'btnToggleTheme', 'btnToggleVoltage',
       'statSource', 'statRows', 'statBusbars',
-      'statMismatch', 'statStatus', 'rawTable', 'rawPager', 'rawPageInfo', 'btnRawFirst', 'btnRawPrev', 'btnRawNext', 'btnRawLast', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyFilterBar', 'dailyFilterBusbar', 'dailyFilterYtm', 'dailyFilterDate', 'dailyFilterControlSource', 'btnClearDailyFilters', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
+      'statMismatch', 'statStatus', 'rawTable', 'rawPager', 'rawPageInfo', 'btnRawFirst', 'btnRawPrev', 'btnRawNext', 'btnRawLast', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyFilterBar', 'dailyFilterBusbar', 'dailyFilterYtm', 'dailyFilterDate', 'dailyFilterControlSource', 'btnClearDailyFilters', 'btnToggleDailyDisplayMode', 'btnExportDailyCsv', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
       'testCatalogSearchInput', 'testBusbarTypeSelect', 'testBusbarSelect', 'testHybridOnlyCheckbox', 'btnExportTestsCsv',
       'btnErrorDetails', 'extensionLogCount', 'extensionLogPanel', 'btnCloseErrors', 'btnExportExtensionLogCsv', 'btnClearErrorLogs', 'extensionLogList',
       'btnYksLogs', 'yksLogCount', 'yksLogPanel', 'btnRefreshYksLogs', 'btnExportYksLogCsv', 'btnClearYksLogs', 'btnCloseYksLogs', 'yksLogList',
@@ -176,6 +202,8 @@
     [el.dailyFilterBusbar, el.dailyFilterYtm, el.dailyFilterDate, el.dailyFilterControlSource]
       .forEach((input) => input?.addEventListener('input', handleDailyFilterChange));
     el.btnClearDailyFilters?.addEventListener('click', clearDailyFilters);
+    el.btnToggleDailyDisplayMode?.addEventListener('click', toggleDailyDisplayMode);
+    el.btnExportDailyCsv?.addEventListener('click', exportDailyCsv);
     [el.testCatalogSearchInput, el.testBusbarTypeSelect, el.testBusbarSelect, el.testHybridOnlyCheckbox]
       .forEach((input) => input.addEventListener('input', () => {
         syncDynamicOptions();
@@ -195,6 +223,13 @@
     el.btnLoadLocalEkc?.addEventListener('click', handleLocalEkcLoad);
     el.localEkcDirectoryInput?.addEventListener('change', handleLocalEkcDirectoryFallbackFiles);
     el.btnToggleDailyMetricTable?.addEventListener('click', toggleDailyMetricTable);
+    el.dailyMetricTable?.addEventListener('click', (event) => {
+      const button = event.target?.closest?.('[data-daily-metric-sort-key]');
+      if (!button) return;
+      event.preventDefault();
+      setDailyMetricSort(button.dataset.dailyMetricSortKey);
+      renderAll();
+    });
     [
       [el.btnRawFirst, 'first'],
       [el.btnRawPrev, 'prev'],
@@ -1032,6 +1067,7 @@
     renderRawTable(rows);
     renderRawUnitDetail();
     renderDailyFilters(dailyPivotRows);
+    updateDailyDisplayModeButton();
     renderDailyTable(filteredDailyPivotRows);
     renderDailyMetricTable(filteredDailyPivotRows);
     renderCharts(rows, state.pivot.rows);
@@ -1167,6 +1203,17 @@
     state.dailyFilters = emptyDailyFilters();
     applyDailyFiltersToTopFilters(state.dailyFilters);
     renderAll();
+  }
+
+  function toggleDailyDisplayMode() {
+    state.dailyDisplayMode = state.dailyDisplayMode === 'percent' ? 'result' : 'percent';
+    updateDailyDisplayModeButton();
+    renderAll();
+  }
+
+  function updateDailyDisplayModeButton() {
+    if (!el.btnToggleDailyDisplayMode) return;
+    el.btnToggleDailyDisplayMode.textContent = state.dailyDisplayMode === 'percent' ? 'Sonuç Göster' : 'Yüzde Göster';
   }
 
   function syncDailyFiltersFromTopFilters() {
@@ -1995,7 +2042,7 @@
         const td = document.createElement('td');
         td.className = RGDH_PIVOT.participationClass(hour);
         const resultLabel = reactiveLabel(hour.hourResult || hour.status);
-        td.innerHTML = `<button class="rgdh-daily-hour-link" type="button">${escapeHtml(formatHourCellText(hour))}</button>${renderSkBadge(hour, { requireActive: true, showCount: true })}`;
+        td.innerHTML = `<button class="rgdh-daily-hour-link" type="button">${escapeHtml(formatDailyHourCellText(hour, state.dailyDisplayMode))}</button>${renderSkBadge(hour, { requireActive: true, showCount: true })}`;
         td.title = [
           `${String(hour.hour).padStart(2, '0')}:00`,
           `Sonuc ${resultLabel}`,
@@ -2033,46 +2080,83 @@
 
   function renderDailyMetricTable(pivotRows) {
     if (!el.dailyMetricTable || !RGDH_CHARTS?.buildHourMetricRows) return;
-    const headers = [
-      'Tarih', 'Saat', 'Bara', 'Tip', 'Kaynak Tipi', 'Sonuc', 'Sagladi', 'Saglamadi', 'DD', 'YY', 'KY',
-      'Katilim', 'Ort Droop %', 'Pnom', 'Pnom %10', 'Pnom %50', 'MKUD', 'Ort P', 'Ort Q', 'Ort V Set', 'Ort V'
-    ];
-    el.dailyMetricTable.innerHTML = `<thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>`;
+    el.dailyMetricTable.innerHTML = `<thead><tr>${DAILY_METRIC_COLUMNS.map(renderDailyMetricSortHeader).join('')}</tr></thead>`;
     const tbody = document.createElement('tbody');
-    RGDH_CHARTS.buildHourMetricRows(pivotRows).forEach((row) => {
+    const metricRows = sortDailyMetricRows(RGDH_CHARTS.buildHourMetricRows(pivotRows));
+    metricRows.forEach((row) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = [
-        escapeHtml(row.localDate || '-'),
-        escapeHtml(`${String(row.hour).padStart(2, '0')}:00`),
-        renderHybridNameHtml(row.busbarName || '-', row, { showSk: true }),
-        escapeHtml(row.sourceType || '-'),
-        renderDailySourceBadge(row),
-        `${escapeHtml(row.hourResult || '-')}${renderSkBadge(row, { requireActive: true, showCount: true })}`,
-        formatNumber(row.passCount),
-        formatNumber(row.failCount),
-        formatNumber(row.ddCount),
-        formatNumber(row.yyCount),
-        formatNumber(row.kyCount),
-        formatPercent(row.participationPct),
-        formatNumber(row.droopPctAvg),
-        formatNumber(row.pnomAvg),
-        formatNumber(row.pnomPct10),
-        formatNumber(row.pnomPct50),
-        formatNumber(row.pmkudAvg),
-        formatNumber(row.pgenAvg),
-        formatNumber(row.qgenAvg),
-        formatNumber(row.setAvg),
-        formatNumber(row.voltageAvg)
-      ].map((value) => `<td>${value}</td>`).join('');
+      tr.innerHTML = DAILY_METRIC_COLUMNS.map((column) => `<td>${renderDailyMetricTableCell(row, column)}</td>`).join('');
       tbody.appendChild(tr);
     });
     el.dailyMetricTable.appendChild(tbody);
+  }
+
+  function renderDailyMetricSortHeader(column) {
+    const sort = state.dailyMetricSort || {};
+    const active = sort.key === column.key;
+    const direction = active && sort.direction === 'desc' ? 'desc' : 'asc';
+    const ariaSort = active ? (direction === 'desc' ? 'descending' : 'ascending') : 'none';
+    const indicator = active ? (direction === 'desc' ? 'v' : '^') : '';
+    return `<th aria-sort="${ariaSort}"><button type="button" class="rgdh-sort-button ${active ? 'active' : ''}" data-daily-metric-sort-key="${escapeHtml(column.key)}">${escapeHtml(column.label)}<span class="rgdh-sort-indicator" aria-hidden="true">${indicator}</span></button></th>`;
+  }
+
+  function renderDailyMetricTableCell(row, column) {
+    if (typeof column.html === 'function') return column.html(row);
+    const value = row?.[column.key];
+    return escapeHtml(value === null || value === undefined || value === '' ? '-' : value);
+  }
+
+  function setDailyMetricSort(key) {
+    if (!DAILY_METRIC_COLUMNS.some((column) => column.key === key)) return;
+    const current = state.dailyMetricSort || { key: '', direction: 'asc' };
+    state.dailyMetricSort = {
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    };
+  }
+
+  function sortDailyMetricRows(rows) {
+    const sort = state.dailyMetricSort || {};
+    const column = DAILY_METRIC_COLUMNS.find((candidate) => candidate.key === sort.key);
+    if (!column) return rows || [];
+    const direction = sort.direction === 'desc' ? -1 : 1;
+    return [...(rows || [])].map((row, index) => ({ row, index })).sort((a, b) => {
+      const primary = compareSortValues(dailyMetricSortValue(a.row, column), dailyMetricSortValue(b.row, column));
+      if (primary) return primary * direction;
+      const fallback = compareDailyMetricDefault(a.row, b.row);
+      return fallback || a.index - b.index;
+    }).map((item) => item.row);
+  }
+
+  function dailyMetricSortValue(row, column) {
+    if (typeof column.sortValue === 'function') return column.sortValue(row);
+    return row?.[column.key];
+  }
+
+  function compareDailyMetricDefault(a, b) {
+    return compareSortValues(a?.localDate, b?.localDate)
+      || compareSortValues(a?.hour, b?.hour)
+      || compareSortValues(a?.busbarName, b?.busbarName)
+      || compareSortValues(a?.controlSource, b?.controlSource);
   }
 
   function formatHourCellText(hour) {
     const result = normalizeReactiveResult(hour?.hourResult || hour?.status);
     if (result === 'DD' || result === 'YY' || result === 'KY') return result;
     return formatPercent(hour?.participationPct ?? hour?.passRatio);
+  }
+
+  function formatDailyHourCellText(hour, displayMode = state.dailyDisplayMode) {
+    if (displayMode === 'result') return dailyHourResultCode(hour);
+    return formatHourCellText(hour);
+  }
+
+  function dailyHourResultCode(hour) {
+    const result = normalizeReactiveResult(hour?.hourResult || hour?.status);
+    if (result === 'SAGLADI') return 'OK';
+    if (result === 'SAGLAMADI') return 'X';
+    if (result === 'DD' || result === 'YY' || result === 'KY') return result;
+    return result || '-';
   }
 
   function renderCharts(rows, pivotRows) {
@@ -3034,6 +3118,21 @@
     const rows = getFilteredRows();
     const text = RGDH_CSV.buildExportCsv(rows);
     downloadCsv(`RGDH_HAM_DATA_${readFilters().date}.csv`, text);
+  }
+
+  function exportDailyCsv() {
+    const rows = getFilteredRows();
+    const ekcRows = getFilteredEkcRows();
+    const dailyPivotRows = buildDailyControlPivotRows(rows, ekcRows);
+    const filteredDailyPivotRows = filterDailyPivotRows(dailyPivotRows, state.dailyFilters);
+    const text = RGDH_CSV.buildDailyPivotExportCsv(filteredDailyPivotRows, { displayMode: state.dailyDisplayMode });
+    downloadCsv(dailyCsvFilename(), text);
+  }
+
+  function dailyCsvFilename() {
+    const filters = readFilters();
+    const date = state.dailyFilters?.date || (!filters.endDate ? filters.date : '');
+    return date ? `RGDH_GUNLUK_${date}.csv` : 'RGDH_GUNLUK.csv';
   }
 
   function exportTestsCsv() {

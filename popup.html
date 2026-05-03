@@ -24,9 +24,14 @@
 
     <section class="card">
       <h2>RGDH Uzlaştırma Otomasyon</h2>
-      <div class="row between center gap">
-        <button id="btnPickCsv" class="primary">Uzlastirma CSV Yukle</button>
-        <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+      <div class="grid-actions four">
+        <button id="btnPickCsv" class="primary">Uzlaştırma CSV Yükle</button>
+        <button id="btnAnalyze">Analiz Et</button>
+        <button id="btnApply" class="primary">CSV TPYS Eşleştirme</button>
+        <button id="btnToggleSimplify">TPYS Sayfa Sadeleştir</button>
+      </div>
+      <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+      <div class="row between center gap file-row">
         <span id="fileName" class="file-pill">Dosya seçilmedi</span>
       </div>
       <div class="stats">
@@ -34,20 +39,20 @@
         <div class="stat"><span>CSV satırı</span><strong id="csvRowCount">0</strong></div>
         <div class="stat"><span>CSV tarih</span><strong id="csvDateCount">0</strong></div>
       </div>
-    </section>
-
-    <section class="card">
-      <h2>Reaktif eşleştirme RGDH Sonuç Otomasyon</h2>
-      <div class="grid-actions four">
-        <button id="btnAnalyze">Analiz Et</button>
-        <button id="btnApply" class="primary">CSV TPYS Eşleşme</button>
-        <button id="btnCommit">ERP Commit</button>
-        <button id="btnToggleSimplify">Onay sadeleştir</button>
-      </div>
       <div class="stats compact">
         <div class="stat"><span>Sayfa tarihi</span><strong id="pageDate">-</strong></div>
         <div class="stat"><span>Sayfa bara</span><strong id="pageBaraCount">0</strong></div>
         <div class="stat"><span>Eşleşen</span><strong id="matchedCount">0</strong></div>
+      </div>
+      <div class="stats compact match-summary">
+        <div class="stat"><span>Eşleşen bara</span><strong id="matchedBaraName">-</strong></div>
+        <div class="stat"><span>Tarih sayısı</span><strong id="matchedDateCount">0</strong></div>
+        <div class="stat"><span>Saat sayısı</span><strong id="matchedHourCount">0</strong></div>
+      </div>
+      <div class="stats compact status-comparison-summary">
+        <div class="stat"><span>TPYS=CSV saat</span><strong id="sameHourCount">0</strong></div>
+        <div class="stat"><span>Farklı saat</span><strong id="differentHourCount">0</strong></div>
+        <div class="stat"><span>Değişen farklı</span><strong id="changedHourCount">0</strong></div>
       </div>
       <p class="hint">Hızlı mod açıkken önce ExtJS store üzerinden toplu yazım denenir; olmazsa hücre bazlı DOM moduna düşülür.</p>
     </section>
@@ -82,7 +87,6 @@
         <label>X <input id="labelX" type="text"></label>
         <label>KY <input id="labelKY" type="text"></label>
       </div>
-      <label class="checkbox-row"><input id="checkApproval" type="checkbox"><span>Durumdan sonra onay hücresini de işaretlemeyi dene</span></label>
       <label class="checkbox-row"><input id="strictDateCheck" type="checkbox"><span>Tarih uyarısında işlemi durdur (kapalıysa devam onayı iste)</span></label>
       <label class="checkbox-row"><input id="fastExtMode" type="checkbox"><span>Önce hızlı ExtJS toplu yazım modunu dene</span></label>
       <label class="checkbox-row"><input id="onlyChangedCells" type="checkbox"><span>Sadece farklı hücreleri değiştir</span></label>
@@ -95,6 +99,7 @@
     </section>
   </main>
   <script src="map-common.js"></script>
+  <script src="tpys-periodic-rgdh-planner.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

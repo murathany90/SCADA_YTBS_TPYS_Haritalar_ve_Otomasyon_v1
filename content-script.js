@@ -2,6 +2,8 @@
   if (window.__tpysReactiveExtensionLoadedV3) return;
   window.__tpysReactiveExtensionLoadedV3 = true;
 
+  const STATUS_COMPANION_SUFFIXES = ['_qw_', '_txt', '_text', '_dsc', '_ad', '_adi'];
+
   initializeExtensionEnhancements();
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -78,26 +80,48 @@
   }
 
   function collectPageRows() {
-    const lockedRows = Array.from(document.querySelectorAll('.x-grid3-locked .x-grid3-body .x-grid3-row'));
-    const unlockedRows = Array.from(document.querySelectorAll('.x-grid3-viewport .x-grid3-body .x-grid3-row'));
-    const count = Math.min(lockedRows.length, unlockedRows.length);
+    const { lockedRows, unlockedRows } = getApprovalGridRows();
+    const count = Math.max(lockedRows.length, unlockedRows.length);
     const rows = [];
 
     for (let i = 0; i < count; i += 1) {
       const lockedRow = lockedRows[i];
       const unlockedRow = unlockedRows[i];
-      const baraCell = lockedRow.querySelector('.x-grid3-td-bara_ad .x-grid3-cell-inner');
-      const baraName = (baraCell?.textContent || '').trim();
+      const baraName = extractGridCellText(lockedRow, 'bara_ad') || extractGridCellText(unlockedRow, 'bara_ad');
+      const pageDate = extractGridCellText(lockedRow, 'gecerlilik_dt') || extractGridCellText(unlockedRow, 'gecerlilik_dt');
+      const statusLabelByHour = collectStatusLabelByHour(unlockedRow);
       if (!baraName) continue;
       rows.push({
         rowIndex: i,
         baraName,
-        lockedRowHtmlId: lockedRow.id || '',
-        unlockedRowHtmlId: unlockedRow.id || ''
+        pageDate,
+        localDate: normalizePeriodDate(pageDate),
+        statusLabelByHour,
+        lockedRowHtmlId: lockedRow?.id || '',
+        unlockedRowHtmlId: unlockedRow?.id || ''
       });
     }
 
     return rows;
+  }
+
+  function collectStatusLabelByHour(row) {
+    const labels = {};
+    for (let hour = 0; hour < 24; hour += 1) {
+      const label = extractGridCellText(row, `lkp_reaktif_yerine_getirme${hour}`);
+      if (label) labels[hour] = label;
+    }
+    return labels;
+  }
+
+  function extractGridCellText(row, dataIndex) {
+    if (!row) return '';
+    if (dataIndex === 'gecerlilik_dt') {
+      const dateCell = row.querySelector('.x-grid3-td-gecerlilik_dt .x-grid3-cell-inner');
+      if (dateCell) return (dateCell.textContent || '').trim();
+    }
+    const cell = row.querySelector(`.x-grid3-td-${dataIndex} .x-grid3-cell-inner`);
+    return (cell?.textContent || '').trim();
   }
 
   async function applyPlan(operations, settings) {
@@ -126,6 +150,9 @@
     if (!store || !getStoreCount(store)) return { ok: false, reason: 'Grid store bulunamadı.' };
 
     const fieldMeta = buildGridFieldMeta(grid, cm, store, pageRows);
+    if (!fieldMeta.dateField && operations.some((operation) => operation.localDate || operation.sourceDate)) {
+      return { ok: false, reason: 'Gecerlilik tarihi alani cozulemedi.' };
+    }
     if (!fieldMeta.baraField) return { ok: false, reason: 'Bara alanı çözümlenemedi.' };
 
     const distinctStatusLabels = new Set();
@@ -157,11 +184,17 @@
       }
     }
 
+    const recordIndexByKey = new Map();
     const recordIndexByName = new Map();
     const recordCount = getStoreCount(store);
     for (let i = 0; i < recordCount; i += 1) {
       const record = getStoreRecord(store, i);
       const baraName = getRecordValue(record, fieldMeta.baraField);
+      const localDate = normalizePeriodDate(getRecordValue(record, fieldMeta.dateField));
+      const periodKey = makePeriodKey(baraName, localDate);
+      if (periodKey && !recordIndexByKey.has(periodKey)) {
+        recordIndexByKey.set(periodKey, i);
+      }
       if (baraName) {
         recordIndexByName.set(normalizeText(baraName), i);
       }
@@ -184,9 +217,13 @@
         summary.failures += 1;
         continue;
       }
-      const recordIndex = recordIndexByName.get(normalizeText(operation.tpysBaraAdi));
+      const operationKey = makePeriodKey(operation.tpysBaraAdi, operation.localDate || operation.sourceDate);
+      const operationNameKey = normalizeText(operation.tpysBaraAdi);
+      const recordIndex = operationKey
+        ? recordIndexByKey.get(operationKey)
+        : recordIndexByName.get(operationNameKey);
       if (recordIndex === undefined) {
-        errors.push(`ERP store içinde bulunamadı: ${operation.tpysBaraAdi}`);
+        errors.push(`ERP store içinde bulunamadı: ${operation.tpysBaraAdi} ${operation.localDate || operation.sourceDate || ''}`);
         summary.failures += 1;
         continue;
       }
@@ -199,7 +236,6 @@
 
         const desiredLabel = settings.statusLabels[code] || code;
         const statusDataIndex = fieldMeta.statusByHour.get(hour);
-        const approvalDataIndex = fieldMeta.approvalByHour.get(hour);
 
         if (!statusDataIndex) {
           errors.push(`${operation.tpysBaraAdi} | ${hour}: Durum dataIndex bulunamadı.`);
@@ -216,17 +252,8 @@
           writes.push({ recordIndex, dataIndex: statusDataIndex, value: desiredValue, kind: 'status' });
           summary.statusWritesOk += 1;
         }
+        collectCompanionStatusWrites(record, recordIndex, statusDataIndex, desiredLabel, writes);
 
-        if (settings.checkApproval && approvalDataIndex) {
-          const currentApproval = getRecordValue(record, approvalDataIndex);
-          const desiredApproval = coerceApprovalValue(currentApproval, true);
-          if (settings.onlyChangedCells && approvalsEqual(currentApproval, desiredApproval)) {
-            summary.unchanged += 1;
-          } else {
-            writes.push({ recordIndex, dataIndex: approvalDataIndex, value: desiredApproval, kind: 'approval' });
-            summary.approvalWritesOk += 1;
-          }
-        }
       }
     }
 
@@ -256,13 +283,19 @@
       for (const [recordIndex, rowWrites] of writesByRecord.entries()) {
         const record = getStoreRecord(store, recordIndex);
         if (!record) continue;
+        let hasDirtyWrite = false;
         if (typeof record.beginEdit === 'function') record.beginEdit();
         for (const write of rowWrites) {
-          if (typeof record.set === 'function') record.set(write.dataIndex, write.value);
-          else if (record.data) record.data[write.dataIndex] = write.value;
+          if (write.kind === 'status-companion') {
+            setRecordDataDirect(record, write.dataIndex, write.value);
+          } else {
+            hasDirtyWrite = true;
+            if (typeof record.set === 'function') record.set(write.dataIndex, write.value);
+            else setRecordDataDirect(record, write.dataIndex, write.value);
+          }
         }
         if (typeof record.endEdit === 'function') record.endEdit();
-        if (typeof record.dirty !== 'undefined') record.dirty = true;
+        if (hasDirtyWrite && typeof record.dirty !== 'undefined') record.dirty = true;
       }
 
       const view = getGridView(grid);
@@ -281,9 +314,24 @@
     }
   }
 
+  function collectCompanionStatusWrites(record, recordIndex, statusDataIndex, desiredLabel, writes) {
+    for (const suffix of STATUS_COMPANION_SUFFIXES) {
+      const dataIndex = `${statusDataIndex}${suffix}`;
+      if (!recordHasField(record, dataIndex)) continue;
+      const currentLabel = getRecordValue(record, dataIndex);
+      if (normalizeText(currentLabel) === normalizeText(desiredLabel)) continue;
+      writes.push({ recordIndex, dataIndex, value: desiredLabel, kind: 'status-companion' });
+    }
+  }
+
   async function applyPlanViaDom(operations, settings, pageRows) {
-    const pageMap = new Map(pageRows.map((row) => [normalizeText(row.baraName), row.rowIndex]));
-    const unlockedRows = Array.from(document.querySelectorAll('.x-grid3-viewport .x-grid3-body .x-grid3-row'));
+    const pageMap = new Map();
+    for (const row of pageRows) {
+      const key = makePeriodKey(row.baraName, row.localDate || row.pageDate);
+      if (key && !pageMap.has(key)) pageMap.set(key, row.rowIndex);
+      if (!key && row.baraName) pageMap.set(normalizeText(row.baraName), row.rowIndex);
+    }
+    const { unlockedRows } = getApprovalGridRows();
 
     const summary = {
       totalBarasInPlan: operations.length,
@@ -302,9 +350,12 @@
         continue;
       }
 
-      const rowIndex = pageMap.get(normalizeText(operation.tpysBaraAdi));
+      const operationKey = makePeriodKey(operation.tpysBaraAdi, operation.localDate || operation.sourceDate);
+      const rowIndex = operationKey
+        ? pageMap.get(operationKey)
+        : pageMap.get(normalizeText(operation.tpysBaraAdi));
       if (rowIndex === undefined) {
-        errors.push(`ERP sayfasında bulunamadı: ${operation.tpysBaraAdi}`);
+        errors.push(`ERP sayfasında bulunamadı: ${operation.tpysBaraAdi} ${operation.localDate || operation.sourceDate || ''}`);
         summary.failures += 1;
         continue;
       }
@@ -326,7 +377,6 @@
 
         const desiredLabel = settings.statusLabels[statusCode] || statusCode;
         const statusCell = rowEl.querySelector(`.x-grid3-td-lkp_reaktif_yerine_getirme${hour}`);
-        const approvalCell = rowEl.querySelector(`.x-grid3-td-onay_durum_flag${hour}`);
 
         if (!statusCell) {
           errors.push(`${operation.tpysBaraAdi} | ${hour}: Durum hücresi bulunamadı.`);
@@ -334,7 +384,12 @@
           continue;
         }
 
-        const statusResult = await writeStatus(statusCell, desiredLabel, settings);
+        let statusResult;
+        try {
+          statusResult = await writeStatus(statusCell, desiredLabel, settings);
+        } catch (error) {
+          statusResult = { ok: false, reason: formatDomFallbackError(error) };
+        }
         if (statusResult.ok) {
           if (statusResult.changed) summary.statusWritesOk += 1;
           else summary.unchanged += 1;
@@ -342,17 +397,6 @@
           errors.push(`${operation.tpysBaraAdi} | ${hour}: ${statusResult.reason}`);
           summary.failures += 1;
           continue;
-        }
-
-        if (settings.checkApproval && approvalCell) {
-          const approvalResult = await setApproval(approvalCell, true);
-          if (approvalResult.ok) {
-            if (approvalResult.changed) summary.approvalWritesOk += 1;
-            else summary.unchanged += 1;
-          } else {
-            errors.push(`${operation.tpysBaraAdi} | ${hour}: ${approvalResult.reason}`);
-            summary.failures += 1;
-          }
         }
       }
     }
@@ -388,7 +432,6 @@
         await sleep(35);
         const pickerAgain = findVisibleComboItem(desiredLabel);
         if (pickerAgain) clickElement(pickerAgain);
-        else pressKey(input, 'Enter');
         await sleep(35);
         clickOutside();
         await sleep(20);
@@ -401,6 +444,14 @@
     }
 
     return { ok: false, reason: `Durum yazılamadı. Beklenen etiket: ${desiredLabel}` };
+  }
+
+  function formatDomFallbackError(error) {
+    const message = error?.message || String(error || 'bilinmeyen hata');
+    if (/Untrusted event/i.test(message)) {
+      return `DOM fallback sentetik event engeline takildi (Untrusted event). MAIN-world ExtJS hizli mod kullanilamadiysa sayfa yenilenip tekrar denenmeli.`;
+    }
+    return `DOM fallback hatasi: ${message}`;
   }
 
   async function setApproval(cell, checked) {
@@ -447,6 +498,7 @@
     if (!Ext) return null;
     const components = collectExtComponents(Ext);
     const visibleNames = new Set(pageRows.map((row) => normalizeText(row.baraName)));
+    const visibleDates = new Set(pageRows.map((row) => normalizePeriodDate(row.localDate || row.pageDate)).filter(Boolean));
 
     let best = null;
     let bestScore = -1;
@@ -468,8 +520,17 @@
         overlap = Math.max(overlap, matches);
       }
 
+      let dateOverlap = 0;
+      for (const field of sampleFields) {
+        const matches = countDateMatchesForField(store, field, visibleDates);
+        dateOverlap = Math.max(dateOverlap, matches);
+      }
+
       const hasStatusField = sampleFields.some((field) => /^lkp_reaktif_yerine_getirme0$/i.test(field));
-      const score = overlap * 10 + (hasStatusField ? 5 : 0) + Math.min(storeCount, 50) / 50;
+      const hasApprovalField = sampleFields.some((field) => /^onay_durum_flag0$/i.test(field));
+      const hasDateField = sampleFields.some((field) => /^gecerlilik_dt$/i.test(field));
+      const hasBaraAdField = sampleFields.some((field) => /^bara_ad$/i.test(field));
+      const score = overlap * 10 + dateOverlap * 8 + (hasStatusField ? 5 : 0) + (hasApprovalField ? 2 : 0) + (hasDateField ? 4 : 0) + (hasBaraAdField ? 2 : 0) + Math.min(storeCount, 50) / 50;
 
       if (score > bestScore) {
         bestScore = score;
@@ -531,6 +592,19 @@
     return record[field];
   }
 
+  function setRecordDataDirect(record, field, value) {
+    if (!record || !field) return;
+    if (record.data) record.data[field] = value;
+    else record[field] = value;
+  }
+
+  function recordHasField(record, field) {
+    if (!record || !field) return false;
+    if (record.data && Object.prototype.hasOwnProperty.call(record.data, field)) return true;
+    if (Array.isArray(record.fields?.items) && record.fields.items.some((item) => item?.name === field)) return true;
+    return Object.prototype.hasOwnProperty.call(record, field);
+  }
+
   function getCandidateFieldNamesFromStore(store) {
     const record = getStoreRecord(store, 0);
     if (!record) return [];
@@ -551,8 +625,20 @@
     return count;
   }
 
+  function countDateMatchesForField(store, field, visibleDates) {
+    if (!visibleDates.size) return 0;
+    let count = 0;
+    const limit = Math.min(getStoreCount(store), 200);
+    for (let i = 0; i < limit; i += 1) {
+      const value = normalizePeriodDate(getRecordValue(getStoreRecord(store, i), field));
+      if (visibleDates.has(value)) count += 1;
+    }
+    return count;
+  }
+
   function buildGridFieldMeta(grid, cm, store, pageRows) {
     const visibleNames = new Set(pageRows.map((row) => normalizeText(row.baraName)));
+    const visibleDates = new Set(pageRows.map((row) => normalizePeriodDate(row.localDate || row.pageDate)).filter(Boolean));
     const candidateFields = getCandidateFieldNamesFromStore(store);
 
     let baraField = '';
@@ -564,6 +650,19 @@
         baraField = field;
       }
     });
+
+    let dateField = candidateFields.find((dataIndex) => /^gecerlilik_dt$/i.test(String(dataIndex))) || '';
+    if (!dateField) {
+      let dateScore = -1;
+      candidateFields.forEach((field) => {
+        const score = countDateMatchesForField(store, field, visibleDates);
+        if (score > dateScore) {
+          dateScore = score;
+          dateField = field;
+        }
+      });
+      if (dateScore <= 0) dateField = '';
+    }
 
     const statusByHour = new Map();
     const approvalByHour = new Map();
@@ -582,7 +681,7 @@
       if (approvalMatch) approvalByHour.set(Number(approvalMatch[1]), dataIndex);
     }
 
-    return { baraField, statusByHour, approvalByHour, columnIndexByDataIndex };
+    return { baraField, dateField, statusByHour, approvalByHour, columnIndexByDataIndex };
   }
 
   function getColumnCount(cm) {
@@ -882,23 +981,18 @@
     const styleId = 'tpys-approval-simplify-style';
     const existing = document.getElementById(styleId);
     if (existing) existing.remove();
+    clearApprovalStatusColors();
 
     if (hidden) {
       const style = document.createElement('style');
       style.id = styleId;
-      const selectors = [
-        '.x-grid3-td-ytm_kisa_ad',
-        '.x-grid3-td-sehir_txt',
-        '.x-grid3-td-onay_durum',
-        '.x-grid3-td-aciklama',
-        ...Array.from({ length: 24 }, (_, i) => `.x-grid3-td-saat${i}`)
-      ];
-      style.textContent = `${selectors.join(', ')} { display: none !important; width: 0 !important; min-width: 0 !important; max-width: 0 !important; padding: 0 !important; border-left-width: 0 !important; border-right-width: 0 !important; }`;
+      style.textContent = buildApprovalSimplifyCss();
       document.head.appendChild(style);
     }
 
     requestAnimationFrame(() => {
       adjustApprovalGridLayout();
+      if (hidden) applyApprovalStatusColors();
       if (window.Ext) {
         try {
           const comps = collectExtComponents(window.Ext);
@@ -908,10 +1002,111 @@
     });
   }
 
-  function adjustApprovalGridLayout() {
-    const grids = Array.from(document.querySelectorAll('.x-grid3')).filter((grid) => {
-      return grid.querySelector('.x-grid3-td-bara_ad') && grid.querySelector('.x-grid3-td-onay_durum_flag0');
+  function buildApprovalSimplifyCss() {
+    const allowedColumns = getApprovalSimplifyAllowedColumnClasses();
+    const columnClasses = collectApprovalGridColumnClasses();
+    const hiddenSelectors = columnClasses
+      .filter((className) => !allowedColumns.has(className))
+      .map((className) => `.${className}`);
+    const fallbackHiddenSelectors = [
+      '.x-grid3-td-uevcb_org_names',
+      '.x-grid3-td-lkp_bara_gerilim',
+      '.x-grid3-td-ytm_kisa_ad',
+      '.x-grid3-td-sehir_txt',
+      '.x-grid3-td-onay_durum',
+      '.x-grid3-td-version_user_id',
+      '.x-grid3-td-version_dttm',
+      ...Array.from({ length: 24 }, (_, i) => `.x-grid3-td-saat${i}`),
+      ...Array.from({ length: 24 }, (_, i) => `.x-grid3-td-onay_durum_flag${i}`)
+    ];
+    const selectors = hiddenSelectors.length ? hiddenSelectors : fallbackHiddenSelectors;
+    const hideRule = `${selectors.join(', ')} { display: none !important; width: 0 !important; min-width: 0 !important; max-width: 0 !important; padding: 0 !important; border-left-width: 0 !important; border-right-width: 0 !important; }`;
+    const colorRules = [
+      '.tpys-status-sagladi { background-color: #dcfce7 !important; }',
+      '.tpys-status-sagladi .x-grid3-cell-inner { color: #166534 !important; font-weight: 700 !important; }',
+      '.tpys-status-saglamadi { background-color: #fee2e2 !important; }',
+      '.tpys-status-saglamadi .x-grid3-cell-inner { color: #991b1b !important; font-weight: 700 !important; }',
+      '.tpys-status-devrede-degil { background-color: #fef3c7 !important; }',
+      '.tpys-status-devrede-degil .x-grid3-cell-inner { color: #92400e !important; font-weight: 700 !important; }',
+      '.tpys-status-yukumlulugu-yok { background-color: #ede9fe !important; }',
+      '.tpys-status-yukumlulugu-yok .x-grid3-cell-inner { color: #5b21b6 !important; font-weight: 700 !important; }'
+    ];
+    return `${hideRule}\n${colorRules.join('\n')}`;
+  }
+
+  function getApprovalSimplifyAllowedColumnClasses() {
+    return new Set([
+      'x-grid3-td-gecerlilik_dt',
+      'x-grid3-td-bara_ad',
+      ...Array.from({ length: 24 }, (_, i) => `x-grid3-td-lkp_reaktif_yerine_getirme${i}`)
+    ]);
+  }
+
+  function collectApprovalGridColumnClasses() {
+    const grids = findApprovalGrids();
+    const classNames = new Set();
+    grids.forEach((grid) => {
+      grid.querySelectorAll('[class*="x-grid3-td-"]').forEach((node) => {
+        Array.from(node.classList || []).forEach((className) => {
+          if (/^x-grid3-td-/.test(className)) classNames.add(className);
+        });
+      });
     });
+    return [...classNames];
+  }
+
+  function findApprovalGrids() {
+    return Array.from(document.querySelectorAll('.x-grid3')).filter((grid) => {
+      return grid.querySelector('.x-grid3-td-bara_ad') && grid.querySelector('.x-grid3-td-lkp_reaktif_yerine_getirme0');
+    });
+  }
+
+  function getApprovalGridRows() {
+    const grid = findApprovalGrids()[0] || null;
+    if (grid) {
+      return {
+        lockedRows: Array.from(grid.querySelectorAll('.x-grid3-locked .x-grid3-body .x-grid3-row')),
+        unlockedRows: Array.from(grid.querySelectorAll('.x-grid3-unlocked .x-grid3-body .x-grid3-row'))
+      };
+    }
+    return {
+      lockedRows: Array.from(document.querySelectorAll('.x-grid3-locked .x-grid3-body .x-grid3-row')),
+      unlockedRows: Array.from(document.querySelectorAll('.x-grid3-unlocked .x-grid3-body .x-grid3-row'))
+    };
+  }
+
+  function applyApprovalStatusColors() {
+    clearApprovalStatusColors();
+    const statusClasses = getApprovalStatusColorClasses();
+    for (let hour = 0; hour < 24; hour += 1) {
+      document.querySelectorAll(`.x-grid3-td-lkp_reaktif_yerine_getirme${hour}`).forEach((cell) => {
+        const normalized = normalizeText(cell.textContent || '');
+        const className = statusClasses.get(normalized);
+        if (className) cell.classList.add(className);
+      });
+    }
+  }
+
+  function clearApprovalStatusColors() {
+    const classNames = [...getApprovalStatusColorClasses().values()];
+    if (!classNames.length) return;
+    document.querySelectorAll(classNames.map((className) => `.${className}`).join(', ')).forEach((cell) => {
+      classNames.forEach((className) => cell.classList.remove(className));
+    });
+  }
+
+  function getApprovalStatusColorClasses() {
+    return new Map([
+      [normalizeText('Sağladı'), 'tpys-status-sagladi'],
+      [normalizeText('Sağlamadı'), 'tpys-status-saglamadi'],
+      [normalizeText('Devrede Değil'), 'tpys-status-devrede-degil'],
+      [normalizeText('Devre Dışı'), 'tpys-status-devrede-degil'],
+      [normalizeText('Yükümlülüğü Yok'), 'tpys-status-yukumlulugu-yok']
+    ]);
+  }
+
+  function adjustApprovalGridLayout() {
+    const grids = findApprovalGrids();
 
     grids.forEach((grid) => {
       const locked = grid.querySelector('.x-grid3-locked');
@@ -1494,6 +1689,26 @@
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
+  }
+
+  function normalizePeriodDate(value) {
+    if (value instanceof Date && Number.isFinite(value.getTime())) {
+      return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    }
+    const text = String(value || '').trim();
+    if (!text) return '';
+    let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) return `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`;
+    match = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/);
+    if (!match) return '';
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+    return `${year}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}`;
+  }
+
+  function makePeriodKey(baraName, localDate) {
+    const nameKey = normalizeText(baraName);
+    const dateKey = normalizePeriodDate(localDate);
+    return nameKey && dateKey ? `${nameKey}|${dateKey}` : '';
   }
 
   function normalizeCsvPageDateToIso(value) {

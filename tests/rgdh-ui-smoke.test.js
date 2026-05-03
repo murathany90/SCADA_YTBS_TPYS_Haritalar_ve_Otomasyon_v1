@@ -405,21 +405,43 @@ test('rgdh monitor daily tab exposes synced local filters for busbar, BYTM, date
   assert.match(html, /<label>Tarih[\s\S]*<select id="dailyFilterDate"/);
   assert.match(html, /<label>Kaynak Tipi[\s\S]*<select id="dailyFilterControlSource"/);
   assert.match(html, /id="btnClearDailyFilters"[\s\S]*Filtreleri Temizle/);
+  assert.match(html, /<div class="rgdh-daily-filter-actions">[\s\S]*id="btnClearDailyFilters"[\s\S]*id="btnToggleDailyDisplayMode"[\s\S]*id="btnExportDailyCsv"/);
+  assert.match(html, /id="btnToggleDailyDisplayMode"[\s\S]*Sonu[cç] G[oö]ster/);
+  assert.match(html, /id="btnExportDailyCsv"[\s\S]*CSV [Iİ]ndir/);
   assert.match(js, /dailyFilters:\s*\{\s*busbarId:\s*''/);
+  assert.match(js, /dailyDisplayMode:\s*'percent'/);
   assert.match(js, /function renderDailyFilters/);
   assert.match(js, /function readDailyFilters/);
   assert.match(js, /function applyDailyFiltersToTopFilters/);
   assert.match(js, /function filterDailyPivotRows/);
   assert.match(js, /function clearDailyFilters/);
+  assert.match(js, /function toggleDailyDisplayMode/);
+  assert.match(js, /state\.dailyDisplayMode = state\.dailyDisplayMode === 'percent' \? 'result' : 'percent'/);
   assert.match(js, /const filteredDailyPivotRows = filterDailyPivotRows\(dailyPivotRows,\s*state\.dailyFilters\)/);
   assert.match(js, /renderDailyFilters\(dailyPivotRows\)/);
   assert.match(js, /renderDailyTable\(filteredDailyPivotRows\)/);
+  assert.match(js, /formatDailyHourCellText\(hour,\s*state\.dailyDisplayMode\)/);
+  assert.match(js, /function exportDailyCsv/);
+  assert.match(js, /RGDH_CSV\.buildDailyPivotExportCsv\(filteredDailyPivotRows,\s*\{\s*displayMode:\s*state\.dailyDisplayMode\s*\}\)/);
   assert.match(js, /renderDailyMetricTable\(filteredDailyPivotRows\)/);
   assert.match(js, /dailyFilterControlSource[\s\S]*YKS Kontrol[\s\S]*EK-C Kontrol/);
   assert.match(js, /el\.filterSearch\.value = catalogBusbarKey\(target\)/);
   assert.match(js, /el\.filterDate\.value = filters\.date \|\| ''/);
   assert.match(js, /persistFilters\(\)/);
   assert.match(css, /\.rgdh-daily-filter-bar/);
+});
+
+test('rgdh monitor daily metric table exposes sortable column headers', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  assert.match(js, /dailyMetricSort:\s*\{\s*key:\s*''/);
+  assert.match(js, /dailyMetricTable\?\.addEventListener\('click'/);
+  assert.match(js, /data-daily-metric-sort-key/);
+  assert.match(js, /function renderDailyMetricSortHeader/);
+  assert.match(js, /function setDailyMetricSort/);
+  assert.match(js, /function sortDailyMetricRows/);
+  assert.match(js, /aria-sort/);
+  assert.match(js, /const metricRows = sortDailyMetricRows\(RGDH_CHARTS\.buildHourMetricRows\(pivotRows\)\)/);
 });
 
 test('rgdh monitor EK-C daily drilldown syncs top filters and comparison scope without fetching', () => {
@@ -509,6 +531,70 @@ test('rgdh monitor supports Localden Ek-C Cek next to manual EK-C upload', () =>
   assert.match(js, /const duplicateOnlyWarning/);
   assert.doesNotMatch(js, /Localden Ek-C[\s\S]{0,500}Toplu YKS cekimi yerine tek bara secimi zorunludur/);
   assert.match(build, /'rgdh-local-ekc-loader\.js'/);
+});
+
+test('TPYS period RGDH automation uses daily result planner and bara-date matching', () => {
+  const popupHtml = fs.readFileSync(path.join(root, 'popup.html'), 'utf8');
+  const popupJs = fs.readFileSync(path.join(root, 'popup.js'), 'utf8');
+  const contentJs = fs.readFileSync(path.join(root, 'content-script.js'), 'utf8');
+  const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
+
+  assert.match(popupHtml, /<script src="tpys-periodic-rgdh-planner\.js"><\/script>[\s\S]*<script src="popup\.js"><\/script>/);
+  assert.match(buildScript, /'tpys-periodic-rgdh-planner\.js'/);
+  assert.match(popupJs, /TPYS_PERIODIC_RGDH_PLANNER\.buildPeriodicPlanForPage/);
+  assert.match(popupJs, /buildPlanForPage\(context\.pageDate,\s*state\.monthlyRows,\s*state\.mappingIndex,\s*context\.pageRows/);
+  assert.match(contentJs, /\.x-grid3-td-gecerlilik_dt/);
+  assert.match(contentJs, /function makePeriodKey/);
+  assert.match(contentJs, /dateField/);
+  assert.match(contentJs, /recordIndexByKey/);
+  assert.match(contentJs, /gecerlilik_dt/);
+  assert.match(contentJs, /statusLabelByHour/);
+  assert.match(contentJs, /lkp_reaktif_yerine_getirme\$\{hour\}/);
+  assert.match(contentJs, /for \(let hour = 0; hour < 24; hour \+= 1\)/);
+  assert.doesNotMatch(contentJs, /recordIndexByName\.get\(normalizeText\(operation\.tpysBaraAdi\)\)/);
+});
+
+test('TPYS period DOM fallback does not re-enter legacy ExtJS fast mode', () => {
+  const popupJs = fs.readFileSync(path.join(root, 'popup.js'), 'utf8');
+
+  assert.match(popupJs, /function applyPlanViaDomFallback/);
+  assert.match(popupJs, /fastExtMode:\s*false/);
+  assert.match(popupJs, /settings:\s*\{\s*\.\.\.state\.settings,\s*checkApproval:\s*false,\s*fastExtMode:\s*false\s*\}/);
+});
+
+test('TPYS period DOM fallback writes status cells only and never approval ticks', () => {
+  const contentJs = fs.readFileSync(path.join(root, 'content-script.js'), 'utf8');
+  const domFallbackBlock = contentJs.match(/async function applyPlanViaDom[\s\S]*?async function writeStatus/)?.[0] || '';
+
+  assert.match(domFallbackBlock, /x-grid3-td-lkp_reaktif_yerine_getirme\$\{hour\}/);
+  assert.doesNotMatch(domFallbackBlock, /onay_durum_flag\$\{hour\}/);
+  assert.doesNotMatch(domFallbackBlock, /setApproval\(/);
+});
+
+test('TPYS approval simplifier keeps date, bara and 24 status columns with status colors', () => {
+  const contentJs = fs.readFileSync(path.join(root, 'content-script.js'), 'utf8');
+
+  assert.match(contentJs, /buildApprovalSimplifyCss/);
+  assert.match(contentJs, /x-grid3-td-gecerlilik_dt/);
+  assert.match(contentJs, /x-grid3-td-bara_ad/);
+  assert.match(contentJs, /lkp_reaktif_yerine_getirme/);
+  assert.match(contentJs, /tpys-status-sagladi/);
+  assert.match(contentJs, /tpys-status-saglamadi/);
+  assert.match(contentJs, /tpys-status-devrede-degil/);
+  assert.match(contentJs, /tpys-status-yukumlulugu-yok/);
+  assert.match(contentJs, /applyApprovalStatusColors/);
+  assert.match(contentJs, /getApprovalGridRows/);
+  assert.doesNotMatch(contentJs, /\.x-grid3-td-saat0, \.x-grid3-td-saat1/);
+});
+
+test('TPYS ExtJS MAIN-world apply helper is packaged and DOM fallback reports untrusted events', () => {
+  const contentJs = fs.readFileSync(path.join(root, 'content-script.js'), 'utf8');
+  const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
+
+  assert.match(buildScript, /tpys-extjs-main-apply\.js/);
+  assert.match(contentJs, /Untrusted event/i);
+  assert.match(contentJs, /DOM fallback/i);
+  assert.doesNotMatch(contentJs, /else\s+pressKey\(input,\s*['"]Enter['"]\)/);
 });
 
 function cssSafeRead() {
