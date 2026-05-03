@@ -314,7 +314,7 @@ test('parseEkcCsvText extracts EK-C RGK mode input fields without deciding final
   assert.equal(row.pfSet, -0.95);
   assert.equal(row.qSet, 10);
   assert.equal(row.qSyncReqMvar, 8);
-  assert.deepEqual(row.ekcUnits, [{ index: 1, mkudMw: 50, pActiveMw: 51 }]);
+  assert.deepEqual(row.ekcUnits, [{ index: 1, slotIndex: 1, sourceUnitNo: 1, pActiveMw: 51 }]);
   assert.equal(row.minuteStat.result, 'KY');
   assert.match(row.minuteStat.warnings.join(' '), /RGK modu/);
 });
@@ -342,8 +342,10 @@ test('parseEkcCsvText carries conventional EK-C excitation limits from header to
   assert.deepEqual(row.ekcUnits, [
     {
       index: 1,
-      mkudMw: 14.1,
+      slotIndex: 1,
+      sourceUnitNo: 1,
       pActiveMw: 21.005,
+      pnomMw: 23.5,
       nominalHighExcitation: 14.56,
       nominalLowExcitation: -7.72,
       highExcitationTest: 14.56,
@@ -351,14 +353,67 @@ test('parseEkcCsvText carries conventional EK-C excitation limits from header to
     },
     {
       index: 2,
-      mkudMw: 14.1,
+      slotIndex: 2,
+      sourceUnitNo: 2,
       pActiveMw: 21.405,
+      pnomMw: 23.5,
       nominalHighExcitation: 14.56,
       nominalLowExcitation: -7.72,
       highExcitationTest: 14.56,
       lowExcitationTest: -7.72
     }
   ]);
+});
+
+test('parseEkcCsvText maps ACWA-style conventional unit slots by active power column order and ignores UEVÇB MKUD', () => {
+  const text = [
+    'GERILIM REFERANS DEGERI ILETILEN BARANIN ADI:;ACWA_KIRIKKALE_DGKC',
+    'ILGILI BIRIMIN UNITELERININ NOMINAL AKTIF GUCU(Pnom):;295,7;295,7;336',
+    'ILGILI BIRIMIN UNITELERININ ASIRI VE DUSUK ZORUNLU MVAR DEGERLERI (MVAR):;183,258;-97,192;183,258;-97,192;208,234;-110,438',
+    'TARIH;SAAT;SIRA_NO;BARA_GER_kV;BARA_GER_SET_DEG_kV;TOP_REAKT_CIK_GUCU_MVAr;UEVCB_1_BIRIM_MKUD_MW;UNI_11_GEN_TER_AKT_CIK_GUCU_MW;UNI_12_GEN_TER_AKT_CIK_GUCU_MW;UNI_10_GEN_TER_AKT_CIK_GUCU_MW',
+    '13.04.2026;18:00:00;1081;410,759;412;11,989;445;208,810;128,631;127,224'
+  ].join('\n');
+
+  const parsed = csv.parseEkcCsvText(text, { filename: 'ACWA_KIRIKKALE_DGKC_13.04.2026.csv' });
+  const row = parsed.rows[0];
+
+  assert.deepEqual(row.ekcUnits, [
+    {
+      index: 1,
+      slotIndex: 1,
+      sourceUnitNo: 11,
+      pActiveMw: 208.81,
+      pnomMw: 295.7,
+      nominalHighExcitation: 183.258,
+      nominalLowExcitation: -97.192,
+      highExcitationTest: 183.258,
+      lowExcitationTest: -97.192
+    },
+    {
+      index: 2,
+      slotIndex: 2,
+      sourceUnitNo: 12,
+      pActiveMw: 128.631,
+      pnomMw: 295.7,
+      nominalHighExcitation: 183.258,
+      nominalLowExcitation: -97.192,
+      highExcitationTest: 183.258,
+      lowExcitationTest: -97.192
+    },
+    {
+      index: 3,
+      slotIndex: 3,
+      sourceUnitNo: 10,
+      pActiveMw: 127.224,
+      pnomMw: 336,
+      nominalHighExcitation: 208.234,
+      nominalLowExcitation: -110.438,
+      highExcitationTest: 208.234,
+      lowExcitationTest: -110.438
+    }
+  ]);
+  assert.equal(row.ekcUnits.some((unit) => Object.prototype.hasOwnProperty.call(unit, 'mkudMw')), false);
+  assert.equal(row.effectiveMkudMw, null);
 });
 
 test('parseEkcCsvText creates synthetic headers for legacy TARIH-only EK-C templates', () => {

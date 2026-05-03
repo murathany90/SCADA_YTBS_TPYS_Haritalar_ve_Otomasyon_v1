@@ -595,6 +595,7 @@
       qNomMainLow: null,
       qNomAuxHigh: null,
       qNomAuxLow: null,
+      unitPnomValues: [],
       unitExcitationLimits: [],
       nominalVoltageKv: null,
       droopPct: null,
@@ -612,7 +613,10 @@
       }
       if (/ana kaynak kurulu gucu/.test(label)) meta.pnomMainMw = first;
       else if (/yardimci kaynak.*kurulu gucu/.test(label)) meta.pnomAuxMw = first;
-      else if (/unitelerinin nominal aktif gucu/.test(label)) meta.pnomMw = sumFinite(nums);
+      else if (/unitelerinin nominal aktif gucu/.test(label)) {
+        meta.unitPnomValues = nums;
+        meta.pnomMw = sumFinite(nums);
+      }
       else if (/kurulu gucu|ptotal/.test(label)) meta.pnomMw = first;
       if (/ana kaynak.*asiri.*dusuk.*mvar/.test(label)) {
         meta.qNomMainHigh = sumPositiveOrFirst(nums, first);
@@ -823,7 +827,9 @@
       pnomAuxMw: meta.pnomAuxMw,
       nominalVoltageKv: meta.nominalVoltageKv,
       droopPct: meta.droopPct,
-      ekcUnits: mergeEkcUnitExcitationLimits(extractEkcUnitMeasurements(row), meta.unitExcitationLimits),
+      effectiveMkudMw: null,
+      effectiveMkudSource: '',
+      ekcUnits: mergeEkcUnitExcitationLimits(extractEkcUnitMeasurements(row), meta.unitExcitationLimits, meta.unitPnomValues),
       raw: row
     };
     base.tpysVoltageSet = base.vSet;
@@ -838,24 +844,23 @@
   }
 
   function extractEkcUnitMeasurements(row) {
-    const units = new Map();
+    const units = [];
     Object.entries(row || {}).forEach(([header, value]) => {
       const normalized = normalizeCsvHeader(header);
       const numeric = parseTurkishNumber(value);
       if (!Number.isFinite(numeric)) return;
-      const mkudIndex = extractEkcUnitIndex(normalized, /(?:uevcb|uecvb|birim).*?(\d+).*mkud|(\d+).*birim.*mkud/);
-      if (mkudIndex) {
-        if (!units.has(mkudIndex)) units.set(mkudIndex, { index: mkudIndex });
-        units.get(mkudIndex).mkudMw = numeric;
-        return;
-      }
       const activeIndex = extractEkcUnitIndex(normalized, /(?:uni|unit).*?(\d+).*?(?:akt|aktif|gen ter)|(\d+).*gen ter.*akt/);
       if (activeIndex) {
-        if (!units.has(activeIndex)) units.set(activeIndex, { index: activeIndex });
-        units.get(activeIndex).pActiveMw = numeric;
+        const slotIndex = units.length + 1;
+        units.push({
+          index: slotIndex,
+          slotIndex,
+          sourceUnitNo: activeIndex,
+          pActiveMw: numeric
+        });
       }
     });
-    return [...units.values()].sort((a, b) => a.index - b.index);
+    return units;
   }
 
   function extractEkcUnitIndex(normalizedHeader, pattern) {
@@ -880,7 +885,7 @@
     return limits;
   }
 
-  function mergeEkcUnitExcitationLimits(units, limits) {
+  function mergeEkcUnitExcitationLimits(units, limits, pnomValues = []) {
     const byIndex = new Map((limits || []).map((item) => [Number(item.index), item]));
     const unitIndexes = new Set((units || []).map((unit) => Number(unit.index)).filter(Number.isFinite));
     (limits || []).forEach((limit) => {
@@ -891,6 +896,10 @@
       const unit = (units || []).find((item) => Number(item.index) === index) || { index };
       const limit = byIndex.get(index) || {};
       const merged = { ...unit };
+      if (!Number.isFinite(Number(merged.slotIndex))) merged.slotIndex = index;
+      if (!Number.isFinite(Number(merged.sourceUnitNo))) merged.sourceUnitNo = index;
+      const pnom = pnomValues[index - 1];
+      if (Number.isFinite(pnom)) merged.pnomMw = pnom;
       if (Number.isFinite(limit.nominalHighExcitation)) {
         merged.nominalHighExcitation = limit.nominalHighExcitation;
         merged.highExcitationTest = limit.nominalHighExcitation;

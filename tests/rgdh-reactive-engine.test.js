@@ -188,6 +188,117 @@ test('conventional modes can fall back to EK-C total excitation when all obligat
   assert.equal(stat.qThreshold, 15.44);
 });
 
+test('conventional EK-C units use catalog TPYS unit MKUD for balancing units', () => {
+  const stat = engine.evaluateEkcMinute({
+    sourceOrigin: 'EKC',
+    sourceType: 'CONVENTIONAL',
+    vBara: 401,
+    vSet: 404,
+    qMeas: 15,
+    pTotal: 120,
+    pnomMw: 300,
+    ekcUnits: [
+      { unitName: 'GT-1', slotIndex: 1, pActiveMw: 110, pnomMw: 300, nominalHighExcitation: 40, nominalLowExcitation: -30 }
+    ]
+  }, {
+    platformRgkType: 'KON_GB_2003S',
+    voltageLevel: 400,
+    units: [
+      { unitName: 'GT-1', isBalancingUnit: true, tpysUnitMkud: 100, unitPmkudMw: 40, nominalHighExcitation: 40, nominalLowExcitation: -30 }
+    ]
+  });
+
+  assert.equal(stat.result, 'SAGLADI');
+  assert.equal(stat.effectiveMkudMw, 100);
+  assert.equal(stat.effectiveMkudSource, 'TPYS_UNIT_MKUD');
+  assert.equal(stat.reason, 'inside_voltage_band');
+});
+
+test('conventional EK-C units fall back to catalog unit nominal power when names do not match', () => {
+  const rows = engine.buildEkcCalculationRows([{
+    sourceOrigin: 'EKC',
+    sourceType: 'CONVENTIONAL',
+    busbarId: '5532',
+    localDate: '2026-04-13',
+    localHour: 20,
+    localMinute: 0,
+    dakikaIndex: 1200,
+    measurementDateLocal: '2026-04-13T20:00:00+03:00',
+    vBara: 410,
+    vSet: 410,
+    qMeas: 87,
+    pTotal: 855,
+    pnomMw: 927.4,
+    ekcUnits: [
+      { slotIndex: 1, sourceUnitNo: 11, pActiveMw: 301, pnomMw: 295.7, nominalHighExcitation: 183.258, nominalLowExcitation: -97.192 },
+      { slotIndex: 2, sourceUnitNo: 12, pActiveMw: 273, pnomMw: 295.7, nominalHighExcitation: 183.258, nominalLowExcitation: -97.192 },
+      { slotIndex: 3, sourceUnitNo: 10, pActiveMw: 278, pnomMw: 336, nominalHighExcitation: 208.234, nominalLowExcitation: -110.438 }
+    ]
+  }], new Map([['5532', {
+    platformRgkType: 'KON_GB_2003S',
+    voltageLevel: 400,
+    totalPnomMw: 927.4,
+    units: [
+      { unitName: 'GT-2', isBalancingUnit: true, tpysUnitMkud: 217, unitPmkudMw: 127, unitPnomMw: 295.7, nominalHighExcitation: 183.26, nominalLowExcitation: -97.19 },
+      { unitName: 'ST', isBalancingUnit: true, tpysUnitMkud: 217, unitPmkudMw: 120, unitPnomMw: 336, nominalHighExcitation: 208.23, nominalLowExcitation: -110.44 },
+      { unitName: 'GT-1', isBalancingUnit: true, tpysUnitMkud: 217, unitPmkudMw: 127, unitPnomMw: 295.7, nominalHighExcitation: 183.26, nominalLowExcitation: -97.19 }
+    ]
+  }]]));
+
+  const row = rows[0];
+  assert.equal(row.minuteStat.result, 'SAGLADI');
+  assert.equal(row.minuteStat.reason, 'inside_voltage_band');
+  assert.equal(row.minuteStat.effectiveMkudMw, 651);
+  assert.equal(row.effectiveMkudMw, 651);
+  assert.equal(row.pmkudMw, 651);
+  assert.deepEqual(row.ekcUnits.map((unit) => unit.catalogUnitName), ['GT-2', 'GT-1', 'ST']);
+});
+
+test('conventional EK-C units use catalog PMKUD for non-balancing units and stay KY when catalog MKUD is missing', () => {
+  const nonBalancing = engine.evaluateEkcMinute({
+    sourceOrigin: 'EKC',
+    sourceType: 'CONVENTIONAL',
+    vBara: 154,
+    vSet: 154,
+    qMeas: 5,
+    pTotal: 60,
+    pnomMw: 100,
+    ekcUnits: [
+      { unitName: 'ST-1', pActiveMw: 50, pnomMw: 100, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+    ]
+  }, {
+    platformRgkType: 'KON_GB_2003S',
+    voltageLevel: 154,
+    units: [
+      { unitName: 'ST-1', isBalancingUnit: false, tpysUnitMkud: 100, unitPmkudMw: 40, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+    ]
+  });
+  assert.equal(nonBalancing.result, 'SAGLADI');
+  assert.equal(nonBalancing.effectiveMkudMw, 40);
+  assert.equal(nonBalancing.effectiveMkudSource, 'UNIT_PMKUD');
+
+  const missing = engine.evaluateEkcMinute({
+    sourceOrigin: 'EKC',
+    sourceType: 'CONVENTIONAL',
+    vBara: 154,
+    vSet: 160,
+    qMeas: 5,
+    pTotal: 60,
+    pnomMw: 100,
+    ekcUnits: [
+      { unitName: 'ST-1', pActiveMw: 50, pnomMw: 100, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+    ]
+  }, {
+    platformRgkType: 'KON_GB_2003S',
+    voltageLevel: 154,
+    units: [
+      { unitName: 'ST-1', isBalancingUnit: false, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+    ]
+  });
+  assert.equal(missing.result, 'KY');
+  assert.equal(missing.reason, 'missing_unit_duty_data');
+});
+
 test('missing conventional and hybrid duty data is classified as KY instead of DD or YY', () => {
   const conventionalContext = {
     platformRgkType: 'KON_GB_2003S',

@@ -103,6 +103,12 @@
         tpysVoltageSet: finiteOrNull(row.tpysVoltageSet) ?? finiteOrNull(row.vSet),
         pgenMw: finiteOrNull(row.pgenMw) ?? finiteOrNull(row.pTotal),
         qgenMvar: finiteOrNull(row.qgenMvar) ?? finiteOrNull(row.qMeas),
+        ekcUnits: Array.isArray(computedMinuteStat.ekcUnits) ? computedMinuteStat.ekcUnits : row.ekcUnits,
+        effectiveMkudMw: finiteOrNull(computedMinuteStat.effectiveMkudMw),
+        effectiveMkudSource: computedMinuteStat.effectiveMkudSource || '',
+        pmkudMw: inferSourceType(computedMinuteStat.rgkMode) === 'CONVENTIONAL'
+          ? finiteOrNull(computedMinuteStat.effectiveMkudMw)
+          : finiteOrNull(row.pmkudMw),
         droopPct: finiteOrNull(row.droopPct) ?? finiteOrNull(catalogContext?.droopPct) ?? finiteOrNull(catalogContext?.speedDrop),
         hasSynchronousCondenser: truthyFlag(row.hasSynchronousCondenser ?? catalogContext?.hasSynchronousCondenser),
         synchronousCondenserCandidate: skInfo.candidate,
@@ -178,27 +184,28 @@
   function evaluateConventional(row, context, settings, rgkMode, inputUnits) {
     const pTotal = finiteOrNull(row?.pTotal ?? row?.pgenMw);
     const pnom = positiveNumber(row?.pnomMw ?? context?.totalPnomMw);
+    const units = inputUnits || mergeUnitMeasurements(row, context);
+    const mkudSummary = summarizeEffectiveMkud(units);
     if (!Number.isFinite(pTotal) || !Number.isFinite(pnom)) {
-      return stat(RESULT_KY, 'missing_total_production_or_pnom', { rgkMode, warnings: ['Toplam aktif guc veya Pnom eksik.'] });
+      return stat(RESULT_KY, 'missing_total_production_or_pnom', { rgkMode, warnings: ['Toplam aktif guc veya Pnom eksik.'], ...mkudSummary, ekcUnits: units });
     }
     if (Number.isFinite(pTotal) && Number.isFinite(pnom) && pTotal < pnom * settings.lowProductionPct) {
-      return stat(RESULT_DD, 'total_production_below_one_percent', { rgkMode, yyDdSource: 'TOTAL_P_LT_1' });
+      return stat(RESULT_DD, 'total_production_below_one_percent', { rgkMode, yyDdSource: 'TOTAL_P_LT_1', ...mkudSummary, ekcUnits: units });
     }
-    const units = inputUnits || mergeUnitMeasurements(row, context);
     const dutyData = conventionalDutyDataStatus(units, settings);
-    if (!dutyData.ok) return stat(RESULT_KY, dutyData.reason, { rgkMode, warnings: [dutyData.warning] });
+    if (!dutyData.ok) return stat(RESULT_KY, dutyData.reason, { rgkMode, warnings: [dutyData.warning], ...mkudSummary, ekcUnits: units });
     const obligated = obligatedUnits(units, settings);
-    if (!obligated.length) return stat(RESULT_YY, 'no_obligated_unit', { rgkMode, yyDdSource: 'NO_OBLIGATED_UNIT' });
+    if (!obligated.length) return stat(RESULT_YY, 'no_obligated_unit', { rgkMode, yyDdSource: 'NO_OBLIGATED_UNIT', ...mkudSummary, ekcUnits: units });
 
     const vSet = finiteOrNull(row?.vSet ?? row?.tpysVoltageSet);
     const vBara = finiteOrNull(row?.vBara ?? row?.liveBusbarVoltage);
     const unom = positiveNumber(row?.nominalVoltageKv ?? row?.voltageLevel ?? context?.voltageLevel ?? vSet ?? vBara);
     if (!Number.isFinite(vSet) || !Number.isFinite(vBara) || !Number.isFinite(unom)) {
-      return stat(RESULT_KY, 'missing_voltage', { rgkMode, warnings: ['Konvansiyonel gerilim degeri eksik.'] });
+      return stat(RESULT_KY, 'missing_voltage', { rgkMode, warnings: ['Konvansiyonel gerilim degeri eksik.'], ...mkudSummary, ekcUnits: units });
     }
     const band = unom * settings.voltageBandPct;
     if (vBara >= vSet - band && vBara <= vSet + band) {
-      return stat(RESULT_PASS, 'inside_voltage_band', { rgkMode, dutySource: 'MAIN', yyDdSource: 'OBLIGATED_UNIT' });
+      return stat(RESULT_PASS, 'inside_voltage_band', { rgkMode, dutySource: 'MAIN', yyDdSource: 'OBLIGATED_UNIT', ...mkudSummary, ekcUnits: units });
     }
     const positiveDirection = vSet > vBara;
     let limitCount = 0;
@@ -214,13 +221,15 @@
       qThreshold = Math.abs(positiveDirection ? finiteOrNull(row?.qNomHigh) : finiteOrNull(row?.qNomLow));
       limitCount = qThreshold > 0 ? obligated.length : limitCount;
     }
-    if (!(qThreshold > 0) || limitCount !== obligated.length) return stat(RESULT_KY, 'missing_unit_excitation', { rgkMode, warnings: ['Yukumlulukteki unite icin nominal ikaz degeri eksik.'] });
+    if (!(qThreshold > 0) || limitCount !== obligated.length) return stat(RESULT_KY, 'missing_unit_excitation', { rgkMode, warnings: ['Yukumlulukteki unite icin nominal ikaz degeri eksik.'], ...mkudSummary, ekcUnits: units });
     const qTarget = positiveDirection ? qThreshold : -qThreshold;
     return targetStat(row, qTarget, settings, rgkMode, {
       qTarget,
       qThreshold,
       dutySource: 'MAIN',
-      yyDdSource: 'OBLIGATED_UNIT'
+      yyDdSource: 'OBLIGATED_UNIT',
+      ...mkudSummary,
+      ekcUnits: units
     });
   }
 
@@ -419,6 +428,9 @@
   function mergeUnitMeasurements(row, context) {
     const catalogUnits = Array.isArray(context?.units) ? context.units : [];
     const ekcUnits = Array.isArray(row?.ekcUnits) ? row.ekcUnits : [];
+    if (ekcUnits.length) {
+      return mergeEkcUnitsWithCatalog(ekcUnits, catalogUnits, row);
+    }
     const sourceUnits = catalogUnits.length ? catalogUnits : ekcUnits;
     return sourceUnits.map((unit, index) => {
       const measurement = ekcUnits.find((item) => {
@@ -440,12 +452,63 @@
     });
   }
 
+  function mergeEkcUnitsWithCatalog(ekcUnits, catalogUnits, row) {
+    const usedCatalog = new Set();
+    return (ekcUnits || []).map((unit, index) => {
+      const catalogUnit = resolveCatalogUnitForEkcUnit(unit, catalogUnits, usedCatalog, index);
+      if (catalogUnit) usedCatalog.add(catalogUnit);
+      const effective = effectiveMkudForCatalogUnit(catalogUnit);
+      return {
+        ...catalogUnit,
+        ...unit,
+        index: Number.isFinite(Number(unit.index)) ? Number(unit.index) : index + 1,
+        slotIndex: Number.isFinite(Number(unit.slotIndex)) ? Number(unit.slotIndex) : index + 1,
+        sourceUnitNo: Number.isFinite(Number(unit.sourceUnitNo)) ? Number(unit.sourceUnitNo) : (Number.isFinite(Number(unit.index)) ? Number(unit.index) : index + 1),
+        unitName: unit.unitName || catalogUnit?.unitName || '',
+        catalogUnitName: catalogUnit?.unitName || '',
+        unitPnomMw: finiteOrNull(catalogUnit?.unitPnomMw ?? unit.pnomMw),
+        pnomMw: finiteOrNull(unit.pnomMw ?? catalogUnit?.unitPnomMw),
+        pActiveMw: finiteOrNull(unit.pActiveMw),
+        nominalHighExcitation: finiteOrNull(firstDefined(unit.nominalHighExcitation, catalogUnit?.nominalHighExcitation, catalogUnit?.highExcitationTest, catalogUnit?.highExcitationTest2)),
+        highExcitationTest: finiteOrNull(firstDefined(unit.highExcitationTest, unit.nominalHighExcitation, catalogUnit?.highExcitationTest, catalogUnit?.nominalHighExcitation, catalogUnit?.highExcitationTest2)),
+        nominalLowExcitation: finiteOrNull(firstDefined(unit.nominalLowExcitation, catalogUnit?.nominalLowExcitation, catalogUnit?.lowExcitationTest, catalogUnit?.lowExcitationTest2)),
+        lowExcitationTest: finiteOrNull(firstDefined(unit.lowExcitationTest, unit.nominalLowExcitation, catalogUnit?.lowExcitationTest, catalogUnit?.nominalLowExcitation, catalogUnit?.lowExcitationTest2)),
+        effectiveMkudMw: effective.value,
+        mkudSource: effective.source,
+        requiresCatalogMkud: String(row?.sourceOrigin || '').toUpperCase() === 'EKC'
+      };
+    });
+  }
+
+  function resolveCatalogUnitForEkcUnit(unit, catalogUnits, usedCatalog, index) {
+    const catalog = Array.isArray(catalogUnits) ? catalogUnits : [];
+    if (!catalog.length) return null;
+    const unitName = normalizeText(unit?.unitName || '');
+    if (unitName) {
+      const byName = catalog.find((item) => !usedCatalog.has(item) && normalizeText(item?.unitName || '') === unitName);
+      if (byName) return byName;
+    }
+    const pnom = finiteOrNull(unit?.pnomMw ?? unit?.unitPnomMw);
+    if (Number.isFinite(pnom)) {
+      const byPnom = catalog.find((item) => !usedCatalog.has(item) && nearlyEqual(item?.unitPnomMw, pnom));
+      if (byPnom) return byPnom;
+    }
+    const byIndex = catalog[index];
+    return byIndex && !usedCatalog.has(byIndex) ? byIndex : null;
+  }
+
+  function effectiveMkudForCatalogUnit(catalogUnit) {
+    if (!catalogUnit) return { value: null, source: '' };
+    if (truthyFlag(catalogUnit.isBalancingUnit) === true) {
+      return { value: finiteOrNull(catalogUnit.tpysUnitMkud), source: 'TPYS_UNIT_MKUD' };
+    }
+    return { value: finiteOrNull(catalogUnit.unitPmkudMw), source: 'UNIT_PMKUD' };
+  }
+
   function obligatedUnits(units, settings) {
     return (units || []).filter((unit) => {
       const p = finiteOrNull(unit?.pActiveMw);
-      const thresholdBase = unit?.isBalancingUnit === true
-        ? firstFinite(unit?.tpysUnitMkud, unit?.mkudMw, unit?.unitPmkudMw)
-        : firstFinite(unit?.unitPmkudMw, unit?.mkudMw, unit?.tpysUnitMkud);
+      const thresholdBase = unitDutyThreshold(unit);
       const threshold = Number.isFinite(thresholdBase) ? thresholdBase * settings.mkudFactor : null;
       return Number.isFinite(p) && Number.isFinite(threshold) && p > threshold;
     });
@@ -458,9 +521,7 @@
     }
     const missing = list.some((unit) => {
       const p = finiteOrNull(unit?.pActiveMw);
-      const thresholdBase = unit?.isBalancingUnit === true
-        ? firstFinite(unit?.tpysUnitMkud, unit?.mkudMw, unit?.unitPmkudMw)
-        : firstFinite(unit?.unitPmkudMw, unit?.mkudMw, unit?.tpysUnitMkud);
+      const thresholdBase = unitDutyThreshold(unit);
       const threshold = Number.isFinite(thresholdBase) ? thresholdBase * settings.mkudFactor : null;
       return !Number.isFinite(p) || !Number.isFinite(threshold);
     });
@@ -468,6 +529,23 @@
       return { ok: false, reason: 'missing_unit_duty_data', warning: 'Unite aktif gucu veya MKUD esigi eksik.' };
     }
     return { ok: true };
+  }
+
+  function unitDutyThreshold(unit) {
+    if (Number.isFinite(finiteOrNull(unit?.effectiveMkudMw))) return finiteOrNull(unit.effectiveMkudMw);
+    if (unit?.requiresCatalogMkud) return null;
+    return truthyFlag(unit?.isBalancingUnit) === true
+      ? firstFinite(unit?.tpysUnitMkud, unit?.mkudMw, unit?.unitPmkudMw)
+      : firstFinite(unit?.unitPmkudMw, unit?.mkudMw, unit?.tpysUnitMkud);
+  }
+
+  function summarizeEffectiveMkud(units) {
+    const values = (units || []).map((unit) => finiteOrNull(unit?.effectiveMkudMw)).filter(Number.isFinite);
+    const sources = uniqueStrings((units || []).map((unit) => unit?.mkudSource).filter(Boolean));
+    return {
+      effectiveMkudMw: values.length ? values.reduce((sum, value) => sum + value, 0) : null,
+      effectiveMkudSource: sources.length === 1 ? sources[0] : (sources.length ? sources.join('+') : '')
+    };
   }
 
   function nominalLimits(row, context) {
@@ -516,8 +594,11 @@
       droopPct: finiteOrNull(extra.droopPct),
       limitLow: finiteOrNull(extra.limitLow),
       limitHigh: finiteOrNull(extra.limitHigh),
+      effectiveMkudMw: finiteOrNull(extra.effectiveMkudMw),
+      effectiveMkudSource: extra.effectiveMkudSource || '',
       dutySource: extra.dutySource || '',
       yyDdSource: extra.yyDdSource || '',
+      ekcUnits: Array.isArray(extra.ekcUnits) ? extra.ekcUnits : undefined,
       warnings: extra.warnings || []
     };
   }
@@ -574,6 +655,16 @@
       if (Number.isFinite(numeric) && Math.abs(numeric) > 0) return Math.abs(numeric);
     }
     return null;
+  }
+
+  function nearlyEqual(left, right, tolerance = 0.001) {
+    const a = finiteOrNull(left);
+    const b = finiteOrNull(right);
+    return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance;
+  }
+
+  function uniqueStrings(values) {
+    return [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
   }
 
   function positiveNumber(value) {

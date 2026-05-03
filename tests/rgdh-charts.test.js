@@ -212,6 +212,20 @@ test('buildVoltageActiveDatasets groups TPYS set and tolerance bands under one l
   assert.equal(lower.borderWidth, set.borderWidth / 2);
 });
 
+test('buildVoltageActiveDatasets uses EK-C effective MKUD for conventional rows and suppresses MKUD for RES/GES', () => {
+  const conventionalRows = [
+    { ...makeRow(5532, 18, 0), sourceOrigin: 'EKC', sourceType: 'CONVENTIONAL', effectiveMkudMw: 651, pmkudMw: null },
+    { ...makeRow(5532, 18, 1), sourceOrigin: 'EKC', sourceType: 'CONVENTIONAL', effectiveMkudMw: 651, pmkudMw: null }
+  ];
+  const conventionalDatasets = charts.buildVoltageActiveDatasets(conventionalRows);
+  assert.deepEqual(conventionalDatasets.find((dataset) => dataset.label === 'MKUD').data, [651, 651]);
+
+  const windDatasets = charts.buildVoltageActiveDatasets([
+    { ...makeRow(5052, 12, 0), sourceOrigin: 'EKC', sourceType: 'WIND', effectiveMkudMw: 20, pmkudMw: 20 }
+  ]);
+  assert.equal(windDatasets.some((dataset) => dataset.label === 'MKUD'), false);
+});
+
 test('formatHeatmapCellText hides SAGLADI SAGLAMADI labels and keeps neutral codes', () => {
   assert.equal(charts.formatHeatmapCellText({ hourResult: 'SAGLADI', participationPct: 95, pctSuppressed: false }), '95%');
   assert.equal(charts.formatHeatmapCellText({ hourResult: 'SAGLAMADI', participationPct: 72.5, pctSuppressed: false }), '72,5%');

@@ -487,7 +487,7 @@
       lineDataset('P Aktif Guc (MW)', sourceRows.map((r) => r.pgenMw), palette.activePower, 'y'),
       lineDataset('Yardimci Kaynak MW', sourceRows.map((r) => r.auxiliaryMw), palette.auxiliaryMw, 'y'),
       lineDataset('Pnom', sourceRows.map((r) => r.pnomMw), palette.pnom, 'y', { borderDash: [6, 4], pointRadius: 0 }),
-      lineDataset('MKUD', sourceRows.map((r) => r.pmkudMw), palette.mkud, 'y', { borderDash: [4, 4], pointRadius: 0 }),
+      lineDataset('MKUD', sourceRows.map(mkudChartValue), palette.mkud, 'y', { borderDash: [4, 4], pointRadius: 0 }),
       lineDataset('Min MKUD', sourceRows.map((r) => r.minMkudMw), palette.minMkud, 'y', { borderDash: [3, 4], pointRadius: 0 }),
       lineDataset('TPYS Set Gerilim', sourceRows.map((r) => r.tpysVoltageSet), palette.voltageSet, 'y1', { pointRadius: 0, borderWidth: 2, rgdhLegendGroup: TPYS_SET_LEGEND_GROUP, rgdhLegendLeader: true }),
       lineDataset('Canli Bara', sourceRows.map((r) => r.liveBusbarVoltage), palette.liveVoltage, 'y1', { pointRadius: 1, borderWidth: 2 }),
@@ -508,6 +508,14 @@
       );
     }
     return datasets.filter(hasDatasetValues);
+  }
+
+  function mkudChartValue(row) {
+    if (!row || isWindRow(row)) return null;
+    if (String(row.sourceOrigin || '').toUpperCase() === 'EKC') {
+      return finiteOrNull(row.effectiveMkudMw ?? row.pmkudMw);
+    }
+    return finiteOrNull(row.pmkudMw);
   }
 
   function buildReactiveDatasets(rows, options = {}, colors = {}) {
@@ -609,6 +617,10 @@
   function isConventionalRow(row) {
     const type = String(row?.sourceType || row?.busbarType || '').toUpperCase();
     return type !== 'WIND' && type !== 'RESGES' && type !== 'RES/GES';
+  }
+
+  function isWindRow(row) {
+    return !isConventionalRow(row);
   }
 
   function calculateVoltageBand(value, factor) {
