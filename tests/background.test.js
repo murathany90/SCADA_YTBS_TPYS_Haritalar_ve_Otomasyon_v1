@@ -3,9 +3,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const { TextEncoder, TextDecoder } = require('node:util');
+const nodeCrypto = require('node:crypto');
 
 const backgroundPath = path.join(__dirname, '..', 'background.js');
 const backgroundCode = fs.readFileSync(backgroundPath, 'utf8');
+const tpysCsvStandardizerPath = path.join(__dirname, '..', 'tpys-csv-standardizer.js');
+const tpysCsvStandardizerCode = fs.readFileSync(tpysCsvStandardizerPath, 'utf8');
+const tpysCsvPlannerPath = path.join(__dirname, '..', 'tpys-csv-planner.js');
+const tpysCsvPlannerCode = fs.readFileSync(tpysCsvPlannerPath, 'utf8');
 const rgdhApiClientPath = path.join(__dirname, '..', 'rgdh-api-client.js');
 const rgdhApiClientCode = fs.readFileSync(rgdhApiClientPath, 'utf8');
 const rgdhCsvPath = path.join(__dirname, '..', 'rgdh-csv.js');
@@ -14,6 +20,7 @@ const diagnosticsPath = path.join(__dirname, '..', 'rgdh-diagnostics.js');
 const diagnosticsCode = fs.existsSync(diagnosticsPath) ? fs.readFileSync(diagnosticsPath, 'utf8') : '';
 
 function loadBackground(options = {}) {
+  const storageValues = { ...(options.storage || {}) };
   const context = {
     console,
     Date,
@@ -28,13 +35,18 @@ function loadBackground(options = {}) {
     URL,
     URLSearchParams,
     AbortController,
+    TextEncoder,
+    TextDecoder,
+    Uint8Array,
+    crypto: nodeCrypto.webcrypto,
     fetch: options.fetch,
     setTimeout: options.setTimeout || setTimeout,
     clearTimeout: options.clearTimeout || clearTimeout,
     chrome: {
       runtime: {
         onMessage: { addListener() {} },
-        getURL: (targetPath) => targetPath
+        getURL: (targetPath) => targetPath,
+        sendMessage: async () => {}
       },
       tabs: {
         create: async () => ({ id: 1 }),
@@ -49,11 +61,34 @@ function loadBackground(options = {}) {
         download: async () => 1,
         search: async () => [],
         onChanged: { addListener() {}, removeListener() {} }
+      },
+      storage: {
+        local: {
+          get: async (keys) => {
+            if (!keys) return { ...storageValues };
+            if (typeof keys === 'string') return { [keys]: storageValues[keys] };
+            if (Array.isArray(keys)) {
+              return keys.reduce((out, key) => {
+                out[key] = storageValues[key];
+                return out;
+              }, {});
+            }
+            return Object.keys(keys).reduce((out, key) => {
+              out[key] = Object.prototype.hasOwnProperty.call(storageValues, key) ? storageValues[key] : keys[key];
+              return out;
+            }, {});
+          },
+          set: async (values) => {
+            Object.assign(storageValues, values || {});
+          }
+        }
       }
     }
   };
   context.globalThis = context;
   vm.createContext(context);
+  vm.runInContext(tpysCsvStandardizerCode, context);
+  vm.runInContext(tpysCsvPlannerCode, context);
   vm.runInContext(rgdhApiClientCode, context);
   vm.runInContext(rgdhCsvCode, context);
   if (diagnosticsCode) vm.runInContext(diagnosticsCode, context);
@@ -75,6 +110,115 @@ function makeStorage(values) {
     }
   };
 }
+
+function makeImmediateDownloadContext(options = {}) {
+  const downloads = [];
+  const context = loadBackground({
+    fetch: options.fetch,
+    storage: options.storage,
+    setTimeout: (fn) => {
+      Promise.resolve().then(fn);
+      return 1;
+    },
+    clearTimeout: () => {}
+  });
+  context.chrome.downloads.download = async (payload) => {
+    downloads.push(payload);
+    if (options.failDownloadIndex === downloads.length) throw new Error(options.failDownloadMessage || 'download failed');
+    return downloads.length;
+  };
+  context.chrome.downloads.search = async ({ id }) => [{
+    id,
+    state: 'complete',
+    filename: downloads[id - 1]?.filename || '',
+    finalUrl: downloads[id - 1]?.url || ''
+  }];
+  return { context, downloads };
+}
+
+test('handleTpysCsvStandardDownload fetches CSV metadata and downloads both standard targets', async () => {
+  const { context, downloads } = makeImmediateDownloadContext({
+    fetch: async () => ({
+      ok: true,
+      text: async () => 'TPYS Santral Ismi;Tarih;Deger\nGEYCEK RES;2.4.2026;1'
+    })
+  });
+
+  const result = await context.handleTpysCsvStandardDownload({
+    runId: 'run-1',
+    url: 'https://tpys.example.test/dl/geycek.csv',
+    filenameHint: 'geycek.csv',
+    baraName: 'GEYCEK RES',
+    localDate: '2026-04-02',
+    pageDate: '02.04.2026',
+    asciiNormalize: true,
+    skipDuplicateContent: true,
+    ordinal: 1
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(downloads.length, 2);
+  assert.deepEqual(downloads.map((item) => item.filename), [
+    'TPYS_CSV_Standartlastirilmis/GEYCEK_RES_04_26/GEYCEK_RES_02.04.2026.csv',
+    'TPYS_CSV_Standartlastirilmis/RGDH_GUN_02_04_26/GEYCEK_RES_02.04.2026.csv'
+  ]);
+  assert.equal(result.targets.every((target) => target.status === 'downloaded'), true);
+  assert.match(result.sha256, /^[a-f0-9]{64}$/);
+});
+
+test('handleTpysCsvStandardDownload uses fallback metadata and continues when one target fails', async () => {
+  const { context, downloads } = makeImmediateDownloadContext({
+    fetch: async () => {
+      throw new Error('network down');
+    },
+    failDownloadIndex: 1,
+    failDownloadMessage: 'first target failed'
+  });
+
+  const result = await context.handleTpysCsvStandardDownload({
+    runId: 'run-2',
+    url: 'https://tpys.example.test/dl/camlica.csv',
+    filenameHint: 'camlica.csv',
+    baraName: 'Camlica RES',
+    localDate: '2026-05-03',
+    asciiNormalize: true,
+    skipDuplicateContent: true,
+    ordinal: 1
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(downloads.length, 2);
+  assert.equal(result.targets[0].status, 'error');
+  assert.equal(result.targets[1].status, 'downloaded');
+  assert.equal(result.warnings.includes('CSV_FETCH_FAILED'), true);
+  assert.equal(result.warnings.includes('PLANT_FALLBACK_USED'), true);
+  assert.equal(result.warnings.includes('DATE_FALLBACK_USED'), true);
+});
+
+test('handleTpysCsvReportDownload writes last run report under standardized root', async () => {
+  const { context, downloads } = makeImmediateDownloadContext({
+    fetch: async () => ({
+      ok: true,
+      text: async () => 'TPYS Santral Ismi;Tarih;Deger\nGEYCEK RES;2.4.2026;1'
+    })
+  });
+
+  await context.handleTpysCsvStandardDownload({
+    runId: 'run-report',
+    url: 'https://tpys.example.test/dl/geycek.csv',
+    filenameHint: 'geycek.csv',
+    baraName: 'GEYCEK RES',
+    localDate: '2026-04-02',
+    asciiNormalize: true,
+    skipDuplicateContent: true,
+    ordinal: 1
+  });
+  const report = await context.handleTpysCsvReportDownload({ runId: 'run-report' });
+
+  assert.equal(report.ok, true);
+  assert.match(downloads.at(-1).filename, /^TPYS_CSV_Standartlastirilmis\/TPYS_CSV_RAPOR_\d{8}_\d{6}\.csv$/);
+  assert.match(downloads.at(-1).url, /^data:text\/csv/);
+});
 
 test('fetchChartData aborts long-running SCADA requests and reports TIMEOUT', async () => {
   let clearedTimerId = null;

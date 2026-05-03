@@ -39,6 +39,10 @@ button {
 button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 button.rgdh-action { background: #0f172a; color: #e2e8f0; border-color: #334155; }
 button:hover { filter: brightness(0.98); }
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 .file-pill {
   font-size: 12px;
   background: #eef2ff;
@@ -77,11 +81,13 @@ button:hover { filter: brightness(0.98); }
   font-size: 12px;
 }
 .checkbox-row { flex-direction: row; align-items: flex-start; margin-top: 10px; }
-input[type="text"] {
+input[type="text"],
+input[type="date"] {
   border: 1px solid #cfd8e3;
   border-radius: 8px;
   padding: 8px;
 }
+.csv-download-grid { margin-bottom: 4px; }
 summary { cursor: pointer; font-weight: 700; }
 .log {
   margin: 0;

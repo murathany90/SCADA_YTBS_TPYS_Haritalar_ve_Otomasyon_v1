@@ -343,6 +343,14 @@ test('extension build includes RGDH helper scripts loaded by monitor page', () =
   assert.match(buildScript, /rgdh-raw-pagination\.js/);
 });
 
+test('extension build includes TPYS CSV automation helper scripts referenced by manifest and background', () => {
+  const buildScript = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
+
+  assert.match(buildScript, /tpys-csv-automation-core\.js/);
+  assert.match(buildScript, /tpys-csv-standardizer\.js/);
+  assert.match(buildScript, /tpys-csv-planner\.js/);
+});
+
 test('rgdh monitor daily table is date-first without summary and voltage toggle excludes TPYS/live busbar', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
   const charts = fs.readFileSync(path.join(root, 'rgdh-charts.js'), 'utf8');
@@ -470,12 +478,37 @@ test('rgdh monitor shows EK-C bulk upload progress popup and page notice', () =>
   assert.match(js, /function updateUploadFeedback/);
   assert.match(js, /function finishUploadFeedback/);
   assert.match(js, /function hideUploadFeedback/);
-  assert.match(js, /showUploadFeedback\(files\.length\)/);
+  assert.match(js, /showUploadFeedback\(files\.length,\s*\{ sourceLabel \}\)/);
   assert.match(js, /updateUploadFeedback\(/);
   assert.match(js, /finishUploadFeedback\(loadSummary/);
   assert.match(css, /\.rgdh-upload-notice/);
   assert.match(css, /\.rgdh-upload-modal/);
   assert.match(css, /\.rgdh-upload-progress-bar/);
+});
+
+test('rgdh monitor supports Localden Ek-C Cek next to manual EK-C upload', () => {
+  const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const build = fs.readFileSync(path.join(root, 'build-extension.ps1'), 'utf8');
+
+  assert.match(html, /id="btnPickCsv"[\s\S]*id="btnLoadLocalEkc"/);
+  assert.match(html, /Localden Ek-C Cek/);
+  assert.match(html, /id="localEkcDirectoryInput"[\s\S]*webkitdirectory[\s\S]*multiple/);
+  assert.match(html, /<script src="rgdh-local-ekc-loader\.js"><\/script>[\s\S]*<script src="rgdh-monitor\.js"><\/script>/);
+  assert.match(js, /btnLoadLocalEkc/);
+  assert.match(js, /handleLocalEkcLoad/);
+  assert.match(js, /readFilters\(\)/);
+  assert.match(js, /getLocalEkcLoader/);
+  assert.match(js, /getLocalEkcDirectoryHandle/);
+  assert.match(js, /collectLocalEkcFilesFromDirectory\(directoryHandle,\s*\{[\s\S]*filters[\s\S]*selectedBusbar[\s\S]*onProgress/);
+  assert.match(js, /collectLocalEkcFilesFromFileList\(files,\s*\{[\s\S]*filters[\s\S]*selectedBusbar[\s\S]*onProgress/);
+  assert.match(js, /filterParsedEkcRows/);
+  assert.match(js, /function handleLocalEkcProgress/);
+  assert.match(js, /function yieldToBrowser/);
+  assert.match(js, /await yieldToBrowser\(\)/);
+  assert.match(js, /const duplicateOnlyWarning/);
+  assert.doesNotMatch(js, /Localden Ek-C[\s\S]{0,500}Toplu YKS cekimi yerine tek bara secimi zorunludur/);
+  assert.match(build, /'rgdh-local-ekc-loader\.js'/);
 });
 
 function cssSafeRead() {

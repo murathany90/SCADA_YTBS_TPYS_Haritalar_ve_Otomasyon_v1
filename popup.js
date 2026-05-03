@@ -21,6 +21,7 @@ const state = {
   monthlyHeaders: [],
   monthlyRows: [],
   csvCacheMode: 'none',
+  tpysCsvLastRunId: '',
   settings: structuredClone(DEFAULT_SETTINGS)
 };
 
@@ -42,6 +43,11 @@ const el = {
   matchedCount: document.getElementById('matchedCount'),
   btnAnalyzeDownloadPage: document.getElementById('btnAnalyzeDownloadPage'),
   btnDownloadAllCsvs: document.getElementById('btnDownloadAllCsvs'),
+  btnDownloadCsvReport: document.getElementById('btnDownloadCsvReport'),
+  downloadStartDate: document.getElementById('downloadStartDate'),
+  downloadEndDate: document.getElementById('downloadEndDate'),
+  downloadAsciiNormalize: document.getElementById('downloadAsciiNormalize'),
+  downloadSkipDuplicateContent: document.getElementById('downloadSkipDuplicateContent'),
   downloadPageDate: document.getElementById('downloadPageDate'),
   downloadBaraCount: document.getElementById('downloadBaraCount'),
   downloadPageStatus: document.getElementById('downloadPageStatus'),
@@ -66,6 +72,7 @@ async function init() {
     await loadMapping();
     await loadLastCsv();
     bindEvents();
+    initializeDownloadDateDefaults();
     log('Hazır. İsterseniz aylık özet CSV seçin, isterseniz doğrudan CSV indirme sayfasını analiz edin.');
   } catch (error) {
     log(`Başlatma hatası: ${error.message}`);
@@ -88,7 +95,25 @@ function bindEvents() {
   el.btnToggleSimplify.addEventListener('click', toggleApprovalSimplifyOnCurrentTab);
   el.btnAnalyzeDownloadPage.addEventListener('click', analyzeDownloadPage);
   el.btnDownloadAllCsvs.addEventListener('click', downloadAllCsvs);
+  el.btnDownloadCsvReport.addEventListener('click', downloadTpysCsvReport);
   el.btnSaveSettings.addEventListener('click', saveSettings);
+  bindTpysCsvProgressListener();
+}
+
+function initializeDownloadDateDefaults() {
+  const today = new Date();
+  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  if (el.downloadStartDate && !el.downloadStartDate.value) el.downloadStartDate.value = iso;
+  if (el.downloadEndDate && !el.downloadEndDate.value) el.downloadEndDate.value = iso;
+  if (el.downloadPageDate) el.downloadPageDate.textContent = iso;
+}
+
+function bindTpysCsvProgressListener() {
+  if (!chrome.runtime?.onMessage?.addListener) return;
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== 'TPYS_CSV_PROGRESS') return;
+    handleTpysCsvProgress(message.payload || {});
+  });
 }
 
 async function loadSettings() {
@@ -274,7 +299,12 @@ async function analyzeDownloadPage() {
     await ensureContentScript(tab.id);
     const result = await sendMessage(tab.id, { type: 'GET_DOWNLOAD_CONTEXT' });
     if (!result?.ok) throw new Error(result?.reason || result?.error || 'CSV indirme ekranı bulunamadı.');
-    el.downloadPageDate.textContent = result.pageDate || '-';
+    const pageIsoDate = normalizePopupDateToIso(result.pageDate);
+    if (pageIsoDate) {
+      el.downloadStartDate.value = pageIsoDate;
+      el.downloadEndDate.value = pageIsoDate;
+    }
+    el.downloadPageDate.textContent = buildDownloadRangeLabel();
     el.downloadBaraCount.textContent = String(result.baraCount || 0);
     el.downloadPageStatus.textContent = 'Hazır';
     log(`CSV indirme sayfası bulundu. Tarih: ${result.pageDate || '-'} | Bara: ${result.baraCount || 0}`);
@@ -286,23 +316,62 @@ async function analyzeDownloadPage() {
 
 async function downloadAllCsvs() {
   try {
+    const dateRange = readDownloadDateRange();
+    const runId = `tpys-csv-${Date.now()}`;
+    state.tpysCsvLastRunId = runId;
+    el.btnDownloadCsvReport.disabled = true;
     const tab = await getActiveTab();
     await ensureContentScript(tab.id);
     const result = await sendMessage(tab.id, {
       type: 'DOWNLOAD_ALL_CSVS',
-      payload: { delayMs: 1800 }
+      payload: {
+        runId,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        delayMs: 1800,
+        asciiNormalize: el.downloadAsciiNormalize.checked,
+        skipDuplicateContent: el.downloadSkipDuplicateContent.checked
+      }
     });
     if (!result?.ok) throw new Error(result?.reason || result?.error || 'Toplu CSV indirme başlatılamadı.');
-    el.downloadPageDate.textContent = result.pageDate || '-';
+    state.tpysCsvLastRunId = result.runId || runId;
+    el.downloadPageDate.textContent = `${dateRange.startDate} - ${dateRange.endDate}`;
     el.downloadBaraCount.textContent = String(result.total || 0);
     el.downloadPageStatus.textContent = 'Çalıştı';
-    log(`Toplu CSV indirme tamamlandı. Sayfa sırası: ${result.total || 0}, Başarılı: ${result.successCount || 0}, Hata: ${result.failureCount || 0}`);
+    el.btnDownloadCsvReport.disabled = false;
+    log(`Toplu CSV indirme tamamlandı. Sayfa sırası: ${result.total || 0}, Başarılı: ${result.successCount || 0}, Hata: ${result.failureCount || 0}, Duplicate: ${result.duplicateCount || 0}`);
     if (result.errors?.length) {
       result.errors.slice(0, 20).forEach((item) => log(`- ${item}`));
     }
   } catch (error) {
     log(`Toplu indirme hatası: ${error.message}`);
     console.error(error);
+  }
+}
+
+async function downloadTpysCsvReport() {
+  try {
+    const response = await sendRuntimeMessage({
+      type: 'TPYS_CSV_REPORT_DOWNLOAD',
+      payload: { runId: state.tpysCsvLastRunId }
+    });
+    if (!response?.ok) throw new Error(response?.reason || response?.error || 'Rapor indirilemedi.');
+    log(`TPYS CSV raporu indirildi: ${response.filename || response.finalFilename || '-'}`);
+  } catch (error) {
+    log(`Rapor indirme hatası: ${error.message}`);
+  }
+}
+
+function handleTpysCsvProgress(payload) {
+  if (!payload?.runId || (state.tpysCsvLastRunId && payload.runId !== state.tpysCsvLastRunId)) return;
+  state.tpysCsvLastRunId = payload.runId;
+  el.downloadPageStatus.textContent = `${payload.successCount || 0} başarılı / ${payload.failureCount || 0} hata`;
+  if (payload.totalItems) el.downloadBaraCount.textContent = String(payload.totalItems);
+  if (payload.localDate) el.downloadPageDate.textContent = payload.localDate;
+  if (payload.lastResult?.targets?.length) {
+    const targetSummary = payload.lastResult.targets.map((target) => `${target.targetKind || target.kind}: ${target.status}`).join(', ');
+    log(`TPYS CSV: ${payload.localDate || '-'} | ${payload.baraName || '-'} | ${targetSummary}`);
+    el.btnDownloadCsvReport.disabled = false;
   }
 }
 
@@ -363,7 +432,7 @@ async function getActiveTab() {
 
 async function ensureContentScript(tabId) {
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content-script.js'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['tpys-csv-automation-core.js', 'content-script.js'] });
   } catch (error) {
     const msg = String(error?.message || error || '');
     if (!/Cannot access contents of url|The extensions gallery cannot be scripted|chrome:\/\//i.test(msg)) throw error;
@@ -381,6 +450,47 @@ function sendMessage(tabId, message) {
       resolve(response);
     });
   });
+}
+
+function sendRuntimeMessage(message) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        reject(new Error(err.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+function readDownloadDateRange() {
+  const startDate = el.downloadStartDate.value;
+  const endDate = el.downloadEndDate.value || startDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new Error('Başlangıç tarihi seçilmelidir.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) throw new Error('Bitiş tarihi seçilmelidir.');
+  return startDate <= endDate
+    ? { startDate, endDate }
+    : { startDate: endDate, endDate: startDate };
+}
+
+function buildDownloadRangeLabel() {
+  try {
+    const range = readDownloadDateRange();
+    return `${range.startDate} - ${range.endDate}`;
+  } catch {
+    return '-';
+  }
+}
+
+function normalizePopupDateToIso(value) {
+  const text = String(value || '').trim();
+  let match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return text;
+  match = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (!match) return '';
+  return `${match[3]}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}`;
 }
 
 function parseSemicolonCsv(text) {

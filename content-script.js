@@ -958,6 +958,42 @@
     };
   }
 
+  function getTpysCsvAutomationCore() {
+    return window.TPYS_CSV_AUTOMATION_CORE || {
+      enumerateInclusiveDateRange(startDate, endDate) {
+        const parse = (value) => {
+          const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          return match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) : null;
+        };
+        const start = parse(startDate);
+        const end = parse(endDate || startDate);
+        if (!start || !end) return [];
+        const low = start <= end ? start : end;
+        const high = start <= end ? end : start;
+        const dates = [];
+        for (let current = new Date(low.getTime()); current <= high; current.setUTCDate(current.getUTCDate() + 1)) {
+          dates.push(`${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, '0')}-${String(current.getUTCDate()).padStart(2, '0')}`);
+        }
+        return dates;
+      },
+      formatIsoDateForTpys(value) {
+        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return match ? `${match[3]}.${match[2]}.${match[1]}` : '';
+      },
+      summarizeTpysCsvRun(items = []) {
+        return items.reduce((summary, item) => {
+          const targets = Array.isArray(item?.targets) ? item.targets : [];
+          summary.targetSuccessCount += targets.filter((target) => target.status === 'downloaded').length;
+          summary.targetFailureCount += targets.filter((target) => target.status === 'error').length;
+          summary.duplicateCount += targets.filter((target) => target.status === 'duplicate').length;
+          if (item?.ok && (targets.length === 0 || targets.every((target) => target.status !== 'error'))) summary.successCount += 1;
+          else summary.failureCount += 1;
+          return summary;
+        }, { successCount: 0, failureCount: 0, duplicateCount: 0, targetSuccessCount: 0, targetFailureCount: 0 });
+      }
+    };
+  }
+
   function appendCsvLog(text) {
     console.info('[TPYS CSV]', text);
   }
@@ -987,6 +1023,7 @@
     return {
       ok: true,
       pageDate: (dateInput?.value || '').trim(),
+      dateInput,
       downloadButton,
       baraItem,
       textInput,
@@ -1016,60 +1053,105 @@
     if (csvRunLock) return { ok: false, reason: 'İndirme otomasyonu zaten çalışıyor.' };
     csvRunLock = true;
     try {
+      const core = getTpysCsvAutomationCore();
       const controls = findCsvDownloadControls();
       if (!controls.ok) return controls;
 
-      const discoveredBaras = await discoverCsvBaras();
       const requestedBaras = Array.isArray(options.baraNames) && options.baraNames.length
         ? options.baraNames.map((x) => String(x || '').trim()).filter(Boolean)
         : [];
-
       const requestedSet = new Set(requestedBaras.map((x) => normalizeText(x)));
-      const baras = discoveredBaras.filter((name) => !requestedSet.size || requestedSet.has(normalizeText(name)));
-      if (!baras.length) return { ok: false, reason: 'İndirilecek bara listesi okunamadı.' };
+      const fallbackIsoDate = normalizeCsvPageDateToIso(controls.pageDate);
+      const dates = core.enumerateInclusiveDateRange(
+        options.startDate || fallbackIsoDate,
+        options.endDate || options.startDate || fallbackIsoDate
+      );
+      if (!dates.length) return { ok: false, reason: 'İndirilecek tarih aralığı geçersiz.' };
 
-      appendCsvLog(`Toplu indirme başladı. Sayfa sırasındaki bara sayısı: ${baras.length}`);
+      const runId = String(options.runId || `tpys-csv-${Date.now()}`);
+      appendCsvLog(`Toplu standart indirme başladı. Tarih aralığı: ${dates[0]} - ${dates[dates.length - 1]}`);
 
-      let successCount = 0;
-      let failureCount = 0;
       const errors = [];
+      const results = [];
       const delayMs = Math.max(1200, Number(options.delayMs || 1800));
       let lastDownloadedHref = '';
+      let discoveredTotal = 0;
+      let requestedTotal = 0;
 
-      for (let i = 0; i < baras.length; i += 1) {
-        const baraName = baras[i];
-        appendCsvLog(`${i + 1}/${baras.length} seçiliyor: ${baraName}`);
-        closeCsvFileWindows();
-        const selected = await selectCsvBara(baraName);
-        if (!selected.ok) {
-          failureCount += 1;
-          errors.push(`${baraName}: ${selected.reason}`);
+      for (const localDate of dates) {
+        const displayDate = core.formatIsoDateForTpys(localDate);
+        const dateSet = await setCsvDownloadDate(localDate, displayDate);
+        if (!dateSet.ok) {
+          const message = `${localDate}: ${dateSet.reason}`;
+          errors.push(message);
+          results.push({ ok: false, reason: message });
           continue;
         }
 
-        await sleep(320);
-        const triggered = await triggerCsvDownload({ baraName, lastDownloadedHref });
-        if (triggered.ok) {
-          successCount += 1;
-          lastDownloadedHref = triggered.href || lastDownloadedHref;
-          appendCsvLog(`İndirildi: ${baraName}${triggered.filename ? ` → ${triggered.filename}` : ''}`);
-        } else {
-          failureCount += 1;
-          errors.push(`${baraName}: ${triggered.reason}`);
-          appendCsvLog(`Atlandı/Hata: ${baraName} → ${triggered.reason}`);
+        await sleep(450);
+        const discoveredBaras = await discoverCsvBaras();
+        const baras = discoveredBaras.filter((name) => !requestedSet.size || requestedSet.has(normalizeText(name)));
+        discoveredTotal += discoveredBaras.length;
+        requestedTotal += baras.length;
+        appendCsvLog(`${displayDate}: ${baras.length} bara işlenecek.`);
+        if (!baras.length) {
+          const message = `${displayDate}: İndirilecek bara listesi okunamadı.`;
+          errors.push(message);
+          results.push({ ok: false, reason: message });
+          continue;
         }
 
-        await sleep(delayMs);
+        for (let i = 0; i < baras.length; i += 1) {
+          const baraName = baras[i];
+          appendCsvLog(`${displayDate} | ${i + 1}/${baras.length} seçiliyor: ${baraName}`);
+          closeCsvFileWindows();
+          const selected = await selectCsvBara(baraName);
+          if (!selected.ok) {
+            const message = `${displayDate} ${baraName}: ${selected.reason}`;
+            errors.push(message);
+            results.push({ ok: false, reason: message });
+            continue;
+          }
+
+          await sleep(320);
+          const triggered = await triggerCsvDownload({
+            runId,
+            baraName,
+            localDate,
+            pageDate: displayDate,
+            lastDownloadedHref,
+            asciiNormalize: options.asciiNormalize === true,
+            skipDuplicateContent: options.skipDuplicateContent !== false,
+            ordinal: results.length + 1,
+            totalItems: requestedTotal,
+            standardDownload: true
+          });
+          results.push(triggered);
+          if (triggered.ok) {
+            lastDownloadedHref = triggered.href || lastDownloadedHref;
+            appendCsvLog(`İşlendi: ${displayDate} | ${baraName}${triggered.filename ? ` -> ${triggered.filename}` : ''}`);
+          } else {
+            errors.push(`${displayDate} ${baraName}: ${triggered.reason}`);
+            appendCsvLog(`Atlandı/Hata: ${displayDate} | ${baraName} -> ${triggered.reason}`);
+          }
+
+          await sleep(delayMs);
+        }
       }
 
+      const summary = core.summarizeTpysCsvRun(results);
       return {
         ok: true,
-        pageDate: controls.pageDate || '',
-        total: baras.length,
-        requestedTotal: requestedBaras.length || baras.length,
-        discoveredTotal: discoveredBaras.length,
-        successCount,
-        failureCount,
+        runId,
+        pageDate: dates.length === 1 ? core.formatIsoDateForTpys(dates[0]) : `${core.formatIsoDateForTpys(dates[0])} - ${core.formatIsoDateForTpys(dates[dates.length - 1])}`,
+        total: results.length,
+        requestedTotal: requestedBaras.length || requestedTotal,
+        discoveredTotal,
+        successCount: summary.successCount,
+        failureCount: summary.failureCount,
+        duplicateCount: summary.duplicateCount,
+        targetSuccessCount: summary.targetSuccessCount,
+        targetFailureCount: summary.targetFailureCount,
         errors
       };
     } catch (error) {
@@ -1106,6 +1188,37 @@
     item.scrollIntoView({ block: 'nearest' });
     clickElement(item);
     await sleep(160);
+    return { ok: true };
+  }
+
+  async function setCsvDownloadDate(localDate, displayDate) {
+    const targetDate = displayDate || getTpysCsvAutomationCore().formatIsoDateForTpys(localDate);
+    if (!targetDate) return { ok: false, reason: 'TPYS tarih formati olusturulamadi.' };
+
+    const extDateField = findExtCsvDateField();
+    if (extDateField) {
+      try {
+        if (typeof extDateField.setRawValue === 'function') extDateField.setRawValue(targetDate);
+        if (typeof extDateField.setValue === 'function') extDateField.setValue(targetDate);
+        if (extDateField.el?.dom) focusAndReplaceInputValue(extDateField.el.dom, targetDate);
+        if (typeof extDateField.fireEvent === 'function') {
+          extDateField.fireEvent('change', extDateField, targetDate);
+          extDateField.fireEvent('select', extDateField, targetDate);
+        }
+        appendCsvLog(`Tarih ayarlandı: ${targetDate}`);
+        return { ok: true };
+      } catch (error) {
+        appendCsvLog(`ExtJS tarih alanı ayarlanamadı, DOM deneniyor: ${error.message}`);
+      }
+    }
+
+    const controls = findCsvDownloadControls();
+    if (!controls.ok) return controls;
+    if (!controls.dateInput) return { ok: false, reason: 'Tarih alanı bulunamadı.' };
+    focusAndReplaceInputValue(controls.dateInput, targetDate);
+    controls.dateInput.dispatchEvent(new Event('blur', { bubbles: true }));
+    pressKey(controls.dateInput, 'Enter');
+    appendCsvLog(`Tarih ayarlandı: ${targetDate}`);
     return { ok: true };
   }
 
@@ -1193,9 +1306,21 @@
     const href = new URL(link.getAttribute('href'), window.location.href).href;
     const filenameHint = (link.textContent || '').trim() || `${(options.baraName || 'bara').replace(/\s+/g, '_')}.csv`;
 
-    const backgroundResult = await downloadViaBackground(href, filenameHint, 50000);
+    const backgroundResult = await downloadViaBackground(href, filenameHint, 90000, options);
     if (backgroundResult?.ok) {
-      return { ok: true, href, filename: backgroundResult.filename || filenameHint, via: 'downloads-api' };
+      return {
+        ok: true,
+        href,
+        filename: backgroundResult.filename || filenameHint,
+        via: options.standardDownload ? 'standard-downloads-api' : 'downloads-api',
+        runId: backgroundResult.runId,
+        targets: backgroundResult.targets || [],
+        warnings: backgroundResult.warnings || []
+      };
+    }
+
+    if (options.standardDownload) {
+      return { ok: false, reason: backgroundResult?.reason || backgroundResult?.error || 'Standart indirme basarisiz.' };
     }
 
     try {
@@ -1208,10 +1333,26 @@
     }
   }
 
-  async function downloadViaBackground(url, filenameHint, timeoutMs) {
+  async function downloadViaBackground(url, filenameHint, timeoutMs, metadata = {}) {
     return new Promise((resolve) => {
       try {
-        chrome.runtime.sendMessage({ type: 'DOWNLOAD_URL_AND_WAIT', payload: { url, filenameHint, timeoutMs } }, (response) => {
+        const standardDownload = metadata.standardDownload === true;
+        const payload = standardDownload
+          ? {
+              runId: metadata.runId,
+              url,
+              filenameHint,
+              baraName: metadata.baraName,
+              localDate: metadata.localDate,
+              pageDate: metadata.pageDate,
+              asciiNormalize: metadata.asciiNormalize === true,
+              skipDuplicateContent: metadata.skipDuplicateContent !== false,
+              ordinal: metadata.ordinal,
+              totalItems: metadata.totalItems,
+              timeoutMs
+            }
+          : { url, filenameHint, timeoutMs };
+        chrome.runtime.sendMessage({ type: standardDownload ? 'TPYS_CSV_STANDARD_DOWNLOAD' : 'DOWNLOAD_URL_AND_WAIT', payload }, (response) => {
           const err = chrome.runtime.lastError;
           if (err) {
             resolve({ ok: false, reason: err.message });
@@ -1257,6 +1398,25 @@
       const fieldLabel = cmp?.fieldLabel || '';
       const xtype = cmp?.xtype || cmp?.getXType?.() || '';
       return /combo/i.test(String(xtype)) && (normalizeText(hiddenName) === 'xbara id' || normalizeText(fieldLabel) === 'bara');
+    }) || null;
+  }
+
+  function findExtCsvDateField() {
+    const Ext = window.Ext;
+    if (!Ext) return null;
+    const mgr = Ext.ComponentMgr || Ext.ComponentManager;
+    if (!mgr?.all) return null;
+    const items = [];
+    if (typeof mgr.all.each === 'function') mgr.all.each((cmp) => items.push(cmp));
+    else if (Array.isArray(mgr.all.items)) items.push(...mgr.all.items);
+    else if (mgr.all.map) items.push(...Object.values(mgr.all.map));
+
+    return items.find((cmp) => {
+      const name = cmp?.name || cmp?.hiddenName || cmp?.id || '';
+      const fieldLabel = cmp?.fieldLabel || '';
+      const xtype = cmp?.xtype || cmp?.getXType?.() || '';
+      const key = normalizeText(`${name} ${fieldLabel} ${xtype}`);
+      return key.includes('xgecerlilik dt') || key.includes('gecerlilik') || key.includes('tarih') || key.includes('datefield');
     }) || null;
   }
 
@@ -1334,6 +1494,15 @@
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
+  }
+
+  function normalizeCsvPageDateToIso(value) {
+    const text = String(value || '').trim();
+    let match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) return text;
+    match = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+    if (!match) return '';
+    return `${match[3]}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}`;
   }
 
   function sleep(ms) {

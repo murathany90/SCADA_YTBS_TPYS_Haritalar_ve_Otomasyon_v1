@@ -17,6 +17,11 @@ try {
 } catch (error) {
   console.warn('[RGDH] Diagnostics yuklenemedi.', error?.message || error);
 }
+try {
+  if (typeof importScripts === 'function') importScripts('tpys-csv-standardizer.js', 'tpys-csv-planner.js');
+} catch (error) {
+  console.warn('[TPYS CSV] Standardizer yuklenemedi.', error?.message || error);
+}
 
 const RGDH_YKS_ORIGIN = 'https://yks.teias.gov.tr';
 const RGDH_YKS_APP_URL = `${RGDH_YKS_ORIGIN}/#/`;
@@ -78,6 +83,10 @@ let rgdhDiagnosticEvents = [];
 const RGDH_DIAGNOSTIC_LIMIT = 1000;
 let rgdhYksLogEvents = [];
 const RGDH_YKS_LOG_LIMIT = 2000;
+const TPYS_CSV_INDEX_STORAGE_KEY = 'tpysCsvDownloadIndexV1';
+const TPYS_CSV_REPORT_ROOT = 'TPYS_CSV_Standartlastirilmis';
+const tpysCsvRuns = new Map();
+let tpysCsvLastRunId = '';
 const rgdhFetchJobs = new Map();
 let rgdhFetchJobSeq = 0;
 const rgdhBusbarInternalIdCache = new Map();
@@ -88,6 +97,18 @@ let rgdhTemporaryYksTabUsers = 0;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'DOWNLOAD_URL_AND_WAIT') {
     handleDownloadAndWait(message.payload || {}).then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, error: error.message || String(error) });
+    });
+    return true;
+  }
+  if (message?.type === 'TPYS_CSV_STANDARD_DOWNLOAD') {
+    handleTpysCsvStandardDownload(message.payload || {}).then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, error: error.message || String(error) });
+    });
+    return true;
+  }
+  if (message?.type === 'TPYS_CSV_REPORT_DOWNLOAD') {
+    handleTpysCsvReportDownload(message.payload || {}).then(sendResponse).catch((error) => {
       sendResponse({ ok: false, error: error.message || String(error) });
     });
     return true;
@@ -4100,6 +4121,285 @@ async function safeReadText(response) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function handleTpysCsvStandardDownload(payload) {
+  const url = String(payload.url || '').trim();
+  if (!url) return { ok: false, reason: 'Indirilecek TPYS CSV URL bos.' };
+  const standardizer = globalThis.TPYS_CSV_STANDARDIZER;
+  if (!standardizer?.standardizeTpysCsv) return { ok: false, reason: 'TPYS CSV standardizer yuklu degil.' };
+
+  const run = await getTpysCsvRun(payload.runId);
+  const warnings = [];
+  let csvText = '';
+  try {
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response?.ok) throw new Error(`HTTP ${response?.status || 0}`);
+    csvText = await response.text();
+  } catch (error) {
+    warnings.push('CSV_FETCH_FAILED');
+    warnings.push(`CSV_FETCH_ERROR:${error.message || String(error)}`);
+  }
+
+  const standard = await standardizer.standardizeTpysCsv({
+    csvText,
+    baraName: payload.baraName,
+    localDate: payload.localDate,
+    pageDate: payload.pageDate,
+    filenameHint: payload.filenameHint,
+    asciiNormalize: payload.asciiNormalize
+  });
+  standard.warnings = [...new Set([...(standard.warnings || []), ...warnings])];
+
+  const planned = run.planner.planTargets(standard, {
+    skipDuplicateContent: payload.skipDuplicateContent !== false
+  });
+  const targets = [];
+
+  for (const target of planned.targets) {
+    const baseReport = {
+      runId: run.runId,
+      ordinal: payload.ordinal || '',
+      url,
+      baraName: String(payload.baraName || ''),
+      localDate: standard.isoDate,
+      displayDate: standard.displayDate,
+      plantName: standard.plantName,
+      safePlantName: standard.safePlantName,
+      sha256: standard.sha256 || '',
+      targetKind: target.kind,
+      targetPath: target.path,
+      warnings: standard.warnings.join('|')
+    };
+
+    if (target.action === 'duplicate') {
+      const item = { ...baseReport, status: 'duplicate', duplicateOf: target.duplicateOf || target.path };
+      targets.push(item);
+      run.rows.push(item);
+      continue;
+    }
+
+    if (target.action === 'error') {
+      const item = { ...baseReport, status: 'error', error: target.reason || 'Planlama hatasi.' };
+      targets.push(item);
+      run.rows.push(item);
+      continue;
+    }
+
+    try {
+      const downloadId = await chrome.downloads.download({
+        url,
+        filename: target.path,
+        saveAs: false,
+        conflictAction: 'uniquify'
+      });
+      const waited = await waitForDownloadCompletion(downloadId, Number(payload.timeoutMs) || DOWNLOAD_TIMEOUT_MS);
+      if (waited.ok) {
+        run.planner.recordSuccess(target.path, standard.sha256 || '');
+        const item = {
+          ...baseReport,
+          status: 'downloaded',
+          downloadId,
+          finalFilename: waited.filename || '',
+          finalUrl: waited.finalUrl || ''
+        };
+        targets.push(item);
+        run.rows.push(item);
+      } else {
+        const item = {
+          ...baseReport,
+          status: 'error',
+          downloadId,
+          error: waited.reason || 'Indirme tamamlanamadi.',
+          finalFilename: waited.filename || ''
+        };
+        targets.push(item);
+        run.rows.push(item);
+      }
+    } catch (error) {
+      const item = { ...baseReport, status: 'error', error: error.message || String(error) };
+      targets.push(item);
+      run.rows.push(item);
+    }
+  }
+
+  await saveTpysCsvIndex(run.planner.getIndex());
+  updateTpysCsvRunSummary(run);
+  const ok = targets.some((target) => target.status === 'downloaded' || target.status === 'duplicate');
+  const result = {
+    ok,
+    runId: run.runId,
+    plantName: standard.plantName,
+    safePlantName: standard.safePlantName,
+    localDate: standard.isoDate,
+    displayDate: standard.displayDate,
+    baraName: String(payload.baraName || ''),
+    sha256: standard.sha256 || '',
+    warnings: standard.warnings,
+    targets,
+    summary: run.summary
+  };
+  await sendTpysCsvProgress(run, {
+    phase: 'item-complete',
+    localDate: standard.isoDate,
+    baraName: String(payload.baraName || ''),
+    totalItems: payload.totalItems || null,
+    lastResult: result
+  });
+  return result;
+}
+
+async function handleTpysCsvReportDownload(payload = {}) {
+  const runId = String(payload.runId || tpysCsvLastRunId || '');
+  const run = tpysCsvRuns.get(runId);
+  if (!run || !run.rows.length) return { ok: false, reason: 'Indirilebilir TPYS CSV raporu bulunamadi.' };
+  const csv = buildTpysCsvReport(run.rows);
+  const filename = `${TPYS_CSV_REPORT_ROOT}/TPYS_CSV_RAPOR_${formatTpysReportTimestamp(new Date())}.csv`;
+  const downloadId = await chrome.downloads.download({
+    url: `data:text/csv;charset=utf-8,%EF%BB%BF${encodeURIComponent(csv)}`,
+    filename,
+    saveAs: false,
+    conflictAction: 'uniquify'
+  });
+  const waited = await waitForDownloadCompletion(downloadId, Number(payload.timeoutMs) || DOWNLOAD_TIMEOUT_MS);
+  return { ok: waited.ok, downloadId, filename, ...waited };
+}
+
+async function getTpysCsvRun(requestedRunId) {
+  const runId = String(requestedRunId || tpysCsvLastRunId || `tpys-csv-${Date.now()}`);
+  const existing = tpysCsvRuns.get(runId);
+  if (existing) {
+    tpysCsvLastRunId = runId;
+    return existing;
+  }
+  const plannerApi = globalThis.TPYS_CSV_PLANNER;
+  if (!plannerApi?.createTpysCsvPlanner) throw new Error('TPYS CSV planner yuklu degil.');
+  const previousIndex = await loadTpysCsvIndex();
+  const run = {
+    runId,
+    createdAt: new Date().toISOString(),
+    planner: plannerApi.createTpysCsvPlanner({ previousIndex }),
+    rows: [],
+    summary: {
+      successCount: 0,
+      failureCount: 0,
+      duplicateCount: 0,
+      targetSuccessCount: 0,
+      targetFailureCount: 0
+    }
+  };
+  tpysCsvRuns.set(runId, run);
+  tpysCsvLastRunId = runId;
+  return run;
+}
+
+async function loadTpysCsvIndex() {
+  try {
+    const stored = await chrome.storage?.local?.get?.(TPYS_CSV_INDEX_STORAGE_KEY);
+    return stored?.[TPYS_CSV_INDEX_STORAGE_KEY] && typeof stored[TPYS_CSV_INDEX_STORAGE_KEY] === 'object'
+      ? stored[TPYS_CSV_INDEX_STORAGE_KEY]
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveTpysCsvIndex(index) {
+  try {
+    await chrome.storage?.local?.set?.({ [TPYS_CSV_INDEX_STORAGE_KEY]: index || {} });
+  } catch {
+  }
+}
+
+function updateTpysCsvRunSummary(run) {
+  const grouped = new Map();
+  for (const row of run.rows) {
+    const key = `${row.localDate}|${row.baraName}|${row.ordinal}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
+  const summary = {
+    successCount: 0,
+    failureCount: 0,
+    duplicateCount: 0,
+    targetSuccessCount: 0,
+    targetFailureCount: 0
+  };
+  for (const rows of grouped.values()) {
+    const targetFailures = rows.filter((row) => row.status === 'error').length;
+    const targetSuccesses = rows.filter((row) => row.status === 'downloaded').length;
+    const duplicates = rows.filter((row) => row.status === 'duplicate').length;
+    summary.targetSuccessCount += targetSuccesses;
+    summary.targetFailureCount += targetFailures;
+    summary.duplicateCount += duplicates;
+    if (targetFailures === 0 && (targetSuccesses > 0 || duplicates > 0)) summary.successCount += 1;
+    else summary.failureCount += 1;
+  }
+  run.summary = summary;
+}
+
+async function sendTpysCsvProgress(run, payload = {}) {
+  try {
+    if (typeof chrome.runtime?.sendMessage !== 'function') return;
+    await chrome.runtime.sendMessage({
+      type: 'TPYS_CSV_PROGRESS',
+      payload: {
+        runId: run.runId,
+        phase: payload.phase || 'progress',
+        localDate: payload.localDate || '',
+        baraName: payload.baraName || '',
+        successCount: run.summary.targetSuccessCount,
+        failureCount: run.summary.targetFailureCount,
+        duplicateCount: run.summary.duplicateCount,
+        totalItems: payload.totalItems || null,
+        lastResult: payload.lastResult || null
+      }
+    });
+  } catch {
+  }
+}
+
+function buildTpysCsvReport(rows) {
+  const headers = [
+    'runId',
+    'ordinal',
+    'localDate',
+    'displayDate',
+    'baraName',
+    'plantName',
+    'safePlantName',
+    'targetKind',
+    'targetPath',
+    'status',
+    'downloadId',
+    'sha256',
+    'warnings',
+    'error',
+    'finalFilename',
+    'url'
+  ];
+  const lines = [headers.join(';')];
+  for (const row of rows) {
+    lines.push(headers.map((header) => quoteCsvCell(row[header])).join(';'));
+  }
+  return lines.join('\n');
+}
+
+function quoteCsvCell(value) {
+  const text = String(value ?? '');
+  return /[;"\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function formatTpysReportTimestamp(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+    '_',
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0'),
+    String(date.getSeconds()).padStart(2, '0')
+  ].join('');
 }
 
 async function handleDownloadAndWait(payload) {

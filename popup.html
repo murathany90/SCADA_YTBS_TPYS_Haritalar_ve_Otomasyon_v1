@@ -54,16 +54,23 @@
 
     <section class="card">
       <h2>TPYS CSV İndirme Otomasyonu</h2>
+      <div class="form-grid csv-download-grid">
+        <label>Başlangıç tarihi <input id="downloadStartDate" type="date"></label>
+        <label>Bitiş tarihi <input id="downloadEndDate" type="date"></label>
+      </div>
+      <label class="checkbox-row"><input id="downloadAsciiNormalize" type="checkbox"><span>Dosya ve klasör adlarında ASCII normalize kullan</span></label>
+      <label class="checkbox-row"><input id="downloadSkipDuplicateContent" type="checkbox" checked><span>Aynı hedefte aynı SHA-256 içeriği atla</span></label>
       <div class="grid-actions two">
         <button id="btnAnalyzeDownloadPage">CSV sayfasını analiz et</button>
-        <button id="btnDownloadAllCsvs" class="primary">42 CSV indir</button>
+        <button id="btnDownloadAllCsvs" class="primary">Standart CSV indir</button>
+        <button id="btnDownloadCsvReport" disabled>Rapor indir</button>
       </div>
       <div class="stats compact">
-        <div class="stat"><span>İndirme sayfa tarihi</span><strong id="downloadPageDate">-</strong></div>
+        <div class="stat"><span>Seçili aralık</span><strong id="downloadPageDate">-</strong></div>
         <div class="stat"><span>Bulunan bara</span><strong id="downloadBaraCount">0</strong></div>
         <div class="stat"><span>Sayfa durumu</span><strong id="downloadPageStatus">-</strong></div>
       </div>
-      <p class="hint">TPYS CSV indirme ekranında mevcut "CSV İndir" akışı kullanılır; açılan dosya penceresindeki ilk dl/...csv bağlantısı otomatik indirilir ve indirme tamamlanmadan sonraki baraya geçilmez. Hata olan baralar atlanır, sıra devam eder.</p>
+      <p class="hint">TPYS CSV indirme ekranında mevcut "CSV İndir" akışı kullanılır; seçilen tarih aralığı gün gün işlenir, her bara standart klasörlere indirilir ve hatalar raporda tutulur.</p>
     </section>
 
     <details class="card" open>

@@ -151,7 +151,7 @@
   function cacheElements() {
     [
       'filterDate', 'filterEndDate', 'filterSourceType', 'filterSearch', 'filterNotice', 'uploadNotice',
-      'btnFetchYks', 'btnCancelFetch', 'btnPickCsv', 'csvInput',
+      'btnFetchYks', 'btnCancelFetch', 'btnPickCsv', 'csvInput', 'btnLoadLocalEkc', 'localEkcDirectoryInput',
       'btnExportCsv', 'btnToggleTheme', 'btnToggleVoltage',
       'statSource', 'statRows', 'statBusbars',
       'statMismatch', 'statStatus', 'rawTable', 'rawPager', 'rawPageInfo', 'btnRawFirst', 'btnRawPrev', 'btnRawNext', 'btnRawLast', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyFilterBar', 'dailyFilterBusbar', 'dailyFilterYtm', 'dailyFilterDate', 'dailyFilterControlSource', 'btnClearDailyFilters', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
@@ -192,6 +192,8 @@
     el.btnCancelFetch?.addEventListener('click', cancelYksFetch);
     el.btnPickCsv.addEventListener('click', () => el.csvInput.click());
     el.csvInput.addEventListener('change', handleCsvFiles);
+    el.btnLoadLocalEkc?.addEventListener('click', handleLocalEkcLoad);
+    el.localEkcDirectoryInput?.addEventListener('change', handleLocalEkcDirectoryFallbackFiles);
     el.btnToggleDailyMetricTable?.addEventListener('click', toggleDailyMetricTable);
     [
       [el.btnRawFirst, 'first'],
@@ -536,32 +538,183 @@
   async function handleCsvFiles(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    showUploadFeedback(files.length);
+    try {
+      await loadEkcFiles(files, { source: 'manual' });
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  async function handleLocalEkcLoad() {
+    const loader = getLocalEkcLoader();
+    if (!loader) {
+      const message = 'Local Ek-C yukleyici modulu bulunamadi.';
+      pushError('Local EK-C', message, {});
+      pushFetchLog('error', 'Local EK-C', message, {});
+      setStatus(message);
+      return;
+    }
+
+    if (typeof window === 'undefined' || typeof window.showDirectoryPicker !== 'function') {
+      startLocalEkcFallbackDirectoryPick();
+      return;
+    }
+
+    const filters = readFilters();
+    const selectedBusbar = resolveSelectedBusbar(filters);
+    el.btnLoadLocalEkc.disabled = true;
+    setStatus('Local EK-C klasoru seciliyor...');
+    pushFetchLog('info', 'Local EK-C', 'Local EK-C klasor secimi baslatildi.', { filters, selectedBusbar });
+
+    try {
+      const directoryResult = await loader.getLocalEkcDirectoryHandle();
+      const directoryHandle = directoryResult.directoryHandle;
+      setStatus('Local EK-C klasoru taraniyor...');
+      const collection = await loader.collectLocalEkcFilesFromDirectory(directoryHandle, {
+        filters,
+        selectedBusbar,
+        onProgress: handleLocalEkcProgress
+      });
+      pushFetchLog('info', 'Local EK-C', `Local EK-C klasoru tarandi: ${directoryHandle?.name || '-'}.`, {
+        directoryName: directoryHandle?.name || '',
+        handleSource: directoryResult.source,
+        scannedFiles: collection.scannedFiles,
+        filteredOutFiles: collection.filteredOutFiles,
+        duplicateFiles: collection.duplicateFiles,
+        readErrorFiles: collection.readErrorFiles || []
+      });
+      await loadEkcFiles(collection.files, {
+        source: 'local',
+        filters,
+        selectedBusbar,
+        localSummary: {
+          ...collection,
+          directoryName: directoryHandle?.name || '',
+          handleSource: directoryResult.source
+        }
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        setStatus('Local EK-C klasor secimi iptal edildi.');
+        pushFetchLog('warn', 'Local EK-C', 'Local EK-C klasor secimi iptal edildi.', {});
+        return;
+      }
+      const message = error?.message || String(error);
+      pushError('Local EK-C', message, error);
+      pushFetchLog('error', 'Local EK-C', message, error);
+      setStatus('Local EK-C yukleme basarisiz');
+    } finally {
+      el.btnLoadLocalEkc.disabled = false;
+    }
+  }
+
+  async function handleLocalEkcDirectoryFallbackFiles(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const loader = getLocalEkcLoader();
+    const filters = readFilters();
+    const selectedBusbar = resolveSelectedBusbar(filters);
+    try {
+      const collection = await loader.collectLocalEkcFilesFromFileList(files, {
+        filters,
+        selectedBusbar,
+        onProgress: handleLocalEkcProgress
+      });
+      pushFetchLog('info', 'Local EK-C', 'Local EK-C fallback klasor secimi tarandi.', {
+        scannedFiles: collection.scannedFiles,
+        filteredOutFiles: collection.filteredOutFiles,
+        duplicateFiles: collection.duplicateFiles,
+        readErrorFiles: collection.readErrorFiles || []
+      });
+      await loadEkcFiles(collection.files, {
+        source: 'local',
+        filters,
+        selectedBusbar,
+        localSummary: {
+          ...collection,
+          directoryName: 'webkitdirectory',
+          handleSource: 'fallback'
+        }
+      });
+    } catch (error) {
+      const message = error?.message || String(error);
+      pushError('Local EK-C', message, error);
+      pushFetchLog('error', 'Local EK-C', message, error);
+      setStatus('Local EK-C yukleme basarisiz');
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  async function loadEkcFiles(files, options = {}) {
+    const sourceLabel = options.source === 'local' ? 'Local EK-C' : 'EK-C';
+    const isLocal = options.source === 'local';
+    const loader = isLocal ? getLocalEkcLoader() : null;
+    const localSummary = options.localSummary || {};
+    const localParseFilters = options.filters || readFilters();
+    const selectedBusbar = options.selectedBusbar || null;
+    let localFilteredOutFiles = 0;
+
+    if (!files.length) {
+      const emptySummary = buildEkcLoadSummary([], { acceptedGroups: [], duplicateGroups: [], rows: [] }, [], {
+        ...localSummary,
+        sourceLabel
+      });
+      finishUploadFeedback(emptySummary, uploadFeedbackTone(emptySummary));
+      setStatus(formatEkcLoadSummary(emptySummary));
+      pushFetchLog(uploadFeedbackLogLevel(emptySummary), sourceLabel, formatEkcLoadSummary(emptySummary), emptySummary);
+      return emptySummary;
+    }
+
+    showUploadFeedback(files.length, { sourceLabel });
     const fileGroups = [];
     const parseErrors = [];
     const catalogSummaries = getCatalogBusbarSummaries();
-    const fallbackTarget = files.length === 1 ? resolveEkcBindingTarget() : null;
+    const fallbackTarget = isLocal ? null : files.length === 1 ? resolveEkcBindingTarget() : null;
 
     for (const [index, file] of files.entries()) {
-      updateUploadFeedback(index, files.length, `Isleniyor: ${file.name}`);
+      if (isLocal && index > 0 && index % 8 === 0) await yieldToBrowser();
+      const fileName = file.localEkcPath || file.webkitRelativePath || file.name;
+      updateUploadFeedback(index, files.length, `Isleniyor: ${fileName}`);
       try {
         const text = await file.text();
         const parsed = RGDH_CSV.parseEkcCsvText(text, { filename: file.name });
-        const binding = RGDH_COMPARISON.bindEkcRowsToCatalog(parsed.rows || [], catalogSummaries, {
+        let parsedRows = parsed.rows || [];
+        if (isLocal && loader?.filterParsedEkcRows) {
+          parsedRows = loader.filterParsedEkcRows(parsedRows, { filters: localParseFilters });
+          if (!parsedRows.length) {
+            localFilteredOutFiles += 1;
+            continue;
+          }
+        }
+        let binding = RGDH_COMPARISON.bindEkcRowsToCatalog(parsedRows, catalogSummaries, {
           fallbackTarget,
           fileName: file.name
         });
+        if (isLocal && loader?.filterParsedEkcRows) {
+          const filteredBoundRows = loader.filterParsedEkcRows(binding.rows || [], {
+            filters: localParseFilters,
+            selectedBusbar
+          });
+          if (!filteredBoundRows.length) {
+            localFilteredOutFiles += 1;
+            continue;
+          }
+          binding = { ...binding, rows: filteredBoundRows };
+        }
         fileGroups.push({
-          fileName: file.name,
+          fileName,
           rows: binding.rows || [],
           parsedGroups: parsed.groups || [],
-          binding
+          binding,
+          localEkcPath: file.localEkcPath || '',
+          localEkcHash: file.localEkcHash || ''
         });
       } catch (error) {
-        parseErrors.push({ fileName: file.name, message: error.message || String(error) });
-        pushError('EK-C', error.message || String(error), { file: file.name });
+        parseErrors.push({ fileName, message: error.message || String(error) });
+        pushError(sourceLabel, error.message || String(error), { file: fileName });
       } finally {
-        updateUploadFeedback(index + 1, files.length, `Islendi: ${file.name}`);
+        updateUploadFeedback(index + 1, files.length, `Islendi: ${fileName}`);
       }
     }
 
@@ -577,16 +730,48 @@
     }
     rebuildEnrichment();
     syncDynamicOptions();
-    const loadSummary = buildEkcLoadSummary(fileGroups, deduped, parseErrors);
+    const loadSummary = buildEkcLoadSummary(fileGroups, deduped, parseErrors, {
+      ...localSummary,
+      sourceLabel,
+      filteredOutFiles: (localSummary.filteredOutFiles || 0) + localFilteredOutFiles
+    });
     finishUploadFeedback(loadSummary, uploadFeedbackTone(loadSummary));
     setStatus(formatEkcLoadSummary(loadSummary));
-    pushFetchLog(loadSummary.duplicateFiles || loadSummary.unmatchedFiles || loadSummary.ambiguousFiles || loadSummary.parseErrorFiles ? 'warn' : 'success', 'EK-C', formatEkcLoadSummary(loadSummary), loadSummary);
+    pushFetchLog(uploadFeedbackLogLevel(loadSummary), sourceLabel, formatEkcLoadSummary(loadSummary), loadSummary);
     if (state.ekcRows.length) {
       autoCompareAfterEkcLoad();
     } else {
       renderAll();
     }
-    event.target.value = '';
+    return loadSummary;
+  }
+
+  function handleLocalEkcProgress(progress) {
+    const scanned = Number(progress?.scannedFiles || 0);
+    const skipped = Number(progress?.skippedByPath || 0);
+    const read = Number(progress?.readFiles || 0);
+    const duplicate = Number(progress?.duplicateFiles || 0);
+    const message = `Local EK-C taraniyor: ${scanned} dosya, ${skipped} filtre disi, ${read} okundu${duplicate ? `, ${duplicate} tekrar` : ''}.`;
+    setStatus(message);
+    setUploadNotice(message, '');
+  }
+
+  function startLocalEkcFallbackDirectoryPick() {
+    if (!el.localEkcDirectoryInput) {
+      const message = 'Local EK-C fallback klasor secici bulunamadi.';
+      pushError('Local EK-C', message, {});
+      pushFetchLog('error', 'Local EK-C', message, {});
+      setStatus(message);
+      return;
+    }
+    el.localEkcDirectoryInput.value = '';
+    pushFetchLog('warn', 'Local EK-C', 'showDirectoryPicker desteklenmiyor; klasor input fallback kullaniliyor.', {});
+    setStatus('Local EK-C klasoru secin...');
+    el.localEkcDirectoryInput.click();
+  }
+
+  function getLocalEkcLoader() {
+    return typeof RGDH_LOCAL_EKC_LOADER !== 'undefined' ? RGDH_LOCAL_EKC_LOADER : null;
   }
 
   function bindEkcRowsToSelectedBusbar(rows, target = resolveEkcBindingTarget()) {
@@ -603,12 +788,18 @@
     return targets.size === 1 ? [...targets.values()][0] : null;
   }
 
-  function buildEkcLoadSummary(fileGroups, deduped, parseErrors) {
+  function buildEkcLoadSummary(fileGroups, deduped, parseErrors, extra = {}) {
     const acceptedGroups = deduped.acceptedGroups || [];
     return {
+      sourceLabel: extra.sourceLabel || 'EK-C',
       fileCount: fileGroups.length + parseErrors.length,
       acceptedFiles: acceptedGroups.length,
       duplicateFiles: (deduped.duplicateGroups || []).length,
+      localDuplicateFiles: Number(extra.duplicateFiles || 0),
+      scannedFiles: Number(extra.scannedFiles || 0),
+      filteredOutFiles: Number(extra.filteredOutFiles || 0),
+      readErrorFiles: (extra.readErrorFiles || []).length || Number(extra.readErrorFileCount || 0),
+      directoryName: extra.directoryName || '',
       matchedFiles: countEkcBindingStatus(acceptedGroups, 'matched'),
       fallbackFiles: countEkcBindingStatus(acceptedGroups, 'fallback_selected'),
       unmatchedFiles: countEkcBindingStatus(acceptedGroups, 'no_match'),
@@ -623,10 +814,15 @@
   }
 
   function formatEkcLoadSummary(summary) {
+    const sourceLabel = summary.sourceLabel || 'EK-C';
     const parts = [
-      `EK-C CSV yuklendi: ${summary.rowCount || 0} dakika`,
+      `${sourceLabel} CSV yuklendi: ${summary.rowCount || 0} dakika`,
       `${summary.acceptedFiles || 0}/${summary.fileCount || 0} dosya kabul`
     ];
+    if (summary.scannedFiles) parts.push(`${summary.scannedFiles} local dosya tarandi`);
+    if (summary.filteredOutFiles) parts.push(`${summary.filteredOutFiles} filtre disi`);
+    if (summary.localDuplicateFiles) parts.push(`${summary.localDuplicateFiles} local tekrar atlandi`);
+    if (summary.readErrorFiles) parts.push(`${summary.readErrorFiles} local okuma hatasi`);
     if (summary.matchedFiles) parts.push(`${summary.matchedFiles} katalog eslesmesi`);
     if (summary.fallbackFiles) parts.push(`${summary.fallbackFiles} secili bara fallback`);
     if (summary.duplicateFiles) parts.push(`${summary.duplicateFiles} tekrar reddedildi`);
@@ -636,11 +832,12 @@
     return parts.join(', ') + '.';
   }
 
-  function showUploadFeedback(totalFiles) {
-    state.uploadFeedback = { active: true, total: totalFiles || 0, processed: 0 };
-    setUploadNotice(`EK-C CSV yukleniyor: 0/${totalFiles || 0} dosya.`, '');
+  function showUploadFeedback(totalFiles, options = {}) {
+    const sourceLabel = options.sourceLabel || 'EK-C';
+    state.uploadFeedback = { active: true, total: totalFiles || 0, processed: 0, sourceLabel };
+    setUploadNotice(`${sourceLabel} CSV yukleniyor: 0/${totalFiles || 0} dosya.`, '');
     if (el.uploadModal) el.uploadModal.hidden = false;
-    if (el.uploadModalTitle) el.uploadModalTitle.textContent = 'EK-C CSV yukleniyor';
+    if (el.uploadModalTitle) el.uploadModalTitle.textContent = `${sourceLabel} CSV yukleniyor`;
     if (el.uploadModalMessage) el.uploadModalMessage.textContent = 'Dosyalar sirayla okunuyor ve katalogla eslestiriliyor.';
     if (el.btnCloseUploadModal) el.btnCloseUploadModal.hidden = true;
     setUploadProgress(0, totalFiles || 0);
@@ -649,20 +846,22 @@
   function updateUploadFeedback(processedFiles, totalFiles, message) {
     const processed = Math.max(0, Number(processedFiles) || 0);
     const total = Math.max(0, Number(totalFiles) || 0);
-    state.uploadFeedback = { active: true, processed, total };
-    const progressText = `EK-C CSV yukleniyor: ${processed}/${total} dosya.`;
+    const sourceLabel = state.uploadFeedback.sourceLabel || 'EK-C';
+    state.uploadFeedback = { active: true, processed, total, sourceLabel };
+    const progressText = `${sourceLabel} CSV yukleniyor: ${processed}/${total} dosya.`;
     setUploadNotice(progressText, '');
-    if (el.uploadModalTitle) el.uploadModalTitle.textContent = 'EK-C CSV yukleniyor';
+    if (el.uploadModalTitle) el.uploadModalTitle.textContent = `${sourceLabel} CSV yukleniyor`;
     if (el.uploadModalMessage) el.uploadModalMessage.textContent = message || progressText;
     setUploadProgress(processed, total);
   }
 
   function finishUploadFeedback(loadSummary, tone = 'success') {
-    state.uploadFeedback = { active: false, processed: loadSummary.fileCount || 0, total: loadSummary.fileCount || 0 };
+    const sourceLabel = loadSummary.sourceLabel || state.uploadFeedback.sourceLabel || 'EK-C';
+    state.uploadFeedback = { active: false, processed: loadSummary.fileCount || 0, total: loadSummary.fileCount || 0, sourceLabel };
     const message = formatEkcLoadSummary(loadSummary);
     setUploadNotice(message, tone);
     if (el.uploadModal) el.uploadModal.hidden = false;
-    if (el.uploadModalTitle) el.uploadModalTitle.textContent = uploadFeedbackTitle(tone);
+    if (el.uploadModalTitle) el.uploadModalTitle.textContent = uploadFeedbackTitle(tone, sourceLabel);
     if (el.uploadModalMessage) el.uploadModalMessage.textContent = message;
     if (el.btnCloseUploadModal) el.btnCloseUploadModal.hidden = false;
     setUploadProgress(loadSummary.fileCount || 0, loadSummary.fileCount || 0);
@@ -673,15 +872,28 @@
   }
 
   function uploadFeedbackTone(summary) {
-    if (summary.parseErrorFiles) return 'error';
-    if (summary.duplicateFiles || summary.unmatchedFiles || summary.ambiguousFiles) return 'warn';
+    const hardErrors = Number(summary.parseErrorFiles || 0) + Number(summary.readErrorFiles || 0);
+    if (hardErrors && !summary.acceptedFiles) return 'error';
+    const duplicateOnlyWarning = Boolean(
+      (summary.duplicateFiles || summary.localDuplicateFiles || summary.filteredOutFiles)
+      && !hardErrors
+      && !summary.unmatchedFiles
+      && !summary.ambiguousFiles
+    );
+    if (duplicateOnlyWarning) return 'success';
+    if (hardErrors || summary.unmatchedFiles || summary.ambiguousFiles) return 'warn';
     return 'success';
   }
 
-  function uploadFeedbackTitle(tone) {
-    if (tone === 'error') return 'EK-C CSV yukleme hatasi';
-    if (tone === 'warn') return 'EK-C CSV yuklendi - uyarilar var';
-    return 'EK-C CSV yuklendi';
+  function uploadFeedbackLogLevel(summary) {
+    const tone = uploadFeedbackTone(summary);
+    return tone === 'error' ? 'error' : tone === 'warn' ? 'warn' : 'success';
+  }
+
+  function uploadFeedbackTitle(tone, sourceLabel = 'EK-C') {
+    if (tone === 'error') return `${sourceLabel} CSV yukleme hatasi`;
+    if (tone === 'warn') return `${sourceLabel} CSV yuklendi - uyarilar var`;
+    return `${sourceLabel} CSV yuklendi`;
   }
 
   function setUploadNotice(message, tone) {
@@ -697,6 +909,13 @@
     const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
     if (el.uploadProgressBar) el.uploadProgressBar.style.width = `${percent}%`;
     if (el.uploadProgressText) el.uploadProgressText.textContent = `${processed}/${total} dosya`;
+  }
+
+  function yieldToBrowser() {
+    if (typeof requestAnimationFrame === 'function') {
+      return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   function buildEkcCalculationRows(rows) {

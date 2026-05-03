@@ -40,6 +40,8 @@
         <button id="btnCancelFetch" type="button" hidden>Iptal</button>
         <button id="btnPickCsv" type="button">Ek-C CSV Yukle</button>
         <input id="csvInput" type="file" accept=".csv,text/csv" multiple hidden>
+        <button id="btnLoadLocalEkc" type="button">Localden Ek-C Cek</button>
+        <input id="localEkcDirectoryInput" type="file" accept=".csv,text/csv" webkitdirectory multiple hidden>
         <button id="btnToggleVoltage" type="button" title="Gerilim kaynaklarini goster/gizle">Gerilim Kaynaklarini Goster</button>
         <button id="btnExportCsv" type="button">CSV Disari Aktar</button>
       </div>
@@ -235,6 +237,7 @@
   <script src="rgdh-dom-bridge.js"></script>
   <script src="rgdh-charts.js"></script>
   <script src="rgdh-raw-pagination.js"></script>
+  <script src="rgdh-local-ekc-loader.js"></script>
   <script src="rgdh-monitor.js"></script>
 </body>
 </html>
