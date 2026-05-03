@@ -273,6 +273,24 @@ test('parseEkcCsvText repairs blank SAAT header and variant EK-C metric names', 
   assert.ok(parsed.meta.headerWarnings.some((warning) => /SAAT/.test(warning)));
 });
 
+test('parseEkcCsvText extracts conventional EK-C busbar name from BARANIN ADI metadata', () => {
+  const text = [
+    'GERILIM REFERANS DEGERI ILETILEN BARANIN ADI:;BAYMINA_154',
+    'ILGILI BIRIMIN UNITELERININ NOMINAL AKTIF GUCU(Pnom):;255,6;255,6;322',
+    'ILGILI BIRIMIN UNITELERININ ASIRI VE DUSUK ZORUNLU MVAR DEGERLERI (MVAR):;158,41;-84,01;158,41;-84,01;199,56;-105,84',
+    'TARIH;SAAT;SIRA_NO;BARA_GER_kV;BARA_GER_SET_DEG_kV;TOP_REAKT_CIK_GUCU_MVAr;UEVCB_1_BIRIM_MKUD_MW;UNI_1_GEN_TER_AKT_CIK_GUCU_MW',
+    '27.03.2026;00:00:00;1;154,521;160;1,568;440;-0,351'
+  ].join('\n');
+
+  const parsed = csv.parseEkcCsvText(text, { filename: '_2026-03-27.1774647163546.csv' });
+  const row = parsed.rows[0];
+
+  assert.equal(parsed.meta.plantName, 'BAYMINA_154');
+  assert.equal(parsed.meta.busbarName, 'BAYMINA_154');
+  assert.equal(row.plantName, 'BAYMINA_154');
+  assert.equal(row.busbarName, 'BAYMINA_154');
+});
+
 test('parseEkcCsvText extracts EK-C RGK mode input fields without deciding final result', () => {
   const text = [
     'GERILIM REFERANS DEGERI ILETILEN BARANIN ADI:;HIBRIT_BARA',

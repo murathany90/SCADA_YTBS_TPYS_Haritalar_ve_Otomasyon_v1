@@ -15,6 +15,7 @@
     calculationMode: 'YKS',
     chartSelection: { busbarId: null, hour: null, date: null },
     compareSelection: { busbarId: '', ytm: '', hourMode: 'all', hourStart: null, hourEnd: null, hour: null, date: null },
+    dailyFilters: { busbarId: '', ytm: '', date: '', controlSource: '' },
     compareHourRows: [],
     rawPageKey: null,
     rawUnitSelection: null,
@@ -24,7 +25,8 @@
     fetchLogs: [],
     yksLogs: [],
     activeFetchJobId: '',
-    showVoltage: false
+    showVoltage: false,
+    uploadFeedback: { active: false, total: 0, processed: 0 }
   };
 
   const el = {};
@@ -101,6 +103,7 @@
     loadEmbeddedCatalog();
     await loadDefaultCatalog();
     syncDynamicOptions();
+    syncDailyFiltersFromTopFilters();
     renderAll();
   }
 
@@ -147,15 +150,16 @@
 
   function cacheElements() {
     [
-      'filterDate', 'filterEndDate', 'filterSourceType', 'filterSearch', 'filterNotice',
+      'filterDate', 'filterEndDate', 'filterSourceType', 'filterSearch', 'filterNotice', 'uploadNotice',
       'btnFetchYks', 'btnCancelFetch', 'btnPickCsv', 'csvInput',
       'btnExportCsv', 'btnToggleTheme', 'btnToggleVoltage',
       'statSource', 'statRows', 'statBusbars',
-      'statMismatch', 'statStatus', 'rawTable', 'rawPager', 'rawPageInfo', 'btnRawFirst', 'btnRawPrev', 'btnRawNext', 'btnRawLast', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
+      'statMismatch', 'statStatus', 'rawTable', 'rawPager', 'rawPageInfo', 'btnRawFirst', 'btnRawPrev', 'btnRawNext', 'btnRawLast', 'rawUnitDetail', 'rawUnitTitle', 'rawUnitTable', 'dailyFilterBar', 'dailyFilterBusbar', 'dailyFilterYtm', 'dailyFilterDate', 'dailyFilterControlSource', 'btnClearDailyFilters', 'dailyTable', 'btnToggleDailyMetricTable', 'dailyMetricWrap', 'dailyMetricTable', 'chartContextLabel', 'chartsRoot', 'compareContextLabel', 'compareChartsRoot', 'compareTable', 'testsTable', 'testUnitDetailsTable', 'testOtherDetailsTable',
       'testCatalogSearchInput', 'testBusbarTypeSelect', 'testBusbarSelect', 'testHybridOnlyCheckbox', 'btnExportTestsCsv',
       'btnErrorDetails', 'extensionLogCount', 'extensionLogPanel', 'btnCloseErrors', 'btnExportExtensionLogCsv', 'btnClearErrorLogs', 'extensionLogList',
       'btnYksLogs', 'yksLogCount', 'yksLogPanel', 'btnRefreshYksLogs', 'btnExportYksLogCsv', 'btnClearYksLogs', 'btnCloseYksLogs', 'yksLogList',
-      'fetchLogPanel', 'btnCloseFetchLog', 'fetchLogList'
+      'fetchLogPanel', 'btnCloseFetchLog', 'fetchLogList',
+      'uploadModal', 'uploadModalTitle', 'uploadModalMessage', 'uploadProgressBar', 'uploadProgressText', 'btnCloseUploadModal'
     ].forEach((id) => { el[id] = document.getElementById(id); });
     el.tabs = Array.from(document.querySelectorAll('[data-tab]'));
     el.panels = Array.from(document.querySelectorAll('[data-panel]'));
@@ -165,9 +169,13 @@
     el.tabs.forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
     [el.filterDate, el.filterEndDate, el.filterSourceType, el.filterSearch]
       .forEach((input) => input.addEventListener('input', () => {
+        syncDailyFiltersFromTopFilters();
         persistFilters();
         renderAll();
       }));
+    [el.dailyFilterBusbar, el.dailyFilterYtm, el.dailyFilterDate, el.dailyFilterControlSource]
+      .forEach((input) => input?.addEventListener('input', handleDailyFilterChange));
+    el.btnClearDailyFilters?.addEventListener('click', clearDailyFilters);
     [el.testCatalogSearchInput, el.testBusbarTypeSelect, el.testBusbarSelect, el.testHybridOnlyCheckbox]
       .forEach((input) => input.addEventListener('input', () => {
         syncDynamicOptions();
@@ -209,6 +217,7 @@
     el.btnClearErrorLogs?.addEventListener('click', clearErrorLogs);
     el.btnClearYksLogs?.addEventListener('click', clearYksLogs);
     el.btnCloseFetchLog.addEventListener('click', () => { el.fetchLogPanel.hidden = true; });
+    el.btnCloseUploadModal?.addEventListener('click', hideUploadFeedback);
     el.btnToggleTheme.addEventListener('click', toggleTheme);
     el.btnToggleVoltage.addEventListener('click', toggleVoltageColumns);
   }
@@ -527,35 +536,51 @@
   async function handleCsvFiles(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    const ekcRows = [];
-    const ekcGroups = [];
-    const bindingTarget = resolveEkcBindingTarget();
+    showUploadFeedback(files.length);
+    const fileGroups = [];
+    const parseErrors = [];
+    const catalogSummaries = getCatalogBusbarSummaries();
+    const fallbackTarget = files.length === 1 ? resolveEkcBindingTarget() : null;
 
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
+      updateUploadFeedback(index, files.length, `Isleniyor: ${file.name}`);
       try {
         const text = await file.text();
         const parsed = RGDH_CSV.parseEkcCsvText(text, { filename: file.name });
-        ekcRows.push(...(parsed.rows || []));
-        ekcGroups.push(...(parsed.groups || []));
+        const binding = RGDH_COMPARISON.bindEkcRowsToCatalog(parsed.rows || [], catalogSummaries, {
+          fallbackTarget,
+          fileName: file.name
+        });
+        fileGroups.push({
+          fileName: file.name,
+          rows: binding.rows || [],
+          parsedGroups: parsed.groups || [],
+          binding
+        });
       } catch (error) {
+        parseErrors.push({ fileName: file.name, message: error.message || String(error) });
         pushError('EK-C', error.message || String(error), { file: file.name });
+      } finally {
+        updateUploadFeedback(index + 1, files.length, `Islendi: ${file.name}`);
       }
     }
 
-    if (ekcRows.length) {
-      state.ekcRows = buildEkcCalculationRows(bindEkcRowsToSelectedBusbar(ekcRows, bindingTarget));
-      state.ekcGroups = ekcGroups;
+    const deduped = RGDH_COMPARISON.dedupeEkcFileLoadGroups(fileGroups);
+    if (deduped.rows.length) {
+      state.ekcRows = buildEkcCalculationRows(deduped.rows);
+      state.ekcGroups = deduped.acceptedGroups.flatMap((group) => group.parsedGroups || []);
       state.ekcLoaded = true;
-      state.ekcBindingTarget = bindingTarget || null;
+      state.ekcBindingTarget = resolveSingleEkcBindingTarget(deduped.acceptedGroups);
       syncFiltersToEkcDates(state.ekcRows);
+    } else {
+      state.ekcLoaded = state.ekcLoaded || fileGroups.length > 0;
     }
     rebuildEnrichment();
     syncDynamicOptions();
-    const bindingText = bindingTarget?.busbarId
-      ? ` ${bindingTarget.busbarName || bindingTarget.busbarId} YKS SCADA barasina baglandi.`
-      : ' YKS SCADA barasi otomatik baglanamadi.';
-    setStatus(`EK-C CSV yuklendi: ${state.ekcRows.length} dakika.${bindingText}`);
-    pushFetchLog('success', 'EK-C', `${ekcRows.length} EK-C dakika satiri okundu.${bindingText}`, { fileCount: files.length, bindingTarget });
+    const loadSummary = buildEkcLoadSummary(fileGroups, deduped, parseErrors);
+    finishUploadFeedback(loadSummary, uploadFeedbackTone(loadSummary));
+    setStatus(formatEkcLoadSummary(loadSummary));
+    pushFetchLog(loadSummary.duplicateFiles || loadSummary.unmatchedFiles || loadSummary.ambiguousFiles || loadSummary.parseErrorFiles ? 'warn' : 'success', 'EK-C', formatEkcLoadSummary(loadSummary), loadSummary);
     if (state.ekcRows.length) {
       autoCompareAfterEkcLoad();
     } else {
@@ -566,6 +591,112 @@
 
   function bindEkcRowsToSelectedBusbar(rows, target = resolveEkcBindingTarget()) {
     return RGDH_COMPARISON.bindEkcRowsToSelectedBusbar(rows, target);
+  }
+
+  function resolveSingleEkcBindingTarget(groups) {
+    const targets = new Map();
+    (groups || []).forEach((group) => {
+      const target = group.binding?.target;
+      if (!target?.busbarId) return;
+      targets.set(String(target.busbarId), target);
+    });
+    return targets.size === 1 ? [...targets.values()][0] : null;
+  }
+
+  function buildEkcLoadSummary(fileGroups, deduped, parseErrors) {
+    const acceptedGroups = deduped.acceptedGroups || [];
+    return {
+      fileCount: fileGroups.length + parseErrors.length,
+      acceptedFiles: acceptedGroups.length,
+      duplicateFiles: (deduped.duplicateGroups || []).length,
+      matchedFiles: countEkcBindingStatus(acceptedGroups, 'matched'),
+      fallbackFiles: countEkcBindingStatus(acceptedGroups, 'fallback_selected'),
+      unmatchedFiles: countEkcBindingStatus(acceptedGroups, 'no_match'),
+      ambiguousFiles: countEkcBindingStatus(acceptedGroups, 'ambiguous'),
+      parseErrorFiles: parseErrors.length,
+      rowCount: (deduped.rows || []).length
+    };
+  }
+
+  function countEkcBindingStatus(groups, status) {
+    return (groups || []).filter((group) => group.binding?.status === status).length;
+  }
+
+  function formatEkcLoadSummary(summary) {
+    const parts = [
+      `EK-C CSV yuklendi: ${summary.rowCount || 0} dakika`,
+      `${summary.acceptedFiles || 0}/${summary.fileCount || 0} dosya kabul`
+    ];
+    if (summary.matchedFiles) parts.push(`${summary.matchedFiles} katalog eslesmesi`);
+    if (summary.fallbackFiles) parts.push(`${summary.fallbackFiles} secili bara fallback`);
+    if (summary.duplicateFiles) parts.push(`${summary.duplicateFiles} tekrar reddedildi`);
+    if (summary.unmatchedFiles) parts.push(`${summary.unmatchedFiles} eslesmedi`);
+    if (summary.ambiguousFiles) parts.push(`${summary.ambiguousFiles} belirsiz`);
+    if (summary.parseErrorFiles) parts.push(`${summary.parseErrorFiles} parse hatasi`);
+    return parts.join(', ') + '.';
+  }
+
+  function showUploadFeedback(totalFiles) {
+    state.uploadFeedback = { active: true, total: totalFiles || 0, processed: 0 };
+    setUploadNotice(`EK-C CSV yukleniyor: 0/${totalFiles || 0} dosya.`, '');
+    if (el.uploadModal) el.uploadModal.hidden = false;
+    if (el.uploadModalTitle) el.uploadModalTitle.textContent = 'EK-C CSV yukleniyor';
+    if (el.uploadModalMessage) el.uploadModalMessage.textContent = 'Dosyalar sirayla okunuyor ve katalogla eslestiriliyor.';
+    if (el.btnCloseUploadModal) el.btnCloseUploadModal.hidden = true;
+    setUploadProgress(0, totalFiles || 0);
+  }
+
+  function updateUploadFeedback(processedFiles, totalFiles, message) {
+    const processed = Math.max(0, Number(processedFiles) || 0);
+    const total = Math.max(0, Number(totalFiles) || 0);
+    state.uploadFeedback = { active: true, processed, total };
+    const progressText = `EK-C CSV yukleniyor: ${processed}/${total} dosya.`;
+    setUploadNotice(progressText, '');
+    if (el.uploadModalTitle) el.uploadModalTitle.textContent = 'EK-C CSV yukleniyor';
+    if (el.uploadModalMessage) el.uploadModalMessage.textContent = message || progressText;
+    setUploadProgress(processed, total);
+  }
+
+  function finishUploadFeedback(loadSummary, tone = 'success') {
+    state.uploadFeedback = { active: false, processed: loadSummary.fileCount || 0, total: loadSummary.fileCount || 0 };
+    const message = formatEkcLoadSummary(loadSummary);
+    setUploadNotice(message, tone);
+    if (el.uploadModal) el.uploadModal.hidden = false;
+    if (el.uploadModalTitle) el.uploadModalTitle.textContent = uploadFeedbackTitle(tone);
+    if (el.uploadModalMessage) el.uploadModalMessage.textContent = message;
+    if (el.btnCloseUploadModal) el.btnCloseUploadModal.hidden = false;
+    setUploadProgress(loadSummary.fileCount || 0, loadSummary.fileCount || 0);
+  }
+
+  function hideUploadFeedback() {
+    if (el.uploadModal) el.uploadModal.hidden = true;
+  }
+
+  function uploadFeedbackTone(summary) {
+    if (summary.parseErrorFiles) return 'error';
+    if (summary.duplicateFiles || summary.unmatchedFiles || summary.ambiguousFiles) return 'warn';
+    return 'success';
+  }
+
+  function uploadFeedbackTitle(tone) {
+    if (tone === 'error') return 'EK-C CSV yukleme hatasi';
+    if (tone === 'warn') return 'EK-C CSV yuklendi - uyarilar var';
+    return 'EK-C CSV yuklendi';
+  }
+
+  function setUploadNotice(message, tone) {
+    if (!el.uploadNotice) return;
+    el.uploadNotice.hidden = false;
+    el.uploadNotice.className = ['rgdh-upload-notice', tone].filter(Boolean).join(' ');
+    el.uploadNotice.textContent = message;
+  }
+
+  function setUploadProgress(processedFiles, totalFiles) {
+    const total = Math.max(0, Number(totalFiles) || 0);
+    const processed = Math.max(0, Number(processedFiles) || 0);
+    const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+    if (el.uploadProgressBar) el.uploadProgressBar.style.width = `${percent}%`;
+    if (el.uploadProgressText) el.uploadProgressText.textContent = `${processed}/${total} dosya`;
   }
 
   function buildEkcCalculationRows(rows) {
@@ -629,6 +760,7 @@
     if (!update.changed) return update;
     el.filterDate.value = update.date;
     el.filterEndDate.value = update.endDate;
+    syncDailyFiltersFromTopFilters();
     persistFilters();
     return update;
   }
@@ -673,14 +805,16 @@
     const rows = getFilteredRows();
     const ekcRows = getFilteredEkcRows();
     const dailyPivotRows = buildDailyControlPivotRows(rows, ekcRows);
+    const filteredDailyPivotRows = filterDailyPivotRows(dailyPivotRows, state.dailyFilters);
     state.pivot = RGDH_PIVOT.buildDailyPivot(rows);
     renderFilterNotice(rows);
-    renderStats(rows);
+    renderStats(rows, ekcRows);
     syncRawUnitSelectionWithRows(rows);
     renderRawTable(rows);
     renderRawUnitDetail();
-    renderDailyTable(dailyPivotRows);
-    renderDailyMetricTable(dailyPivotRows);
+    renderDailyFilters(dailyPivotRows);
+    renderDailyTable(filteredDailyPivotRows);
+    renderDailyMetricTable(filteredDailyPivotRows);
     renderCharts(rows, state.pivot.rows);
     renderCompareView(rows);
     renderTestsTable();
@@ -744,9 +878,13 @@
   function buildEkcPlatformComparison(platformRows, ekcRows) {
     return RGDH_COMPARISON.buildEkcPlatformComparison(platformRows, ekcRows, {
       pivot: RGDH_PIVOT,
-      bindingTargetMissing: state.ekcLoaded && !state.ekcBindingTarget?.busbarId,
+      bindingTargetMissing: state.ekcLoaded && !hasBoundEkcRows(ekcRows),
       missingBindingDiagnosis: 'Ortak dakika bulunamadi: secili YKS SCADA barasi yok veya EK-C icin otomatik bara eslesmesi yapilamadi'
     });
+  }
+
+  function hasBoundEkcRows(rows = state.ekcRows) {
+    return (rows || []).some((row) => row?.busbarId !== null && row?.busbarId !== undefined && row.busbarId !== '');
   }
 
   function buildDailyControlPivotRows(platformRows, ekcRows) {
@@ -787,10 +925,149 @@
     return row?.controlSource === 'EKC' ? 'EKC' : 'YKS';
   }
 
+  function emptyDailyFilters() {
+    return { busbarId: '', ytm: '', date: '', controlSource: '' };
+  }
+
+  function readDailyFilters() {
+    return {
+      busbarId: el.dailyFilterBusbar?.value || '',
+      ytm: el.dailyFilterYtm?.value || '',
+      date: el.dailyFilterDate?.value || '',
+      controlSource: el.dailyFilterControlSource?.value || ''
+    };
+  }
+
+  function handleDailyFilterChange() {
+    state.dailyFilters = readDailyFilters();
+    applyDailyFiltersToTopFilters(state.dailyFilters);
+    renderAll();
+  }
+
+  function clearDailyFilters() {
+    state.dailyFilters = emptyDailyFilters();
+    applyDailyFiltersToTopFilters(state.dailyFilters);
+    renderAll();
+  }
+
+  function syncDailyFiltersFromTopFilters() {
+    const filters = readFilters();
+    const selectedBusbar = resolveSelectedBusbar(filters);
+    state.dailyFilters = {
+      ...state.dailyFilters,
+      busbarId: selectedBusbar?.busbarId || '',
+      date: filters.date || ''
+    };
+  }
+
+  function applyDailyFiltersToTopFilters(filters = state.dailyFilters) {
+    const target = resolveCatalogBusbarForDailyFilter(filters.busbarId);
+    if (el.filterDate) el.filterDate.value = filters.date || '';
+    if (el.filterEndDate) el.filterEndDate.value = '';
+    if (el.filterSearch) el.filterSearch.value = target ? catalogBusbarKey(target) : '';
+    if (el.filterSourceType) {
+      el.filterSourceType.value = target
+        ? normalizeSelectedSourceType(target.sourceType || inferCatalogSourceType(target))
+        : 'ALL';
+    }
+    persistFilters();
+  }
+
+  function resolveCatalogBusbarForDailyFilter(busbarId) {
+    const value = String(busbarId || '').trim();
+    if (!value) return null;
+    return getCatalogBusbarSummaries().find((summary) => String(summary.busbarId || '').trim() === value) || null;
+  }
+
+  function setDailyFiltersFromRow(row) {
+    const target = resolveCatalogBusbarForRow(row);
+    state.dailyFilters = {
+      busbarId: dailyFilterBusbarValue(row),
+      ytm: row?.ytm || target?.ytm || '',
+      date: row?.localDate || '',
+      controlSource: row?.controlSource === 'EKC' ? 'EKC' : row?.controlSource === 'YKS' ? 'YKS' : ''
+    };
+  }
+
+  function renderDailyFilters(pivotRows) {
+    if (!el.dailyFilterBar) return;
+    const rows = pivotRows || [];
+    const filters = state.dailyFilters || emptyDailyFilters();
+    setOptions(el.dailyFilterBusbar, rows.map((row) => ({
+      value: dailyFilterBusbarValue(row),
+      label: dailyFilterBusbarLabel(row)
+    })), 'Tumu', filters.busbarId);
+    setOptions(el.dailyFilterYtm, rows.map((row) => ({
+      value: row.ytm || '',
+      label: row.ytm || ''
+    })), 'Tumu', filters.ytm);
+    setOptions(el.dailyFilterDate, rows.map((row) => ({
+      value: row.localDate || '',
+      label: row.localDate || ''
+    })), 'Tumu', filters.date);
+    setOptions(el.dailyFilterControlSource, [
+      { value: 'YKS', label: 'YKS Kontrol' },
+      { value: 'EKC', label: 'EK-C Kontrol' }
+    ], 'Tumu', filters.controlSource);
+  }
+
+  function filterDailyPivotRows(rows, filters = state.dailyFilters) {
+    const dailyFilters = filters || emptyDailyFilters();
+    return (rows || []).filter((row) => {
+      if (dailyFilters.busbarId && dailyFilterBusbarValue(row) !== dailyFilters.busbarId) return false;
+      if (dailyFilters.ytm && String(row.ytm || '') !== dailyFilters.ytm) return false;
+      if (dailyFilters.date && String(row.localDate || '') !== dailyFilters.date) return false;
+      if (dailyFilters.controlSource && String(row.controlSource || '') !== dailyFilters.controlSource) return false;
+      return true;
+    });
+  }
+
+  function dailyFilterBusbarValue(row) {
+    return String(row?.busbarId || row?.ekcEntityKey || row?.busbarName || '').trim();
+  }
+
+  function dailyFilterBusbarLabel(row) {
+    const name = row?.busbarName || row?.ekcOriginalName || row?.ekcSourceFileName || row?.fileName || row?.busbarId || 'Bara';
+    const id = row?.busbarId ? ` (${row.busbarId})` : '';
+    const source = row?.controlSource === 'EKC' ? 'EK-C Kontrol' : row?.controlSource === 'YKS' ? 'YKS Kontrol' : '';
+    const label = [String(name || 'Bara') + id, source].filter(Boolean).join(' - ');
+    return formatHybridOptionLabel(label, row);
+  }
+
   function selectDailyChart(row, hour = null) {
     state.calculationMode = dailyCalculationMode(row);
     state.chartSelection = { busbarId: row.busbarId, hour, date: row.localDate || null };
+    setDailyFiltersFromRow(row);
+    syncFiltersToDailyControlRow(row);
+    setCompareSelectionFromDailyRow(row);
     switchTab('charts');
+  }
+
+  function syncFiltersToDailyControlRow(row) {
+    if (row?.controlSource !== 'EKC') return;
+    const target = resolveCatalogBusbarForRow(row);
+    if (el.filterDate) el.filterDate.value = row.localDate || '';
+    if (el.filterEndDate) el.filterEndDate.value = '';
+    if (el.filterSourceType) {
+      el.filterSourceType.value = normalizeSelectedSourceType(row.sourceType || target?.sourceType || 'ALL');
+    }
+    if (el.filterSearch && target) el.filterSearch.value = catalogBusbarKey(target);
+    persistFilters();
+  }
+
+  function setCompareSelectionFromDailyRow(row) {
+    if (row?.controlSource !== 'EKC') return;
+    const target = resolveCatalogBusbarForRow(row);
+    state.compareSelection = {
+      ...state.compareSelection,
+      busbarId: String(row.busbarId || target?.busbarId || ''),
+      ytm: row.ytm || target?.ytm || '',
+      date: row.localDate || '',
+      hourMode: 'all',
+      hourStart: null,
+      hourEnd: null,
+      hour: null
+    };
   }
 
   function renderDailySourceBadge(row) {
@@ -1176,10 +1453,11 @@
     }
   }
 
-  function renderStats(rows) {
-    const busbars = new Set(rows.map((row) => row.busbarId).filter((value) => value !== null && value !== undefined));
+  function renderStats(rows, ekcRows = getFilteredEkcRows()) {
+    const combinedRows = [...(rows || []), ...(ekcRows || [])];
+    const busbars = new Set(combinedRows.map(statBusbarKey).filter(Boolean));
     el.statSource.textContent = sourceLabel();
-    el.statRows.textContent = String(rows.length);
+    el.statRows.textContent = String(combinedRows.length);
     el.statBusbars.textContent = String(busbars.size);
     el.statMismatch.textContent = String(mismatchCount());
     const extensionCount = state.errors.reduce((sum, item) => sum + (item.count || 1), 0) + state.fetchLogs.length;
@@ -1187,12 +1465,20 @@
     if (el.yksLogCount) el.yksLogCount.textContent = String(state.yksLogs.length);
   }
 
+  function statBusbarKey(row) {
+    if (row?.busbarId !== null && row?.busbarId !== undefined && row.busbarId !== '') return `busbar:${row.busbarId}`;
+    if (String(row?.sourceOrigin || row?.calculationSource || '').toUpperCase() === 'EKC') {
+      return `ekc:${row.ekcEntityKey || row.busbarName || row.plantName || row.fileName || row.ekcSourceFileName || ''}`;
+    }
+    return '';
+  }
+
   function sourceLabel() {
     const parts = [];
     if (state.apiRows.length) parts.push('API');
     if (state.domRows.length) parts.push('DOM');
     if (state.ekcRows.length) parts.push('EK-C');
-    if (state.catalogRows.length) parts.push('KATALOG');
+    if (state.catalogRows.length) parts.push('RGDH Test Tanımları');
     return parts.join(' + ') || '-';
   }
 
@@ -1631,11 +1917,72 @@
     };
   }
 
+  function resolveCompareScope(platformRows, ekcRows) {
+    const selectedScope = {
+      busbarId: String(state.compareSelection?.busbarId || ''),
+      ytm: state.compareSelection?.ytm || '',
+      date: state.compareSelection?.date || '',
+      hourMode: state.compareSelection?.hourMode || 'all',
+      hourStart: state.compareSelection?.hourStart ?? null,
+      hourEnd: state.compareSelection?.hourEnd ?? null,
+      hour: state.compareSelection?.hour ?? null
+    };
+    if (selectedScope.busbarId && selectedScope.date && hasRowsForCompareScope(ekcRows, selectedScope)) {
+      return selectedScope;
+    }
+
+    const firstEkcRow = resolveFirstEkcDailyControlRow(ekcRows);
+    if (firstEkcRow) {
+      return {
+        busbarId: String(firstEkcRow.busbarId || ''),
+        ytm: firstEkcRow.ytm || '',
+        date: firstEkcRow.localDate || '',
+        hourMode: 'all',
+        hourStart: null,
+        hourEnd: null,
+        hour: null
+      };
+    }
+
+    return normalizeCompareSelection([...(platformRows || []), ...(ekcRows || [])], state.compareSelection);
+  }
+
+  function resolveFirstEkcDailyControlRow(ekcRows) {
+    const rows = RGDH_PIVOT.buildDailyPivot(markDailyControlRows(ekcRows || [], 'EKC')).rows
+      .sort(compareDailyControlRows);
+    return rows.find((row) => row.localDate && row.busbarId) || rows.find((row) => row.localDate) || null;
+  }
+
+  function filterRowsForCompareScope(rows, scope) {
+    const sourceRows = rows || [];
+    if (!scope?.date && !scope?.busbarId) return sourceRows;
+    return sourceRows.filter((row) => rowMatchesCompareScope(row, scope));
+  }
+
+  function hasRowsForCompareScope(rows, scope) {
+    return (rows || []).some((row) => rowMatchesCompareScope(row, scope));
+  }
+
+  function rowMatchesCompareScope(row, scope) {
+    if (!row || !scope) return false;
+    if (scope.date && row.localDate !== scope.date) return false;
+    if (scope.busbarId && String(row.busbarId || '') !== String(scope.busbarId)) return false;
+    return true;
+  }
+
   function renderCompareView(platformRows) {
     if (state.activeTab !== 'compare') return;
-    const comparison = buildEkcPlatformComparison(platformRows || getFilteredRows(), getFilteredEkcRows());
+    const compareScope = resolveCompareScope(platformRows || getFilteredRows(), getFilteredEkcRows());
+    const scopedPlatformRows = filterRowsForCompareScope(platformRows || getFilteredRows(), compareScope);
+    const scopedEkcRows = filterRowsForCompareScope(getFilteredEkcRows(), compareScope);
+    const comparison = buildEkcPlatformComparison(scopedPlatformRows, scopedEkcRows);
     state.comparison = comparison;
-    state.compareSelection = normalizeCompareSelection(comparison.rows || [], state.compareSelection);
+    state.compareSelection = normalizeCompareSelection(comparison.rows || [], {
+      ...state.compareSelection,
+      busbarId: compareScope.busbarId,
+      ytm: compareScope.ytm || state.compareSelection.ytm || '',
+      date: compareScope.date
+    });
     const compareDay = state.compareSelection.date;
     const dayHourRows = (comparison.hourRows || []).filter((row) => !compareDay || row.localDate === compareDay);
     const summary = comparison.summary || {};
@@ -2078,6 +2425,7 @@
   }
 
   function setOptions(select, options, placeholder, selectedValue) {
+    if (!select) return;
     const unique = new Map();
     (options || []).forEach((item) => {
       const value = String(item.value ?? '').trim();
@@ -2139,6 +2487,15 @@
   function resolveSelectedInternalIds(filters, selectedBusbar = null) {
     if (selectedBusbar?.busbarInternalId) return [String(selectedBusbar.busbarInternalId)];
     return [];
+  }
+
+  function resolveCatalogBusbarForRow(row) {
+    const busbarId = String(row?.busbarId || '').trim();
+    const busbarName = normalizeText(row?.busbarName || '');
+    return getCatalogBusbarSummaries().find((summary) => {
+      if (busbarId && String(summary.busbarId || '').trim() === busbarId) return true;
+      return busbarName && normalizeText(summary.busbarName || '') === busbarName;
+    }) || null;
   }
 
   function resolveSelectedBusbar(filters) {
@@ -2329,7 +2686,8 @@
       'waitBudgetMs',
       'jobId', 'jobTimeoutMs', 'continuationJobId', 'parentJobId', 'isHybridContinuation',
       'missingWindows', 'responseTotalCount', 'responseLink', 'fallbackPhase',
-      'preferCsvFallback', 'csvFallbackRows', 'responseContentType', 'probedWindows'
+      'preferCsvFallback', 'csvFallbackRows', 'responseContentType', 'probedWindows',
+      'fileCount', 'acceptedFiles', 'duplicateFiles', 'matchedFiles', 'fallbackFiles', 'unmatchedFiles', 'ambiguousFiles', 'parseErrorFiles', 'bindingStatus'
     ].forEach((key) => {
       if (detail[key] !== undefined) allowed[key] = detail[key];
     });

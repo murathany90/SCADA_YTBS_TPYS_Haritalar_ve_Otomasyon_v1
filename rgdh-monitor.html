@@ -46,6 +46,7 @@
     </section>
 
     <div id="filterNotice" class="rgdh-filter-notice" hidden></div>
+    <div id="uploadNotice" class="rgdh-upload-notice" hidden></div>
 
     <section class="rgdh-status-grid">
       <div><span>Kaynak</span><strong id="statSource">-</strong></div>
@@ -85,6 +86,33 @@
     </section>
 
     <section id="panelDaily" class="rgdh-panel" data-panel="daily">
+      <div id="dailyFilterBar" class="yks-card rgdh-daily-filter-bar" aria-label="Gunluk RGDH filtreleri">
+        <label>Bara
+          <select id="dailyFilterBusbar">
+            <option value="">Tumu</option>
+          </select>
+        </label>
+        <label>BYTM
+          <select id="dailyFilterYtm">
+            <option value="">Tumu</option>
+          </select>
+        </label>
+        <label>Tarih
+          <select id="dailyFilterDate">
+            <option value="">Tumu</option>
+          </select>
+        </label>
+        <label>Kaynak Tipi
+          <select id="dailyFilterControlSource">
+            <option value="">Tumu</option>
+            <option value="YKS">YKS Kontrol</option>
+            <option value="EKC">EK-C Kontrol</option>
+          </select>
+        </label>
+        <div class="rgdh-daily-filter-actions">
+          <button id="btnClearDailyFilters" type="button">Filtreleri Temizle</button>
+        </div>
+      </div>
       <div class="rgdh-table-wrap">
         <table id="dailyTable" class="rgdh-table compact"></table>
       </div>
@@ -177,6 +205,20 @@
       </header>
       <div id="yksLogList"></div>
     </aside>
+
+    <div id="uploadModal" class="rgdh-upload-modal" role="status" aria-live="polite" hidden>
+      <div class="rgdh-upload-modal-card">
+        <div class="rgdh-upload-modal-head">
+          <strong id="uploadModalTitle">EK-C CSV yukleniyor</strong>
+          <button id="btnCloseUploadModal" type="button" hidden>Kapat</button>
+        </div>
+        <div id="uploadModalMessage" class="rgdh-upload-modal-message">Hazirlaniyor...</div>
+        <div class="rgdh-upload-progress" aria-hidden="true">
+          <div id="uploadProgressBar" class="rgdh-upload-progress-bar"></div>
+        </div>
+        <div id="uploadProgressText" class="rgdh-upload-progress-text">0/0 dosya</div>
+      </div>
+    </div>
   </main>
 
   <script src="lib/chart.min.js"></script>

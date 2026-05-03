@@ -35,6 +35,182 @@
     });
   }
 
+  function bindEkcRowsToCatalog(rows, catalogSummaries, options = {}) {
+    const sourceRows = rows || [];
+    if (!sourceRows.length) {
+      return { rows: [], target: null, status: 'empty', reason: 'EK-C satiri yok.' };
+    }
+    const sourceName = ekcSourceName(sourceRows[0]);
+    const matches = findEkcCatalogMatches(sourceRows[0], catalogSummaries);
+    if (matches.length === 1) {
+      const target = catalogSummaryToBindingTarget(matches[0]);
+      return {
+        rows: annotateBoundEkcRows(bindEkcRowsToSelectedBusbar(sourceRows, target), {
+          status: 'matched',
+          reason: 'EK-C adi katalog barasi ile eslesti.',
+          entityKey: `catalog:${target.busbarId}`,
+          sourceName
+        }),
+        target,
+        status: 'matched',
+        reason: 'EK-C adi katalog barasi ile eslesti.'
+      };
+    }
+    if (!matches.length && options.fallbackTarget?.busbarId) {
+      const target = catalogSummaryToBindingTarget(options.fallbackTarget);
+      return {
+        rows: annotateBoundEkcRows(bindEkcRowsToSelectedBusbar(sourceRows, target), {
+          status: 'fallback_selected',
+          reason: 'Katalog eslesmesi bulunamadi; secili YKS barasi kullanildi.',
+          entityKey: `selected:${target.busbarId}`,
+          sourceName
+        }),
+        target,
+        status: 'fallback_selected',
+        reason: 'Katalog eslesmesi bulunamadi; secili YKS barasi kullanildi.'
+      };
+    }
+    const status = matches.length > 1 ? 'ambiguous' : 'no_match';
+    const reason = matches.length > 1
+      ? `Birden fazla katalog barasi eslesti: ${matches.map((item) => item.busbarName || item.busbarId).join(', ')}`
+      : 'Katalog eslesmesi bulunamadi.';
+    return {
+      rows: annotateUnboundEkcRows(sourceRows, {
+        status,
+        reason,
+        entityKey: `file:${normalizeEntityKey(sourceName || sourceRows[0]?.fileName || 'ekc')}`,
+        sourceName
+      }),
+      target: null,
+      status,
+      reason,
+      matches
+    };
+  }
+
+  function dedupeEkcFileLoadGroups(groups) {
+    const seen = new Set();
+    const acceptedGroups = [];
+    const duplicateGroups = [];
+    (groups || []).forEach((group) => {
+      const keys = ekcFileGroupKeys(group.rows);
+      const duplicateKeys = keys.filter((key) => seen.has(key));
+      if (duplicateKeys.length) {
+        duplicateGroups.push({ ...group, duplicateKeys });
+        return;
+      }
+      keys.forEach((key) => seen.add(key));
+      acceptedGroups.push({ ...group, duplicateKeys: [] });
+    });
+    return {
+      acceptedGroups,
+      duplicateGroups,
+      rows: acceptedGroups.flatMap((group) => group.rows || [])
+    };
+  }
+
+  function ekcFileGroupKeys(rows) {
+    const keys = new Set();
+    (rows || []).forEach((row) => {
+      const entity = row?.busbarId !== null && row?.busbarId !== undefined && row.busbarId !== ''
+        ? `busbar:${row.busbarId}`
+        : `entity:${row?.ekcEntityKey || normalizeEntityKey(ekcSourceName(row))}`;
+      keys.add(`${row?.sourceType || ''}:${entity}:${row?.localDate || ''}`);
+    });
+    return [...keys];
+  }
+
+  function annotateBoundEkcRows(rows, info) {
+    return (rows || []).map((row) => ({
+      ...row,
+      ekcEntityKey: info.entityKey,
+      ekcBindingStatus: info.status,
+      ekcBindingReason: info.reason,
+      ekcSourceFileName: row.ekcSourceFileName || row.fileName || '',
+      ekcOriginalName: row.ekcOriginalName || info.sourceName || row.busbarName || row.plantName || row.fileName || ''
+    }));
+  }
+
+  function annotateUnboundEkcRows(rows, info) {
+    return (rows || []).map((row) => {
+      const originalName = row.ekcOriginalName || info.sourceName || row.busbarName || row.plantName || row.fileName || '';
+      return {
+        ...row,
+        ekcOriginalName: originalName,
+        ekcOriginalBusbarName: row.ekcOriginalBusbarName || row.busbarName || '',
+        ekcOriginalPlantName: row.ekcOriginalPlantName || row.plantName || '',
+        ekcBoundToYks: false,
+        busbarId: row.busbarId ?? null,
+        busbarInternalId: row.busbarInternalId ?? null,
+        ekcEntityKey: info.entityKey,
+        ekcBindingStatus: info.status,
+        ekcBindingReason: info.reason,
+        ekcSourceFileName: row.ekcSourceFileName || row.fileName || ''
+      };
+    });
+  }
+
+  function findEkcCatalogMatches(row, catalogSummaries) {
+    const sourceVariants = nameVariants(ekcSourceName(row));
+    const summaries = uniqueCatalogSummaries(catalogSummaries);
+    const busbarMatches = summaries.filter((summary) => sourceVariants.some((name) => nameVariants(summary.busbarName).includes(name)));
+    if (busbarMatches.length) return busbarMatches;
+    return summaries.filter((summary) => sourceVariants.some((name) => [
+      ...nameVariants(summary.plantName),
+      ...nameVariants(summary.ytbsPlantName)
+    ].includes(name)));
+  }
+
+  function uniqueCatalogSummaries(catalogSummaries) {
+    const map = new Map();
+    (catalogSummaries || []).forEach((summary) => {
+      if (!summary) return;
+      const key = summary.busbarId !== null && summary.busbarId !== undefined
+        ? String(summary.busbarId)
+        : normalizeEntityKey(`${summary.busbarName || ''} ${summary.plantName || ''}`);
+      if (!map.has(key)) map.set(key, summary);
+    });
+    return [...map.values()];
+  }
+
+  function catalogSummaryToBindingTarget(summary = {}) {
+    return {
+      busbarId: summary.busbarId === null || summary.busbarId === undefined ? '' : summary.busbarId,
+      busbarInternalId: summary.busbarInternalId ?? summary.internalBusbarId ?? null,
+      busbarName: summary.busbarName || '',
+      plantName: summary.plantName || summary.ytbsPlantName || '',
+      sourceType: summary.sourceType || summary.busbarType || '',
+      ytm: summary.ytm || summary.bytm || ''
+    };
+  }
+
+  function ekcSourceName(row) {
+    return row?.ekcOriginalName || row?.busbarName || row?.plantName || row?.fileName || '';
+  }
+
+  function nameVariants(value) {
+    const normalized = normalizeCatalogText(value);
+    if (!normalized) return [];
+    const withoutParens = normalizeCatalogText(String(value || '').replace(/\([^)]*\)/g, ' '));
+    return uniqueStrings([normalized, withoutParens]);
+  }
+
+  function normalizeCatalogText(value) {
+    return String(value || '')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0130/g, 'I')
+      .replace(/\u0131/g, 'i')
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  function normalizeEntityKey(value) {
+    return normalizeCatalogText(value).replace(/\s+/g, '-') || 'ekc';
+  }
+
   function getEkcDateFilterUpdate(rows, filters = {}) {
     const dates = [...new Set((rows || []).map((row) => row.localDate).filter(Boolean))].sort();
     if (!dates.length) return { changed: false, dates: [] };
@@ -524,6 +700,8 @@
 
   return {
     bindEkcRowsToSelectedBusbar,
+    bindEkcRowsToCatalog,
+    dedupeEkcFileLoadGroups,
     getEkcDateFilterUpdate,
     dateRangeCovers,
     addLocalDays,

@@ -99,6 +99,33 @@ test('buildDailyPivot keeps YKS and EK-C control rows separate for the same busb
   assert.equal(result.rows.every((row) => row.hours[0].status === 'SAGLADI'), true);
 });
 
+test('buildDailyPivot keeps EK-C rows with null busbarId separate by EK-C entity key', () => {
+  const rows = [
+    ...Array.from({ length: 60 }, (_, minute) => makeRow(minute, {
+      sourceType: 'WIND',
+      busbarId: null,
+      busbarName: 'ATAKALE_RES',
+      ekcEntityKey: 'file:atakale',
+      controlSource: 'EKC',
+      controlType: 'EK-C Kontrol'
+    })),
+    ...Array.from({ length: 60 }, (_, minute) => makeRow(minute, {
+      sourceType: 'WIND',
+      busbarId: null,
+      busbarName: 'KURTKAYASI_RES',
+      ekcEntityKey: 'file:kurtkayasi',
+      controlSource: 'EKC',
+      controlType: 'EK-C Kontrol'
+    }))
+  ];
+
+  const result = pivot.buildDailyPivot(rows, '2026-04-01');
+
+  assert.equal(result.rows.length, 2);
+  assert.deepEqual(result.rows.map((row) => row.busbarName).sort(), ['ATAKALE_RES', 'KURTKAYASI_RES']);
+  assert.equal(result.rows.every((row) => row.hours[0].status === 'SAGLADI'), true);
+});
+
 test('buildDailyPivot computes hourly averages and participation percentage over 60 minutes', () => {
   const rows = Array.from({ length: 30 }, (_, minute) => makeRow(minute, {
     tpysVoltageSet: 160,

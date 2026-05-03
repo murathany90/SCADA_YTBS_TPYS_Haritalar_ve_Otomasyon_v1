@@ -265,6 +265,13 @@ test('rgdh monitor exposes separate extension and YKS log panels', () => {
   assert.match(html, /id="btnCancelFetch"/);
 });
 
+test('rgdh monitor labels catalog source as RGDH test definitions in the UI', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  assert.match(js, /RGDH Test Tanımları/);
+  assert.doesNotMatch(js, /parts\.push\('KATALOG'\)/);
+});
+
 test('rgdh monitor raw data table exposes original YKS status and approval columns', () => {
   const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
@@ -377,6 +384,98 @@ test('rgdh monitor daily table distinguishes YKS and EK-C control sources with d
   assert.match(css, /rgdh-source-yks/);
   assert.match(css, /rgdh-source-ekc/);
   assert.match(css, /rgdh-daily-hour-link[\s\S]*color:\s*inherit/);
+});
+
+test('rgdh monitor daily tab exposes synced local filters for busbar, BYTM, date and control source', () => {
+  const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const css = cssSafeRead();
+
+  assert.match(html, /id="dailyFilterBar"/);
+  assert.match(html, /<label>Bara[\s\S]*<select id="dailyFilterBusbar"/);
+  assert.match(html, /<label>BYTM[\s\S]*<select id="dailyFilterYtm"/);
+  assert.match(html, /<label>Tarih[\s\S]*<select id="dailyFilterDate"/);
+  assert.match(html, /<label>Kaynak Tipi[\s\S]*<select id="dailyFilterControlSource"/);
+  assert.match(html, /id="btnClearDailyFilters"[\s\S]*Filtreleri Temizle/);
+  assert.match(js, /dailyFilters:\s*\{\s*busbarId:\s*''/);
+  assert.match(js, /function renderDailyFilters/);
+  assert.match(js, /function readDailyFilters/);
+  assert.match(js, /function applyDailyFiltersToTopFilters/);
+  assert.match(js, /function filterDailyPivotRows/);
+  assert.match(js, /function clearDailyFilters/);
+  assert.match(js, /const filteredDailyPivotRows = filterDailyPivotRows\(dailyPivotRows,\s*state\.dailyFilters\)/);
+  assert.match(js, /renderDailyFilters\(dailyPivotRows\)/);
+  assert.match(js, /renderDailyTable\(filteredDailyPivotRows\)/);
+  assert.match(js, /renderDailyMetricTable\(filteredDailyPivotRows\)/);
+  assert.match(js, /dailyFilterControlSource[\s\S]*YKS Kontrol[\s\S]*EK-C Kontrol/);
+  assert.match(js, /el\.filterSearch\.value = catalogBusbarKey\(target\)/);
+  assert.match(js, /el\.filterDate\.value = filters\.date \|\| ''/);
+  assert.match(js, /persistFilters\(\)/);
+  assert.match(css, /\.rgdh-daily-filter-bar/);
+});
+
+test('rgdh monitor EK-C daily drilldown syncs top filters and comparison scope without fetching', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const selectDailyChartBlock = js.match(/function selectDailyChart[\s\S]*?function renderDailySourceBadge/)?.[0] || '';
+
+  assert.match(js, /function syncFiltersToDailyControlRow/);
+  assert.match(js, /function setCompareSelectionFromDailyRow/);
+  assert.match(selectDailyChartBlock, /syncFiltersToDailyControlRow\(row\)/);
+  assert.match(selectDailyChartBlock, /setCompareSelectionFromDailyRow\(row\)/);
+  assert.match(selectDailyChartBlock, /state\.chartSelection = \{ busbarId: row\.busbarId, hour, date: row\.localDate \|\| null \}/);
+  assert.match(js, /el\.filterDate\.value = row\.localDate \|\| ''/);
+  assert.match(js, /el\.filterEndDate\.value = ''/);
+  assert.match(js, /el\.filterSearch\.value = catalogBusbarKey\(target\)/);
+  assert.match(js, /hourMode:\s*'all'/);
+  assert.doesNotMatch(selectDailyChartBlock, /fetchYksData\(/);
+});
+
+test('rgdh monitor scopes EK-C comparison rendering to one busbar and one date', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  assert.match(js, /function resolveCompareScope/);
+  assert.match(js, /function filterRowsForCompareScope/);
+  assert.match(js, /function resolveFirstEkcDailyControlRow/);
+  assert.match(js, /const compareScope = resolveCompareScope\(platformRows \|\| getFilteredRows\(\), getFilteredEkcRows\(\)\)/);
+  assert.match(js, /const scopedPlatformRows = filterRowsForCompareScope\(platformRows \|\| getFilteredRows\(\), compareScope\)/);
+  assert.match(js, /const scopedEkcRows = filterRowsForCompareScope\(getFilteredEkcRows\(\), compareScope\)/);
+  assert.match(js, /buildEkcPlatformComparison\(scopedPlatformRows,\s*scopedEkcRows\)/);
+  assert.match(js, /busbarId: compareScope\.busbarId/);
+  assert.match(js, /date: compareScope\.date/);
+});
+
+test('rgdh monitor EK-C upload uses file-based catalog binding and duplicate rejection', () => {
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+
+  assert.match(js, /RGDH_COMPARISON\.bindEkcRowsToCatalog/);
+  assert.match(js, /RGDH_COMPARISON\.dedupeEkcFileLoadGroups/);
+  assert.match(js, /formatEkcLoadSummary/);
+  assert.match(js, /renderStats\(rows,\s*ekcRows\)/);
+  assert.match(js, /hasBoundEkcRows/);
+});
+
+test('rgdh monitor shows EK-C bulk upload progress popup and page notice', () => {
+  const html = fs.readFileSync(path.join(root, 'rgdh-monitor.html'), 'utf8');
+  const js = fs.readFileSync(path.join(root, 'rgdh-monitor.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'rgdh-monitor.css'), 'utf8');
+
+  assert.match(html, /id="uploadNotice"/);
+  assert.match(html, /id="uploadModal"/);
+  assert.match(html, /id="uploadModalTitle"/);
+  assert.match(html, /id="uploadModalMessage"/);
+  assert.match(html, /id="uploadProgressBar"/);
+  assert.match(html, /id="uploadProgressText"/);
+  assert.match(html, /id="btnCloseUploadModal"/);
+  assert.match(js, /function showUploadFeedback/);
+  assert.match(js, /function updateUploadFeedback/);
+  assert.match(js, /function finishUploadFeedback/);
+  assert.match(js, /function hideUploadFeedback/);
+  assert.match(js, /showUploadFeedback\(files\.length\)/);
+  assert.match(js, /updateUploadFeedback\(/);
+  assert.match(js, /finishUploadFeedback\(loadSummary/);
+  assert.match(css, /\.rgdh-upload-notice/);
+  assert.match(css, /\.rgdh-upload-modal/);
+  assert.match(css, /\.rgdh-upload-progress-bar/);
 });
 
 function cssSafeRead() {

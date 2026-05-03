@@ -34,6 +34,112 @@ test('bindEkcRowsToSelectedBusbar preserves EK-C identity and attaches selected 
   assert.equal(rows[0].ekcBoundToYks, true);
 });
 
+test('bindEkcRowsToCatalog attaches EK-C rows to a unique normalized catalog busbar', () => {
+  const result = comparison.bindEkcRowsToCatalog([{
+    fileName: 'BAYMINA.csv',
+    plantName: 'BAYMINA_154',
+    busbarName: 'BAYMINA_154',
+    sourceType: 'CONVENTIONAL',
+    localDate: '2026-03-27'
+  }], [{
+    busbarId: 2111,
+    busbarInternalId: 10933818988,
+    busbarName: 'BAYMİNA 154',
+    plantName: 'BAYMİNA 154',
+    busbarType: 'CONVENTIONAL',
+    sourceType: 'CONVENTIONAL',
+    ytm: 'OA_YTM'
+  }]);
+
+  assert.equal(result.status, 'matched');
+  assert.equal(result.target.busbarId, 2111);
+  assert.equal(result.rows[0].busbarId, '2111');
+  assert.equal(result.rows[0].busbarInternalId, 10933818988);
+  assert.equal(result.rows[0].busbarName, 'BAYMİNA 154');
+  assert.equal(result.rows[0].plantName, 'BAYMİNA 154');
+  assert.equal(result.rows[0].ekcOriginalName, 'BAYMINA_154');
+  assert.equal(result.rows[0].ekcEntityKey, 'catalog:2111');
+  assert.equal(result.rows[0].ekcBindingStatus, 'matched');
+});
+
+test('bindEkcRowsToCatalog avoids unsafe substring matches and reports ambiguous candidates', () => {
+  const rows = [{
+    fileName: 'YAHYALI.csv',
+    plantName: 'YAHYALI_RES',
+    busbarName: 'YAHYALI_RES',
+    sourceType: 'WIND',
+    localDate: '2026-03-27'
+  }];
+  const catalog = [
+    { busbarId: 4572, busbarName: 'YAHYALI RES', plantName: 'YAHYALI RES (SE)', busbarType: 'WIND' },
+    { busbarId: 5192, busbarName: 'YAHYALI-2 RES', plantName: 'YAHYALI RES(BAK)', busbarType: 'WIND' }
+  ];
+
+  const result = comparison.bindEkcRowsToCatalog(rows, catalog);
+
+  assert.equal(result.status, 'matched');
+  assert.equal(result.target.busbarId, 4572);
+  assert.equal(result.rows[0].busbarId, '4572');
+
+  const ambiguous = comparison.bindEkcRowsToCatalog([{
+    fileName: 'KARAPINAR.csv',
+    plantName: 'KARAPINAR_YEKA-1_GES',
+    busbarName: 'KARAPINAR_YEKA-1_GES',
+    sourceType: 'WIND',
+    localDate: '2026-03-27'
+  }], [
+    { busbarId: 6084, busbarName: 'KARAPINAR YEKA-1 GES 154', plantName: 'KARAPINAR YEKA-1 GES', busbarType: 'WIND' },
+    { busbarId: 6085, busbarName: 'KARAPINAR YEKA-1 GES 400', plantName: 'KARAPINAR YEKA-1 GES', busbarType: 'WIND' }
+  ]);
+
+  assert.equal(ambiguous.status, 'ambiguous');
+  assert.equal(ambiguous.rows[0].busbarId, null);
+  assert.equal(ambiguous.rows[0].ekcBindingStatus, 'ambiguous');
+  assert.match(ambiguous.reason, /Birden fazla/);
+});
+
+test('bindEkcRowsToCatalog falls back to selected busbar for a single unmatched EK-C file', () => {
+  const result = comparison.bindEkcRowsToCatalog([{
+    fileName: 'unknown.csv',
+    plantName: 'BILINMEYEN',
+    busbarName: 'BILINMEYEN',
+    sourceType: 'WIND',
+    localDate: '2026-03-27'
+  }], [], {
+    fallbackTarget: {
+      busbarId: '4772',
+      busbarName: 'KURTKAYASI RES',
+      plantName: 'KURTKAYASI RES',
+      sourceType: 'WIND'
+    }
+  });
+
+  assert.equal(result.status, 'fallback_selected');
+  assert.equal(result.rows[0].busbarId, '4772');
+  assert.equal(result.rows[0].ekcBindingStatus, 'fallback_selected');
+});
+
+test('dedupeEkcFileLoadGroups rejects repeated source and entity dates after first file', () => {
+  const result = comparison.dedupeEkcFileLoadGroups([
+    {
+      fileName: 'first.csv',
+      rows: [{ sourceType: 'WIND', busbarId: '4772', ekcEntityKey: 'catalog:4772', localDate: '2026-03-27' }]
+    },
+    {
+      fileName: 'repeat.csv',
+      rows: [{ sourceType: 'WIND', busbarId: '4772', ekcEntityKey: 'catalog:4772', localDate: '2026-03-27' }]
+    },
+    {
+      fileName: 'other.csv',
+      rows: [{ sourceType: 'WIND', busbarId: '5052', ekcEntityKey: 'catalog:5052', localDate: '2026-03-27' }]
+    }
+  ]);
+
+  assert.deepEqual(result.acceptedGroups.map((group) => group.fileName), ['first.csv', 'other.csv']);
+  assert.deepEqual(result.duplicateGroups.map((group) => group.fileName), ['repeat.csv']);
+  assert.equal(result.rows.length, 2);
+});
+
 test('getEkcDateFilterUpdate switches filters to a single EK-C date or an exclusive multi-day range', () => {
   const single = comparison.getEkcDateFilterUpdate([
     { localDate: '2026-04-28' },

@@ -69,7 +69,8 @@
       .filter((row) => !localDate || row.localDate === localDate)
       .forEach((row) => {
         const controlSource = normalizeControlSource(row.controlSource);
-        const key = `${controlSource || ''}:${row.sourceType || ''}:${row.busbarId ?? ''}:${row.localDate || ''}`;
+        const entityKey = dailyEntityKey(row, controlSource);
+        const key = `${controlSource || ''}:${row.sourceType || ''}:${entityKey}:${row.localDate || ''}`;
         if (!grouped.has(key)) {
           grouped.set(key, {
             key,
@@ -78,6 +79,10 @@
             busbarName: row.busbarName || '',
             localDate: row.localDate || '',
             ytm: row.ytm || '',
+            ekcEntityKey: row.ekcEntityKey || '',
+            ekcBindingStatus: row.ekcBindingStatus || '',
+            ekcBindingReason: row.ekcBindingReason || '',
+            ekcSourceFileName: row.ekcSourceFileName || '',
             controlSource,
             controlType: controlTypeForSource(controlSource, row.controlType),
             rows: []
@@ -102,6 +107,14 @@
     });
 
     return { localDate, rows: pivotRows };
+  }
+
+  function dailyEntityKey(row, controlSource) {
+    if (row?.busbarId !== null && row?.busbarId !== undefined && row.busbarId !== '') return String(row.busbarId);
+    if (controlSource === 'EKC') {
+      return String(row?.ekcEntityKey || row?.busbarName || row?.plantName || row?.fileName || row?.ekcSourceFileName || '');
+    }
+    return '';
   }
 
   function buildDailySummary(rows, hours) {

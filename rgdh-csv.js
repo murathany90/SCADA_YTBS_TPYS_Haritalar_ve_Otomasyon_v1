@@ -606,7 +606,7 @@
       const first = parseTurkishNumber(cells[1]);
       const second = parseTurkishNumber(cells[2]);
       const nums = cells.slice(1).map(parseTurkishNumber).filter(Number.isFinite);
-      if (!meta.plantName && /birimin adi|birim adi|santral/.test(label)) {
+      if (!meta.plantName && /birimin adi|birim adi|santral|baranin adi|bara.*adi/.test(label)) {
         meta.plantName = cleanCell(cells[1]);
         meta.busbarName = meta.plantName;
       }
