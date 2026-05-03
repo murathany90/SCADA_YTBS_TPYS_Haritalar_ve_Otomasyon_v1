@@ -287,6 +287,19 @@ test('hybrid and SENKOM modes follow duty handoff and set availability rules', (
   assert.equal(senkom.result, 'SAGLADI');
 });
 
+test('isSynchronousCondenserActiveMinute requires absolute active power strictly between 1 and 5 MW', () => {
+  const baseRow = {
+    hasSynchronousCondenser: true,
+    qMeas: 20
+  };
+
+  assert.equal(engine.isSynchronousCondenserActiveMinute({ ...baseRow, pTotal: 0.5 }), false);
+  assert.equal(engine.isSynchronousCondenserActiveMinute({ ...baseRow, pTotal: 1 }), false);
+  assert.equal(engine.isSynchronousCondenserActiveMinute({ ...baseRow, pTotal: 5 }), false);
+  assert.equal(engine.isSynchronousCondenserActiveMinute({ ...baseRow, pTotal: 2 }), true);
+  assert.equal(engine.isSynchronousCondenserActiveMinute({ ...baseRow, pTotal: -2 }), true);
+});
+
 test('buildEkcCalculationRows switches flagged SK active hours to SENKOM mode', () => {
   const context = new Map([['6083', {
     busbarId: '6083',
@@ -304,7 +317,7 @@ test('buildEkcCalculationRows switches flagged SK active hours to SENKOM mode', 
     localHour: 2,
     localMinute: minute,
     measurementDateLocal: `2026-05-01T02:${String(minute).padStart(2, '0')}:00+03:00`,
-    pTotal: 1,
+    pTotal: 2,
     pnomMw: 100,
     qMeas: 8,
     qSyncReqMvar: 8
@@ -343,7 +356,7 @@ test('buildEkcCalculationRows counts successful SK minutes against nominal excit
     localDate: '2026-05-01',
     localHour: 3,
     localMinute: minute,
-    pTotal: 1,
+    pTotal: 2,
     pnomMw: 100,
     qMeas,
     qSyncReqMvar: 1

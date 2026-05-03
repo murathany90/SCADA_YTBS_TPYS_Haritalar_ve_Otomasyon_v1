@@ -20,6 +20,10 @@
   const TPYS_SET_LEGEND_GROUP = 'tpys-set-voltage';
   const PARTICIPATION_OK_THRESHOLD_PCT = 80;
   const VIOLATION_POINT_COLOR = '#dc2626';
+  const SK_ACTIVE_P_ABS_MIN_MW = 1;
+  const SK_ACTIVE_P_ABS_MAX_MW = 5;
+  const SK_REACTIVE_TO_ACTIVE_RATIO = 2;
+  const SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW = 0.1;
   let pivotApiCache = null;
   let pivotApiChecked = false;
 
@@ -524,6 +528,9 @@
       violationPointDataset('YKS İhlal Noktası', sourceRows.map((row) => isYksReactiveViolation(row) ? (row.qgenMvar ?? row.qMeas) : null)),
       violationPointDataset('EK-C İhlal Noktası', sourceRows.map((row) => isEkcReactiveViolation(row) ? (row.qMeas ?? row.qgenMvar) : null))
     );
+    datasets.push(
+      skFailurePointDataset('SK Başarısız Dakika', buildSynchronousCondenserFailureSeries(sourceRows))
+    );
     return datasets.filter(hasDatasetValues);
   }
 
@@ -812,7 +819,7 @@
         td.dataset.hour = String(hour.hour);
         td.tabIndex = 0;
         const resultLabel = reactiveDisplayLabel(hour.hourResult || hour.status);
-        td.textContent = formatHeatmapCellText(hour);
+        td.innerHTML = formatHeatmapCellHtml(hour);
         td.title = [
           `${String(hour.hour).padStart(2, '0')}:00`,
           `Katılım ${formatPercent(hour.participationPct)}`,
@@ -861,14 +868,39 @@
   }
 
   function formatHeatmapCellText(hour) {
+    const baseText = formatHeatmapBaseCellText(hour);
+    const skText = formatHeatmapSkText(hour);
+    return `${baseText}${skText}`;
+  }
+
+  function formatHeatmapCellHtml(hour) {
+    return `${escapeHtml(formatHeatmapBaseCellText(hour))}${formatHeatmapSkBadgeHtml(hour)}`;
+  }
+
+  function formatHeatmapBaseCellText(hour) {
     const result = normalizeReactiveResultCode(hour?.hourResult || hour?.status);
-    const successCount = Number(hour?.synchronousCondenserSuccessMinuteCount);
-    const skSuffix = hour?.synchronousCondenserActive
-      ? ` SK(${Number.isFinite(successCount) ? formatNumber(successCount) : formatNumber(hour?.synchronousCondenserMinuteCount)})`
-      : '';
-    if (result === 'DD' || result === 'YY' || result === 'KY') return `${result}${skSuffix}`;
+    if (result === 'DD' || result === 'YY' || result === 'KY') return result;
     const pct = hour?.participationPct ?? hour?.passRatio;
-    return Number.isFinite(Number(pct)) ? `${formatPercent(pct)}${skSuffix}` : `${result || '-'}${skSuffix}`;
+    return Number.isFinite(Number(pct)) ? formatPercent(pct) : (result || '-');
+  }
+
+  function formatHeatmapSkText(hour) {
+    if (!hour?.synchronousCondenserActive) return '';
+    const successCount = Number(hour?.synchronousCondenserSuccessMinuteCount);
+    const count = Number.isFinite(successCount) ? successCount : Number(hour?.synchronousCondenserMinuteCount);
+    return ` SK(${formatNumber(count)})`;
+  }
+
+  function formatHeatmapSkBadgeHtml(hour) {
+    if (!hour?.synchronousCondenserActive) return '';
+    const result = normalizeReactiveResultCode(hour?.synchronousCondenserResult || hour?.hourResult || hour?.status);
+    const className = result === 'SAGLAMADI'
+      ? 'rgdh-sk-fail'
+      : (result === 'SAGLADI' ? 'rgdh-sk-ok' : 'rgdh-sk-neutral');
+    const successCount = Number(hour?.synchronousCondenserSuccessMinuteCount);
+    const count = Number.isFinite(successCount) ? successCount : Number(hour?.synchronousCondenserMinuteCount);
+    const title = `SK aktif ${formatNumber(hour?.synchronousCondenserMinuteCount)} dk, basarili ${formatNumber(count)} dk`;
+    return ` <span class="rgdh-sk-badge ${className}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">SK(${escapeHtml(formatNumber(count))})</span>`;
   }
 
   function normalizeReactiveResultCode(value) {
@@ -1105,11 +1137,99 @@
     });
   }
 
+  function skFailurePointDataset(label, data) {
+    return lineDataset(label, data, VIOLATION_POINT_COLOR, 'y', {
+      showLine: false,
+      borderWidth: 0,
+      pointStyle: 'crossRot',
+      pointRadius: 6,
+      pointHoverRadius: 8,
+      pointBackgroundColor: VIOLATION_POINT_COLOR,
+      pointBorderColor: VIOLATION_POINT_COLOR,
+      pointBorderWidth: 3,
+      tension: 0,
+      rgdhSkFailureDataset: true
+    });
+  }
+
   function ekcHybridPowerForChart(row) {
     const ekc = row?.ekc || row;
     const candidates = [ekc?.pAux, ekc?.auxiliaryMw, ekc?.hybridP, ekc?.pHybrid];
     const value = candidates.find((candidate) => Number.isFinite(Number(candidate)));
     return value === undefined ? null : Number(value);
+  }
+
+  function buildSynchronousCondenserFailureSeries(rows) {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const hourInfo = new Map();
+    sourceRows.forEach((row) => {
+      const key = synchronousCondenserChartHourKey(row);
+      if (!hourInfo.has(key)) hourInfo.set(key, []);
+      hourInfo.get(key).push(row);
+    });
+    const activeHourKeys = new Set();
+    hourInfo.forEach((groupRows, key) => {
+      const candidate = groupRows.some(isSynchronousCondenserCandidate);
+      const activeCount = groupRows.filter(isSynchronousCondenserActiveMinute).length;
+      if ((candidate && activeCount >= 5) || groupRows.some((row) => truthyFlag(row?.synchronousCondenserActive))) {
+        activeHourKeys.add(key);
+      }
+    });
+    return sourceRows.map((row) => {
+      if (!activeHourKeys.has(synchronousCondenserChartHourKey(row))) return null;
+      if (!isSynchronousCondenserActiveMinute(row)) return null;
+      if (isSynchronousCondenserSuccessfulMinute(row)) return null;
+      return qValueForSynchronousCondenser(row);
+    });
+  }
+
+  function synchronousCondenserChartHourKey(row) {
+    const date = row?.localDate || String(row?.measurementDateLocal || row?.measurementDateUtc || '').slice(0, 10);
+    const hour = row?.localHour ?? row?.hour ?? String(row?.measurementDateLocal || row?.measurementDateUtc || '').slice(11, 13);
+    const busbar = row?.busbarId ?? row?.busbarInternalId ?? row?.busbarName ?? row?.plantName ?? '';
+    return `${busbar}|${date}|${hour}`;
+  }
+
+  function isSynchronousCondenserCandidate(row) {
+    return truthyFlag(row?.hasSynchronousCondenser ?? row?.catalog?.hasSynchronousCondenser ?? row?.synchronousCondenserCandidate);
+  }
+
+  function isSynchronousCondenserActiveMinute(row) {
+    if (!isSynchronousCondenserCandidate(row)) return false;
+    const p = finiteOrNull(row?.pgenMw ?? row?.pTotal);
+    const q = qValueForSynchronousCondenser(row);
+    if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
+    const absP = Math.abs(p);
+    return absP > SK_ACTIVE_P_ABS_MIN_MW
+      && absP < SK_ACTIVE_P_ABS_MAX_MW
+      && Math.abs(q) > SK_REACTIVE_TO_ACTIVE_RATIO * Math.max(absP, SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW);
+  }
+
+  function isSynchronousCondenserSuccessfulMinute(row) {
+    const q = qValueForSynchronousCondenser(row);
+    const threshold = synchronousCondenserNominalThreshold(row, q);
+    return Number.isFinite(q) && Number.isFinite(threshold) && Math.abs(q) >= threshold * 0.90;
+  }
+
+  function qValueForSynchronousCondenser(row) {
+    return finiteOrNull(row?.qgenMvar ?? row?.qMeas);
+  }
+
+  function synchronousCondenserNominalThreshold(row, q) {
+    const high = firstFiniteAbs(
+      row?.nominalHighExcitation,
+      row?.qNomHigh,
+      row?.catalog?.nominalHighExcitation,
+      sumUnitAbs(row?.catalog?.units, ['nominalHighExcitation', 'highExcitationTest', 'highExcitationTest2'])
+    );
+    const low = firstFiniteAbs(
+      row?.nominalLowExcitation,
+      row?.qNomLow,
+      row?.catalog?.nominalLowExcitation,
+      sumUnitAbs(row?.catalog?.units, ['nominalLowExcitation', 'lowExcitationTest', 'lowExcitationTest2'])
+    );
+    if (Number(q) < 0) return Number.isFinite(low) ? low : high;
+    return Number.isFinite(high) ? high : low;
   }
 
   function isYksReactiveViolation(row) {
@@ -1310,8 +1430,37 @@
   }
 
   function finiteOrNull(value) {
+    if (value === null || value === undefined || value === '') return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  function truthyFlag(value) {
+    if (value === true) return true;
+    if (value === false || value === null || value === undefined || value === '') return false;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric !== 0;
+    return /^(true|evet|yes|aktif|var)$/i.test(String(value).trim());
+  }
+
+  function firstFiniteAbs(...values) {
+    for (const value of values) {
+      const numeric = finiteOrNull(value);
+      if (Number.isFinite(numeric) && Math.abs(numeric) > 0) return Math.abs(numeric);
+    }
+    return null;
+  }
+
+  function sumUnitAbs(units, keys) {
+    const values = (Array.isArray(units) ? units : []).map((unit) => {
+      for (const key of keys) {
+        const numeric = finiteOrNull(unit?.[key]);
+        if (Number.isFinite(numeric)) return Math.abs(numeric);
+      }
+      return null;
+    }).filter(Number.isFinite);
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0);
   }
 
   function roundMetric(value) {
@@ -1341,6 +1490,7 @@
     buildComparisonReactiveDatasets,
     buildHourMetricRows,
     formatHeatmapCellText,
+    formatHeatmapCellHtml,
     selectComparisonRowsForCharts,
     integerLinearScale,
     normalizeHourFilter,

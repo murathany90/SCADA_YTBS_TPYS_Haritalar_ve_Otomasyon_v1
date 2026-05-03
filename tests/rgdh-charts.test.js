@@ -220,6 +220,29 @@ test('formatHeatmapCellText hides SAGLADI SAGLAMADI labels and keeps neutral cod
   assert.equal(charts.formatHeatmapCellText({ hourResult: 'KY', participationPct: null, pctSuppressed: true }), 'KY');
 });
 
+test('formatHeatmapCellHtml renders colored SK success counts for chart hour cells', () => {
+  const okHtml = charts.formatHeatmapCellHtml({
+    hourResult: 'DD',
+    synchronousCondenserActive: true,
+    synchronousCondenserResult: 'SAGLADI',
+    synchronousCondenserSuccessMinuteCount: 57
+  });
+  const failHtml = charts.formatHeatmapCellHtml({
+    hourResult: 'SAGLADI',
+    participationPct: 98.3,
+    synchronousCondenserActive: true,
+    synchronousCondenserResult: 'SAGLAMADI',
+    synchronousCondenserSuccessMinuteCount: 42
+  });
+
+  assert.match(okHtml, /DD/);
+  assert.match(okHtml, /rgdh-sk-badge rgdh-sk-ok/);
+  assert.match(okHtml, /SK\(57\)/);
+  assert.match(failHtml, /98,3%/);
+  assert.match(failHtml, /rgdh-sk-badge rgdh-sk-fail/);
+  assert.match(failHtml, /SK\(42\)/);
+});
+
 test('participationClass differentiates DD YY KY neutral result colors', () => {
   assert.equal(charts.participationClass({ hourResult: 'DD', participationPct: null }), 'participation-dd');
   assert.equal(charts.participationClass({ hourResult: 'YY', participationPct: null }), 'participation-yy');
@@ -395,6 +418,39 @@ test('reactive datasets add hidden red violation points for YKS failed minutes',
   assert.equal(violations.hidden, true);
   assert.equal(violations.showLine, false);
   assert.equal(violations.pointBackgroundColor, '#dc2626');
+});
+
+test('reactive datasets add red X points for active failed synchronous condenser minutes', () => {
+  const datasets = charts.buildReactiveDatasets([
+    { localDate: '2026-04-17', localHour: 9, localMinute: 0, hasSynchronousCondenser: true, pgenMw: 2, qgenMvar: 18, nominalHighExcitation: 20, nominalLowExcitation: -20 },
+    { localDate: '2026-04-17', localHour: 9, localMinute: 1, hasSynchronousCondenser: true, pgenMw: 2, qgenMvar: 17, nominalHighExcitation: 20, nominalLowExcitation: -20 },
+    { localDate: '2026-04-17', localHour: 9, localMinute: 2, hasSynchronousCondenser: true, pgenMw: 2, qgenMvar: -17, nominalHighExcitation: 20, nominalLowExcitation: -20 },
+    { localDate: '2026-04-17', localHour: 9, localMinute: 3, hasSynchronousCondenser: true, pgenMw: 2, qgenMvar: 19, nominalHighExcitation: 20, nominalLowExcitation: -20 },
+    { localDate: '2026-04-17', localHour: 9, localMinute: 4, hasSynchronousCondenser: true, pgenMw: 2, qgenMvar: -19, nominalHighExcitation: 20, nominalLowExcitation: -20 }
+  ]);
+  const skFailures = datasets.find((dataset) => dataset.label === 'SK Başarısız Dakika');
+
+  assert.deepEqual(skFailures.data, [null, 17, -17, null, null]);
+  assert.equal(skFailures.showLine, false);
+  assert.equal(skFailures.pointStyle, 'crossRot');
+  assert.equal(skFailures.pointBackgroundColor, '#dc2626');
+  assert.notEqual(skFailures.hidden, true);
+});
+
+test('reactive datasets do not mark synchronous condenser failure points at 1 MW active power', () => {
+  const datasets = charts.buildReactiveDatasets(Array.from({ length: 5 }, (_, minute) => ({
+    localDate: '2026-04-17',
+    localHour: 10,
+    localMinute: minute,
+    hasSynchronousCondenser: true,
+    pgenMw: 1,
+    qgenMvar: 17,
+    nominalHighExcitation: 20,
+    nominalLowExcitation: -20
+  })));
+  const skFailures = datasets.find((dataset) => dataset.label === 'SK Başarısız Dakika');
+
+  assert.equal(skFailures, undefined);
 });
 
 test('reactive datasets do not mark YKS DD YY or KY minutes as violation points', () => {

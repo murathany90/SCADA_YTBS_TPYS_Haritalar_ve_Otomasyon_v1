@@ -156,7 +156,7 @@ test('buildEkcPlatformComparison carries SK and droop hour metadata', () => {
     localMinute: minute,
     dakikaIndex: 240 + minute,
     measurementDateLocal: `2026-05-01T04:${String(minute).padStart(2, '0')}:00+03:00`,
-    pTotal: 1,
+    pTotal: 2,
     qMeas: 19,
     droopPct: 3,
     hasSynchronousCondenser: true,
@@ -170,7 +170,7 @@ test('buildEkcPlatformComparison carries SK and droop hour metadata', () => {
     localHour: 4,
     localMinute: minute,
     measurementDateLocal: `2026-05-01T04:${String(minute).padStart(2, '0')}:00+03:00`,
-    pgenMw: 1,
+    pgenMw: 2,
     qgenMvar: -19,
     droopPct: 4,
     hasSynchronousCondenser: true,
@@ -189,6 +189,44 @@ test('buildEkcPlatformComparison carries SK and droop hour metadata', () => {
   assert.equal(hourRow.synchronousCondenserActive, true);
   assert.equal(hourRow.platformStat.synchronousCondenserSuccessMinuteCount, 5);
   assert.equal(hourRow.ekcStat.synchronousCondenserSuccessMinuteCount, 5);
+});
+
+test('buildEkcPlatformComparison fallback SK rule requires absolute active power above 1 MW', () => {
+  const platformRows = [
+    ...Array.from({ length: 5 }, (_, minute) => ({
+      busbarId: '2110',
+      localDate: '2026-05-01',
+      localHour: 4,
+      localMinute: minute,
+      measurementDateLocal: `2026-05-01T04:${String(minute).padStart(2, '0')}:00+03:00`,
+      pgenMw: 1,
+      qgenMvar: 19,
+      hasSynchronousCondenser: true,
+      nominalHighExcitation: 20,
+      nominalLowExcitation: -20,
+      approvalStatus: 1
+    })),
+    ...Array.from({ length: 5 }, (_, minute) => ({
+      busbarId: '2110',
+      localDate: '2026-05-01',
+      localHour: 5,
+      localMinute: minute,
+      measurementDateLocal: `2026-05-01T05:${String(minute).padStart(2, '0')}:00+03:00`,
+      pgenMw: -2,
+      qgenMvar: 19,
+      hasSynchronousCondenser: true,
+      nominalHighExcitation: 20,
+      nominalLowExcitation: -20,
+      approvalStatus: 1
+    }))
+  ];
+
+  const result = comparison.buildEkcPlatformComparison(platformRows, []);
+
+  assert.equal(result.hourRows[0].platformStat.synchronousCondenserActive, false);
+  assert.equal(result.hourRows[0].platformStat.synchronousCondenserMinuteCount, 0);
+  assert.equal(result.hourRows[1].platformStat.synchronousCondenserActive, true);
+  assert.equal(result.hourRows[1].platformStat.synchronousCondenserMinuteCount, 5);
 });
 
 test('buildEkcPlatformComparison does not count DD YY KY as active liability minutes', () => {

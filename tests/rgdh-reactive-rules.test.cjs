@@ -79,7 +79,7 @@ test('buildPlatformHourStat detects synchronous condenser hours and averages dro
   const skRows = [
     ...Array.from({ length: 4 }, (_, index) => ({
       hasSynchronousCondenser: true,
-      pgenMw: 1,
+      pgenMw: 2,
       qgenMvar: index % 2 ? -18 : 18,
       approvalStatus: 1,
       nominalHighExcitation: 20,
@@ -88,7 +88,7 @@ test('buildPlatformHourStat detects synchronous condenser hours and averages dro
     })),
     {
       hasSynchronousCondenser: true,
-      pgenMw: 1,
+      pgenMw: 2,
       qgenMvar: 17,
       approvalStatus: 1,
       nominalHighExcitation: 20,
@@ -124,7 +124,7 @@ test('buildPlatformHourStat detects synchronous condenser hours and averages dro
 test('buildPlatformHourStat marks active SK hours failed when nominal excitation support is below threshold', () => {
   const stat = pivot.buildPlatformHourStat(Array.from({ length: 5 }, () => ({
     hasSynchronousCondenser: true,
-    pgenMw: 1,
+    pgenMw: 2,
     qgenMvar: 10,
     approvalStatus: 1,
     nominalHighExcitation: 20,
@@ -135,4 +135,17 @@ test('buildPlatformHourStat marks active SK hours failed when nominal excitation
   assert.equal(stat.synchronousCondenserSuccessMinuteCount, 0);
   assert.equal(stat.synchronousCondenserFailMinuteCount, 5);
   assert.equal(stat.synchronousCondenserResult, 'SAGLAMADI');
+});
+
+test('isSynchronousCondenserActiveMinute requires absolute active power strictly between 1 and 5 MW', () => {
+  const baseRow = {
+    hasSynchronousCondenser: true,
+    qgenMvar: 20
+  };
+
+  assert.equal(pivot.isSynchronousCondenserActiveMinute({ ...baseRow, pgenMw: 0.5 }), false);
+  assert.equal(pivot.isSynchronousCondenserActiveMinute({ ...baseRow, pgenMw: 1 }), false);
+  assert.equal(pivot.isSynchronousCondenserActiveMinute({ ...baseRow, pgenMw: 5 }), false);
+  assert.equal(pivot.isSynchronousCondenserActiveMinute({ ...baseRow, pgenMw: 2 }), true);
+  assert.equal(pivot.isSynchronousCondenserActiveMinute({ ...baseRow, pgenMw: -2 }), true);
 });

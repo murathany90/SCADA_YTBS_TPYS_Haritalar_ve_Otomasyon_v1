@@ -139,6 +139,31 @@ test('buildDailyPivot gives approvalStatus priority when counting successful min
   assert.equal(hour.participationPct, 75);
 });
 
+test('buildDailyPivot does not mark SK active for DD hours with zero active power', () => {
+  const rows = Array.from({ length: 60 }, (_, minute) => makeRow(minute, {
+    busbarId: '2108',
+    busbarName: 'SARIYAR 154',
+    hasSynchronousCondenser: true,
+    offBoardStatus: 1,
+    approvalStatus: 1,
+    pgenMw: 0,
+    qgenMvar: -59.151,
+    pnomMw: 160,
+    nominalHighExcitation: 60,
+    nominalLowExcitation: -60
+  }));
+  const hour = pivot.buildDailyPivot(rows, '2026-04-01').rows[0].hours[0];
+
+  assert.equal(hour.hourResult, 'DD');
+  assert.equal(hour.ddCount, 60);
+  assert.equal(hour.pgenAvg, 0);
+  assert.equal(hour.synchronousCondenserCandidate, true);
+  assert.equal(hour.synchronousCondenserActive, false);
+  assert.equal(hour.synchronousCondenserMinuteCount, 0);
+  assert.equal(hour.synchronousCondenserSuccessMinuteCount, 0);
+  assert.equal(hour.synchronousCondenserResult, '');
+});
+
 test('participationClass follows reactive hour verdicts and distinguishes neutral decisions', () => {
   assert.equal(pivot.participationClass({ hourResult: 'SAGLAMADI', passRatio: 79.9 }), 'participation-fail');
   assert.equal(pivot.participationClass({ hourResult: 'SAGLADI', passRatio: 80 }), 'participation-ok');

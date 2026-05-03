@@ -10,6 +10,7 @@
   const RESULT_DD = 'DD';
   const RESULT_YY = 'YY';
   const RESULT_KY = 'KY';
+  const SK_ACTIVE_P_ABS_MIN_MW = 1;
   const SK_ACTIVE_P_ABS_MAX_MW = 5;
   const SK_REACTIVE_TO_ACTIVE_RATIO = 2;
   const SK_MIN_MINUTES_PER_HOUR = 5;
@@ -389,7 +390,8 @@
     if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
     const absP = Math.abs(p);
     const absQ = Math.abs(q);
-    return absP < SK_ACTIVE_P_ABS_MAX_MW
+    return absP > SK_ACTIVE_P_ABS_MIN_MW
+      && absP < SK_ACTIVE_P_ABS_MAX_MW
       && absQ > SK_REACTIVE_TO_ACTIVE_RATIO * Math.max(absP, SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW);
   }
 
@@ -629,6 +631,7 @@
     buildEkcCalculationRows,
     isSynchronousCondenserActiveMinute,
     synchronousCondenserHourInfo,
+    SK_ACTIVE_P_ABS_MIN_MW,
     SK_ACTIVE_P_ABS_MAX_MW,
     SK_REACTIVE_TO_ACTIVE_RATIO,
     SK_MIN_MINUTES_PER_HOUR,

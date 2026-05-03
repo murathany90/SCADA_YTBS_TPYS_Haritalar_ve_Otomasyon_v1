@@ -10,6 +10,10 @@
   const RESULT_DD = 'DD';
   const RESULT_YY = 'YY';
   const RESULT_KY = 'KY';
+  const SK_ACTIVE_P_ABS_MIN_MW = 1;
+  const SK_ACTIVE_P_ABS_MAX_MW = 5;
+  const SK_REACTIVE_TO_ACTIVE_RATIO = 2;
+  const SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW = 0.1;
 
   function bindEkcRowsToSelectedBusbar(rows, target) {
     if (!target?.busbarId) return rows || [];
@@ -345,14 +349,20 @@
       const p = Number(row?.pgenMw ?? row?.pTotal);
       const q = Number(row?.qgenMvar ?? row?.qMeas);
       if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
-      return Math.abs(p) < 5 && Math.abs(q) > 2 * Math.max(Math.abs(p), 0.1);
+      const absP = Math.abs(p);
+      return absP > SK_ACTIVE_P_ABS_MIN_MW
+        && absP < SK_ACTIVE_P_ABS_MAX_MW
+        && Math.abs(q) > SK_REACTIVE_TO_ACTIVE_RATIO * Math.max(absP, SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW);
     }).length;
     const activeRows = sourceRows.filter((row) => {
       if (!truthyFlag(row?.hasSynchronousCondenser ?? row?.catalog?.hasSynchronousCondenser)) return false;
       const p = Number(row?.pgenMw ?? row?.pTotal);
       const q = Number(row?.qgenMvar ?? row?.qMeas);
       if (!Number.isFinite(p) || !Number.isFinite(q)) return false;
-      return Math.abs(p) < 5 && Math.abs(q) > 2 * Math.max(Math.abs(p), 0.1);
+      const absP = Math.abs(p);
+      return absP > SK_ACTIVE_P_ABS_MIN_MW
+        && absP < SK_ACTIVE_P_ABS_MAX_MW
+        && Math.abs(q) > SK_REACTIVE_TO_ACTIVE_RATIO * Math.max(absP, SK_ACTIVE_POWER_DENOMINATOR_FLOOR_MW);
     });
     const successMinuteCount = activeRows.filter((row) => {
       const q = Number(row?.qgenMvar ?? row?.qMeas);
