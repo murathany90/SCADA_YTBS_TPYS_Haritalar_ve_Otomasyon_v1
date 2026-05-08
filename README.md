@@ -400,6 +400,21 @@ commitCurrentTab() → content-script.js'e CLICK_COMMIT
 
 ---
 
+### 6.4 Dashboard Modu
+
+Dashboard Modu, popup icindeki **Dashboard Modu** kartindan baslatilir ve durdurulur. Ayarlar ekrani `dashboard-settings.html` uzerinden acilir. Mod aktifken eklenti, `map-modern.html` harita sekmesi ve kullanicinin tanimladigi dis sekmeler arasinda `chrome.tabs.update(tabId, { active: true })` ile gecis yapar.
+
+- Fullscreen davranisi DOM fullscreen API ile yapilmaz. Dis sitelere `requestFullscreen()` veya fullscreen injection uygulanmaz. Dashboard penceresi `chrome.windows.update(windowId, { state: "fullscreen" })` ile browser window fullscreen durumuna alinir.
+- Ekrani acik tutmanin ana yontemi `chrome.power.requestKeepAwake("display")` cagrisidir. Dashboard durdugunda, recover edildiginde veya hata temizligi gerektiginde `chrome.power.releaseKeepAwake()` cagrilir.
+- Fare hareketi simulasyonu yalniz best-effort fallback secenegidir. Chrome extension gercek isletim sistemi faresini veya kurumsal ekran koruyucu politikasini guvenilir bicimde kontrol edemez. Kurumsal kiosk/dashboard kullanimi icin IT tarafinda ekran koruyucu veya kiosk istisnasi onerilir.
+- Runtime state `chrome.storage.local` icindeki `dashboardRuntime` anahtarinda tutulur. MV3 service worker yeniden basladiginda eski `running=true` state otomatik devam ettirilmez; guvenli cleanup yapilir.
+- Slot zamanlamasi `chrome.alarms` ile yapilir. Uretim icin guvenilir aralik 30-600 saniyedir; 1-29 saniye yalniz unpacked/dev best-effort davranisi olarak gorulmelidir.
+- ESC harita extension sayfasinda `DASHBOARD_STOP` mesaji gonderir. Dis sitelerde ESC yalniz dashboard slot sekmelerine eklenen gecici listener ile denenir; browser fullscreen ESC'yi tuketirse dusuk frekansli fullscreen-state kontrolu Dashboard'u durdurur.
+
+Dashboard SCADA davranisi iki katmanlidir. Harita slotu tekrar gorunur oldugunda background, harita sekmesine `DASHBOARD_MAP_SLOT_ACTIVE` mesaji gonderir; `scada-v2-runtime.js` mevcut overdue/auto refresh mekanizmasini tetikler ve aktif sorgu varsa ikinci fetch baslatmadan pending auto refresh isaretler. Son basarili SCADA olcum snapshot'i JSON dostu bicimde `scadaDashboardSnapshot` icine yazilir; harita acilisinda bu snapshot once onbellek etiketiyle restore edilir, ardindan canli fetch denenir. Arka plan yenileme `scada.backgroundRefresh` alarmi ve `scadaBackgroundRefreshState` uzerinden raw/normalized snapshot uretir; render islemi yine acik harita sayfasinda yapilir.
+
+---
+
 ## 7. Kurulum ve Geliştirme
 
 ### Ön Koşullar

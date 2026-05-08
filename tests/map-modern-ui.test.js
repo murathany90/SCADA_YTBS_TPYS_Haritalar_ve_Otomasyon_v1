@@ -91,3 +91,9 @@ test('isBlankMapClickTarget ignores UI chrome and feature nodes', () => {
   assert.equal(hooks.isBlankMapClickTarget(blankTarget), true);
   assert.equal(hooks.isBlankMapClickTarget(null), true);
 });
+
+test('map modern binds ESC to dashboard stop message', () => {
+  assert.match(sourceCode, /document\.addEventListener\('keydown',\s*handleDashboardEscapeKey,\s*true\)/);
+  assert.match(sourceCode, /DASHBOARD_STOP/);
+  assert.match(sourceCode, /reason:\s*'esc-map'/);
+});

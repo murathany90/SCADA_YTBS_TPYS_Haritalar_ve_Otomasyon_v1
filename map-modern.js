@@ -433,6 +433,7 @@ function bindEvents() {
     if (isBlankMapClickTarget(event.target)) clearMapSelection({ keepPanelOpen: true });
   });
   window.addEventListener('resize', () => requestRender({ forceTiles: true }));
+  document.addEventListener('keydown', handleDashboardEscapeKey, true);
 
   if (el.btnToggleSidebar && el.sidebar) {
     el.btnToggleSidebar.addEventListener('click', () => {
@@ -459,6 +460,16 @@ function bindEvents() {
 
 function checkedFromEvent(checked) {
   return Boolean(checked);
+}
+
+function handleDashboardEscapeKey(event) {
+  if (event.key !== 'Escape') return;
+  try {
+    if (chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'DASHBOARD_STOP', reason: 'esc-map' });
+    }
+  } catch {
+  }
 }
 
 function checkedKvValues(checked) {

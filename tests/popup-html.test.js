@@ -124,3 +124,50 @@ test('manifest loads TPYS CSV automation core before content-script', () => {
     ['tpys-csv-automation-core.js', 'content-script.js']
   );
 });
+
+test('dashboard mode exposes popup controls and dedicated settings page', () => {
+  const popupHtml = fs.readFileSync(popupHtmlPath, 'utf8');
+  const popupJs = fs.readFileSync(popupJsPath, 'utf8');
+  const settingsHtmlPath = path.join(__dirname, '..', 'dashboard-settings.html');
+  const settingsJsPath = path.join(__dirname, '..', 'dashboard-settings.js');
+
+  assert.match(popupHtml, /<h2>Dashboard Modu<\/h2>/);
+  assert.match(popupHtml, /id="btnDashboardStart"/);
+  assert.match(popupHtml, /id="btnDashboardStop"/);
+  assert.match(popupHtml, /id="btnDashboardSettings"/);
+  assert.match(popupHtml, /id="dashboardRuntimeStatus"/);
+  assert.match(popupJs, /DASHBOARD_START/);
+  assert.match(popupJs, /DASHBOARD_STOP/);
+  assert.match(popupJs, /DASHBOARD_GET_STATE/);
+  assert.match(popupJs, /dashboard-settings\.html/);
+  assert.ok(fs.existsSync(settingsHtmlPath), 'dashboard-settings.html bulunmali.');
+  assert.ok(fs.existsSync(settingsJsPath), 'dashboard-settings.js bulunmali.');
+});
+
+test('dashboard settings page validates slots and mouse fallback fields', () => {
+  const settingsHtml = fs.readFileSync(path.join(__dirname, '..', 'dashboard-settings.html'), 'utf8');
+  const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'dashboard-settings.js'), 'utf8');
+
+  assert.match(settingsHtml, /id="dashboardSlots"/);
+  assert.match(settingsHtml, /id="mouseJiggleEnabled"/);
+  assert.match(settingsHtml, /id="mouseJiggleIntervalMinutes"/);
+  assert.match(settingsHtml, /id="btnDashboardSettingsSave"/);
+  assert.match(settingsHtml, /id="btnDashboardSettingsValidate"/);
+  assert.match(settingsHtml, /Fare hareketi simülasyonu kurum politikası/i);
+  assert.match(settingsJs, /DASHBOARD_SAVE_SETTINGS/);
+  assert.match(settingsJs, /DASHBOARD_VALIDATE_SETTINGS/);
+  assert.match(settingsJs, /waitSeconds/);
+  assert.match(settingsJs, /mouseJiggleIntervalMinutes/);
+});
+
+test('manifest and background wire dashboard APIs without windows permission', () => {
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const background = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
+
+  assert(manifest.permissions.includes('power'));
+  assert(!manifest.permissions.includes('windows'));
+  assert.match(background, /dashboard-controller\.js/);
+  assert.match(background, /DASHBOARD_START/);
+  assert.match(background, /chrome\.alarms\.onAlarm\.addListener/);
+  assert.match(background, /SCADA_BACKGROUND_REFRESH_ALARM/);
+});

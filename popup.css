@@ -26,6 +26,7 @@ h2 { margin: 0 0 8px 0; font-size: 14px; }
 .gap { gap: 8px; }
 .grid-actions { display: grid; gap: 8px; }
 .grid-actions.two { grid-template-columns: 1fr 1fr; }
+.grid-actions.three { grid-template-columns: repeat(3, 1fr); }
 .grid-actions.four { grid-template-columns: 1fr 1fr; }
 .file-row { margin-top: 8px; }
 button {
@@ -89,6 +90,17 @@ input[type="date"] {
   padding: 8px;
 }
 .csv-download-grid { margin-bottom: 4px; }
+.dashboard-stats .stat strong {
+  font-size: 13px;
+  word-break: break-word;
+}
+.dashboard-error {
+  min-height: 16px;
+  margin: 8px 0 0;
+}
+.dashboard-error.is-error {
+  color: #b91c1c;
+}
 summary { cursor: pointer; font-weight: 700; }
 .log {
   margin: 0;

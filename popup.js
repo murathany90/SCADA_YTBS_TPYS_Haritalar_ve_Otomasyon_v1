@@ -24,6 +24,7 @@ const state = {
   monthlyRows: [],
   csvCacheMode: 'none',
   tpysCsvLastRunId: '',
+  dashboardRuntime: null,
   settings: structuredClone(DEFAULT_SETTINGS)
 };
 
@@ -38,6 +39,13 @@ const el = {
   btnApply: document.getElementById('btnApply'),
   btnOpenMap: document.getElementById('btnOpenMap'),
   btnOpenRgdhMonitor: document.getElementById('btnOpenRgdhMonitor'),
+  btnDashboardStart: document.getElementById('btnDashboardStart'),
+  btnDashboardStop: document.getElementById('btnDashboardStop'),
+  btnDashboardSettings: document.getElementById('btnDashboardSettings'),
+  dashboardRuntimeStatus: document.getElementById('dashboardRuntimeStatus'),
+  dashboardCurrentSlot: document.getElementById('dashboardCurrentSlot'),
+  dashboardNextSwitch: document.getElementById('dashboardNextSwitch'),
+  dashboardLastError: document.getElementById('dashboardLastError'),
   btnToggleSimplify: document.getElementById('btnToggleSimplify'),
   pageDate: document.getElementById('pageDate'),
   pageBaraCount: document.getElementById('pageBaraCount'),
@@ -78,6 +86,7 @@ async function init() {
     await loadMapping();
     await loadLastCsv();
     bindEvents();
+    await refreshDashboardState();
     initializeDownloadDateDefaults();
     log('Hazır. İsterseniz aylık özet CSV seçin, isterseniz doğrudan CSV indirme sayfasını analiz edin.');
   } catch (error) {
@@ -92,6 +101,9 @@ function bindEvents() {
   el.btnAnalyze.addEventListener('click', analyzeCurrentTab);
   el.btnApply.addEventListener('click', applyToCurrentTab);
   el.btnOpenMap.addEventListener('click', openMapPage);
+  if (el.btnDashboardStart) el.btnDashboardStart.addEventListener('click', startDashboardMode);
+  if (el.btnDashboardStop) el.btnDashboardStop.addEventListener('click', stopDashboardMode);
+  if (el.btnDashboardSettings) el.btnDashboardSettings.addEventListener('click', openDashboardSettingsPage);
   if (el.btnOpenRgdhMonitor) {
     el.btnOpenRgdhMonitor.addEventListener('click', openRgdhMonitorPage);
   } else {
@@ -116,6 +128,10 @@ function initializeDownloadDateDefaults() {
 function bindTpysCsvProgressListener() {
   if (!chrome.runtime?.onMessage?.addListener) return;
   chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === 'DASHBOARD_STATE_CHANGED') {
+      updateDashboardState(message.payload || {});
+      return;
+    }
     if (message?.type !== 'TPYS_CSV_PROGRESS') return;
     handleTpysCsvProgress(message.payload || {});
   });
@@ -471,6 +487,73 @@ async function openRgdhMonitorPage() {
     await chrome.tabs.create({ url: chrome.runtime.getURL('rgdh-monitor.html') });
   } catch (error) {
     log(`RGDH Izleme acilamadi: ${error.message}`);
+  }
+}
+
+async function refreshDashboardState() {
+  if (!el.dashboardRuntimeStatus) return;
+  try {
+    const response = await sendRuntimeMessage({ type: 'DASHBOARD_GET_STATE' });
+    if (!response?.ok) throw new Error(response?.error || 'Dashboard durumu alinamadi.');
+    updateDashboardState(response.runtime || {});
+  } catch (error) {
+    if (el.dashboardRuntimeStatus) el.dashboardRuntimeStatus.textContent = 'Bilinmiyor';
+    if (el.dashboardLastError) {
+      el.dashboardLastError.textContent = `Dashboard durumu okunamadi: ${error.message}`;
+      el.dashboardLastError.classList.add('is-error');
+    }
+  }
+}
+
+function updateDashboardState(runtime) {
+  state.dashboardRuntime = runtime || {};
+  const running = Boolean(runtime?.running);
+  if (el.btnDashboardStart) el.btnDashboardStart.disabled = running;
+  if (el.btnDashboardStop) el.btnDashboardStop.disabled = !running;
+  if (el.dashboardRuntimeStatus) el.dashboardRuntimeStatus.textContent = running ? 'Çalışıyor' : 'Durdu';
+  if (el.dashboardCurrentSlot) el.dashboardCurrentSlot.textContent = runtime?.currentSlotLabel || '-';
+  if (el.dashboardNextSwitch) {
+    const next = Number(runtime?.nextSwitchAt || 0);
+    el.dashboardNextSwitch.textContent = next ? new Date(next).toLocaleTimeString('tr-TR') : '-';
+  }
+  if (el.dashboardLastError) {
+    const lastError = runtime?.lastError || runtime?.stopReason || '';
+    el.dashboardLastError.textContent = lastError ? `Son durum: ${lastError}` : '-';
+    el.dashboardLastError.classList.toggle('is-error', Boolean(runtime?.lastError));
+  }
+}
+
+async function startDashboardMode() {
+  try {
+    const response = await sendRuntimeMessage({ type: 'DASHBOARD_START' });
+    if (!response?.ok) throw new Error(response?.error || 'Dashboard baslatilamadi.');
+    updateDashboardState(response.runtime || {});
+    log('Dashboard Modu baslatildi.');
+  } catch (error) {
+    log(`Dashboard baslatma hatasi: ${error.message}`);
+    if (el.dashboardLastError) {
+      el.dashboardLastError.textContent = error.message;
+      el.dashboardLastError.classList.add('is-error');
+    }
+  }
+}
+
+async function stopDashboardMode() {
+  try {
+    const response = await sendRuntimeMessage({ type: 'DASHBOARD_STOP', reason: 'popup-stop' });
+    if (!response?.ok) throw new Error(response?.error || 'Dashboard durdurulamadi.');
+    updateDashboardState(response.runtime || {});
+    log('Dashboard Modu durduruldu.');
+  } catch (error) {
+    log(`Dashboard durdurma hatasi: ${error.message}`);
+  }
+}
+
+async function openDashboardSettingsPage() {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('dashboard-settings.html') });
+  } catch (error) {
+    log(`Dashboard ayarlari acilamadi: ${error.message}`);
   }
 }
 

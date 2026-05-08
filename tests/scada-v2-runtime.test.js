@@ -764,3 +764,51 @@ test('scadaDoFetch defers manual fetch while document is hidden', async () => {
   assert.equal(rankingRefreshCount, 1);
   assert.equal(context.state.scada.fetchInProgress, false);
 });
+
+test('dashboard map slot message marks pending auto refresh when fetch is already running', () => {
+  const context = loadRuntime();
+  const { handleDashboardMapSlotActive } = context.__SCADA_V2_TEST_HOOKS__;
+
+  context.state.scada.enabled = true;
+  context.state.scada.autoRefresh = true;
+  context.state.scada.fetchInProgress = true;
+  context.state.scada.pollState = {
+    pendingAutoRefresh: false,
+    nextDueAt: new Date(Date.now() - 1000)
+  };
+
+  const result = handleDashboardMapSlotActive({ at: Date.now() });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.queued, true);
+  assert.equal(context.state.scada.pollState.pendingAutoRefresh, true);
+});
+
+test('SCADA dashboard snapshot serializes and restores measurement rows as maps', () => {
+  const context = loadRuntime();
+  const { serializeScadaDashboardSnapshot, restoreScadaDashboardSnapshot } = context.__SCADA_V2_TEST_HOOKS__;
+  const timestamp = new Date('2026-05-01T08:00:00.000Z');
+
+  context.state.scada.measurementRowsById = new Map([
+    ['m-1', { measurementId: 'm-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp, value: 42 }]
+  ]);
+  context.state.scada.currentScope = { mode: 'hat-active', domain: 'hat', entities: [], measurementIds: ['m-1'], elementNames: ['P'], filterKey: 'kv:400' };
+  context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
+  context.state.scada.lastTransport = { authMode: 'session' };
+
+  const snapshot = serializeScadaDashboardSnapshot({ source: 'unit-test' });
+  context.state.scada.measurementRowsById = new Map();
+  const restored = restoreScadaDashboardSnapshot(snapshot, { apply: false });
+
+  assert.equal(snapshot.schemaVersion, 1);
+  assert.equal(snapshot.measurementRows[0][0], 'm-1');
+  assert.equal(snapshot.measurementRows[0][1].measurementId, 'm-1');
+  assert.equal(snapshot.measurementRows[0][1].tmName, 'TM-A');
+  assert.equal(snapshot.measurementRows[0][1].remoteName, 'TM-B');
+  assert.equal(snapshot.measurementRows[0][1].timestamp, '2026-05-01T08:00:00.000Z');
+  assert.equal(snapshot.measurementRows[0][1].value, 42);
+  assert.equal(restored.ok, true);
+  assert.equal(context.state.scada.measurementRowsById instanceof Map, true);
+  assert.equal(context.state.scada.measurementRowsById.get('m-1').timestamp.getTime(), timestamp.getTime());
+  assert.match(context.state.scada.fetchMeta.phaseMessage, /onbellek|önbellek/i);
+});

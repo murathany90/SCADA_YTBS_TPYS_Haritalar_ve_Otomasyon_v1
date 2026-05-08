@@ -22,6 +22,21 @@
       </div>
     </section>
 
+    <section class="card dashboard-card">
+      <h2>Dashboard Modu</h2>
+      <div class="grid-actions three">
+        <button id="btnDashboardStart" class="primary">Play</button>
+        <button id="btnDashboardStop" disabled>Stop</button>
+        <button id="btnDashboardSettings">Ayarlar</button>
+      </div>
+      <div class="stats compact dashboard-stats">
+        <div class="stat"><span>Durum</span><strong id="dashboardRuntimeStatus">-</strong></div>
+        <div class="stat"><span>Aktif slot</span><strong id="dashboardCurrentSlot">-</strong></div>
+        <div class="stat"><span>Sonraki geçiş</span><strong id="dashboardNextSwitch">-</strong></div>
+      </div>
+      <p id="dashboardLastError" class="hint dashboard-error">-</p>
+    </section>
+
     <section class="card">
       <h2>RGDH Uzlaştırma Otomasyon</h2>
       <div class="grid-actions four">

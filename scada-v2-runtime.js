@@ -92,6 +92,8 @@
   state.scada.entityMetricsByKey = state.scada.entityMetricsByKey || new Map();
   state.scada.measurementRowsById = state.scada.measurementRowsById || new Map();
   state.scada.currentScope = state.scada.currentScope || null;
+  const SCADA_DASHBOARD_SNAPSHOT_KEY = 'scadaDashboardSnapshot';
+  const SCADA_BACKGROUND_REFRESH_STATE_KEY = 'scadaBackgroundRefreshState';
   state.scada.visibleSummary = state.scada.visibleSummary || {
     total: 0,
     matched: 0,
@@ -1695,6 +1697,141 @@
     });
   };
 
+  function serializeDateLike(value) {
+    if (value instanceof Date) return value.toISOString();
+    if (value == null) return null;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : value;
+  }
+
+  function reviveDateLike(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+
+  function serializeScadaDashboardSnapshot(options = {}) {
+    const rows = state.scada.measurementRowsById instanceof Map
+      ? Array.from(state.scada.measurementRowsById.entries()).map(([key, row]) => [
+        String(key),
+        {
+          ...row,
+          timestamp: serializeDateLike(row?.timestamp)
+        }
+      ])
+      : [];
+    return {
+      schemaVersion: 1,
+      source: options.source || 'map',
+      at: Number(options.at || Date.now()),
+      scope: state.scada.currentScope || getCurrentScadaScope(),
+      fetchMeta: {
+        ...(state.scada.fetchMeta || {}),
+        startedAt: serializeDateLike(state.scada.fetchMeta?.startedAt),
+        finishedAt: serializeDateLike(state.scada.fetchMeta?.finishedAt)
+      },
+      lastTransport: state.scada.lastTransport || null,
+      measurementRows: rows
+    };
+  }
+
+  function restoreScadaDashboardSnapshot(snapshot, options = {}) {
+    if (!snapshot || snapshot.schemaVersion !== 1 || !Array.isArray(snapshot.measurementRows)) {
+      return { ok: false, reason: 'invalid-snapshot' };
+    }
+    const rows = new Map(snapshot.measurementRows.map(([key, row]) => [
+      String(key),
+      {
+        ...row,
+        timestamp: reviveDateLike(row?.timestamp)
+      }
+    ]));
+    state.scada.measurementRowsById = rows;
+    state.scada.rowsBySinsid = rows;
+    state.scada.totalRows = rows.size;
+    state.scada.currentScope = snapshot.scope || state.scada.currentScope || getCurrentScadaScope();
+    state.scada.lastTransport = snapshot.lastTransport || state.scada.lastTransport || null;
+    state.scada.fetchMeta = {
+      ...(snapshot.fetchMeta || {}),
+      startedAt: reviveDateLike(snapshot.fetchMeta?.startedAt),
+      finishedAt: reviveDateLike(snapshot.fetchMeta?.finishedAt),
+      status: snapshot.fetchMeta?.status || 'success',
+      phaseLabel: 'Onbellek',
+      phaseMessage: 'SCADA verisi onbellekten yuklendi; canli yenileme deneniyor.'
+    };
+    if (options.apply !== false && rows.size && state.scada.currentScope?.entities?.length) {
+      applyGenericScadaSnapshot(rows, state.scada.currentScope);
+    }
+    if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+    if (typeof refreshRankingTable === 'function') refreshRankingTable();
+    if (typeof requestRender === 'function') requestRender();
+    return { ok: true, rows: rows.size };
+  }
+
+  async function persistScadaDashboardSnapshot(options = {}) {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local?.set) return { ok: false, skipped: true };
+      const scope = state.scada.currentScope || getCurrentScadaScope();
+      const snapshot = serializeScadaDashboardSnapshot(options);
+      await chrome.storage.local.set({ [SCADA_DASHBOARD_SNAPSHOT_KEY]: snapshot });
+      await chrome.storage.local.set({
+        [SCADA_BACKGROUND_REFRESH_STATE_KEY]: {
+          enabled: true,
+          updatedAt: Date.now(),
+          scope,
+          payload: {
+            baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+            dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+            chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+            datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+            elementNames: scope.elementNames,
+            measurementIds: scope.measurementIds,
+            rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, scope.measurementIds.length * 3 || 5000),
+            chartPayload: buildChartPayload()
+          }
+        }
+      });
+      return { ok: true, snapshot };
+    } catch (error) {
+      scadaLog('warn', 'SCADA dashboard snapshot yazilamadi.', error?.message || String(error));
+      return { ok: false, error: error?.message || String(error) };
+    }
+  }
+
+  async function restoreScadaDashboardSnapshotFromStorage() {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local?.get) return { ok: false, skipped: true };
+      const stored = await chrome.storage.local.get(SCADA_DASHBOARD_SNAPSHOT_KEY);
+      const snapshot = stored?.[SCADA_DASHBOARD_SNAPSHOT_KEY];
+      const restored = restoreScadaDashboardSnapshot(snapshot);
+      if (restored.ok) {
+        setScadaStatusMessage('SCADA son dashboard snapshot onbellekten yuklendi.', 'warn');
+      }
+      return restored;
+    } catch (error) {
+      scadaLog('warn', 'SCADA dashboard snapshot okunamadi.', error?.message || String(error));
+      return { ok: false, error: error?.message || String(error) };
+    }
+  }
+
+  function handleDashboardMapSlotActive(payload = {}) {
+    if (!state.scada.enabled || !state.scada.autoRefresh) {
+      return { ok: true, skipped: true, reason: 'scada-disabled' };
+    }
+    if (!state.scada.pollState) state.scada.pollState = {};
+    setScadaStatusMessage('Dashboard harita slotu aktif; SCADA yenileme kontrol ediliyor.', 'info');
+    if (state.scada.fetchInProgress) {
+      state.scada.pollState.pendingAutoRefresh = true;
+      return { ok: true, queued: true, at: payload.at || Date.now() };
+    }
+    const pollState = state.scada.pollState;
+    if (!pollState.nextDueAt || pollState.nextDueAt.getTime() > Date.now()) {
+      pollState.nextDueAt = new Date(Date.now() - 1);
+    }
+    resumeScadaAutoSchedulerIfOverdue('dashboard');
+    return { ok: true, triggered: true, at: payload.at || Date.now() };
+  }
+
   scadaBuildIndex = function () {
     buildNetworkIndexes();
     state.scada.entityMetricsByKey = new Map();
@@ -1705,6 +1842,7 @@
     state.scada.duplicateHatIds = new Set();
     state.scada.ambiguousRows = [];
     refreshScadaVisibleSummary();
+    restoreScadaDashboardSnapshotFromStorage();
     scadaLog('info', `SCADA V2 modulu hazir. ${state.network.hatLines.length} hat, ${state.network.trafos.length} trafo, ${state.network.baraNodes.length} bara yuklendi.`);
   };
 
@@ -2052,6 +2190,7 @@
         `SCADA ${triggerLabel.toLowerCase()} yenileme tamamlandi: ${rawRows} ham, ${rowsByMeasurementId.size} tekil, gorunen ${visibleSummary.matched || 0}/${visibleSummary.total || 0} cozuldu.`,
         `${result.authMode}${result.usedFallback ? ' fallback' : ''}`
       );
+      await persistScadaDashboardSnapshot({ source: triggerType === 'background' ? 'background' : 'map' });
     } catch (error) {
       const finishedAt = new Date();
       const errorMessage = error.message || String(error);
@@ -3827,6 +3966,15 @@
       window.addEventListener('focus', () => resumeScadaAutoSchedulerIfOverdue('focus'));
       window.addEventListener('pageshow', () => resumeScadaAutoSchedulerIfOverdue('pageshow'));
     }
+    if (typeof chrome !== 'undefined' && typeof chrome.runtime?.onMessage?.addListener === 'function') {
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message?.type === 'DASHBOARD_MAP_SLOT_ACTIVE') {
+          handleDashboardMapSlotActive(message.payload || {});
+        } else if (message?.type === 'SCADA_DASHBOARD_SNAPSHOT_UPDATED') {
+          restoreScadaDashboardSnapshotFromStorage();
+        }
+      });
+    }
   }
 
   const baseInitScadaCard = initScadaCard;
@@ -3866,6 +4014,9 @@
       buildVisibleSummary,
       buildScadaAuditReport,
       getReadableTextColor,
+      handleDashboardMapSlotActive,
+      serializeScadaDashboardSnapshot,
+      restoreScadaDashboardSnapshot,
       applyScreenDeclutter: typeof applyScreenDeclutter === 'function' ? applyScreenDeclutter : undefined,
       selectActiveVoltagePerTmLevel: typeof selectActiveVoltagePerTmLevel === 'function' ? selectActiveVoltagePerTmLevel : undefined
     });

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Modu Ayarları</title>
+  <link rel="stylesheet" href="dashboard-settings.css">
+</head>
+<body>
+  <main class="settings-app">
+    <header class="settings-header">
+      <div>
+        <h1>Dashboard Modu Ayarları</h1>
+        <p>Fullscreen sekme döngüsü, ekran açık tutma ve SCADA dashboard davranışları.</p>
+      </div>
+      <div class="settings-actions">
+        <button id="btnDashboardSettingsValidate">Ayarları test et</button>
+        <button id="btnDashboardSettingsReset">Varsayılana dön</button>
+        <button id="btnDashboardSettingsSave" class="primary">Kaydet</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>Genel</h2>
+      <div class="settings-grid">
+        <label><input id="keepAwakeEnabled" type="checkbox"> Chrome power API ile ekranı açık tut</label>
+        <label><input id="stopOnEsc" type="checkbox"> ESC ile durdur</label>
+        <label><input id="stopOnFullscreenExit" type="checkbox"> Fullscreen çıkışında durdur</label>
+        <label><input id="openMissingTabs" type="checkbox"> Eksik sekmeleri otomatik aç</label>
+        <label><input id="restorePreviousWindowStateOnStop" type="checkbox"> Stop sonrası pencere durumunu geri yükle</label>
+        <label><input id="restorePreviousActiveTabOnStop" type="checkbox"> Stop sonrası eski aktif sekmeye dön</label>
+        <label><input id="reloadTabOnShow" type="checkbox"> Slot gösterilirken sekmeyi yenile</label>
+        <label><input id="scadaBackgroundRefreshEnabled" type="checkbox"> SCADA arka plan snapshot yenilemesini aç</label>
+        <label>SCADA arka plan yenileme saniyesi <input id="scadaBackgroundRefreshSeconds" type="number" min="30" max="600"></label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Fare hareketi fallback</h2>
+      <p class="warning">Ekranı açık tutmak için ana yöntem Chrome power API'dir. Fare hareketi simülasyonu kurum politikası veya işletim sistemi düzeyindeki ekran koruyucuyu her zaman engellemeyebilir. Bu seçenek yalnız ek deneme/fallback olarak kullanılır.</p>
+      <div class="settings-grid compact">
+        <label><input id="mouseJiggleEnabled" type="checkbox"> Fare hareketi fallback aktif</label>
+        <label>Aralık dakika <input id="mouseJiggleIntervalMinutes" type="number" min="3" max="15"></label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Slotlar</h2>
+      <div id="dashboardSlots" class="slot-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Durum</h2>
+      <pre id="dashboardSettingsStatus" class="status-log"></pre>
+    </section>
+  </main>
+  <script src="dashboard-settings.js"></script>
+</body>
+</html>

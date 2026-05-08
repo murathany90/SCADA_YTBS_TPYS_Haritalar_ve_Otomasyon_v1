@@ -32,6 +32,7 @@ $zipPath = Join-Path $dist $zipFileName
 $files = @(
   'manifest.json',
   'background.js',
+  'dashboard-controller.js',
   'content-script.js',
   'tpys-csv-automation-core.js',
   'tpys-csv-standardizer.js',
@@ -41,6 +42,9 @@ $files = @(
   'tpys-periodic-rgdh-planner.js',
   'tpys-extjs-main-apply.js',
   'popup.js',
+  'dashboard-settings.html',
+  'dashboard-settings.css',
+  'dashboard-settings.js',
   'rgdh-monitor.html',
   'rgdh-monitor.css',
   'rgdh-monitor.js',

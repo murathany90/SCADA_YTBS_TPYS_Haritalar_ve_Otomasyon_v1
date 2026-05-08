@@ -22,6 +22,16 @@ try {
 } catch (error) {
   console.warn('[TPYS CSV] Standardizer yuklenemedi.', error?.message || error);
 }
+try {
+  if (typeof importScripts === 'function') importScripts('scada-common.js');
+} catch (error) {
+  console.warn('[SCADA] Ortak helper yuklenemedi.', error?.message || error);
+}
+try {
+  if (typeof importScripts === 'function') importScripts('dashboard-controller.js');
+} catch (error) {
+  console.warn('[Dashboard] Controller yuklenemedi.', error?.message || error);
+}
 
 const RGDH_YKS_ORIGIN = 'https://yks.teias.gov.tr';
 const RGDH_YKS_APP_URL = `${RGDH_YKS_ORIGIN}/#/`;
@@ -85,6 +95,17 @@ let rgdhYksLogEvents = [];
 const RGDH_YKS_LOG_LIMIT = 2000;
 const TPYS_CSV_INDEX_STORAGE_KEY = 'tpysCsvDownloadIndexV1';
 const TPYS_CSV_REPORT_ROOT = 'TPYS_CSV_Standartlastirilmis';
+const SCADA_DASHBOARD_SNAPSHOT_KEY = 'scadaDashboardSnapshot';
+const SCADA_BACKGROUND_REFRESH_STATE_KEY = 'scadaBackgroundRefreshState';
+const SCADA_BACKGROUND_REFRESH_ALARM = 'scada.backgroundRefresh';
+const DASHBOARD_MESSAGE_TYPES = [
+  'DASHBOARD_START',
+  'DASHBOARD_STOP',
+  'DASHBOARD_GET_STATE',
+  'DASHBOARD_GET_SETTINGS',
+  'DASHBOARD_SAVE_SETTINGS',
+  'DASHBOARD_VALIDATE_SETTINGS'
+];
 const tpysCsvRuns = new Map();
 let tpysCsvLastRunId = '';
 const rgdhFetchJobs = new Map();
@@ -95,6 +116,16 @@ let rgdhTemporaryYksTabState = null;
 let rgdhTemporaryYksTabUsers = 0;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (DASHBOARD_MESSAGE_TYPES.includes(message?.type)) {
+    if (!globalThis.DASHBOARD_CONTROLLER?.handleRuntimeMessage) {
+      sendResponse({ ok: false, error: 'Dashboard controller yuklu degil.' });
+      return false;
+    }
+    globalThis.DASHBOARD_CONTROLLER.handleRuntimeMessage(message, sender).then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, error: error.message || String(error) });
+    });
+    return true;
+  }
   if (message?.type === 'DOWNLOAD_URL_AND_WAIT') {
     handleDownloadAndWait(message.payload || {}).then(sendResponse).catch((error) => {
       sendResponse({ ok: false, error: error.message || String(error) });
@@ -223,6 +254,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   return false;
 });
+
+if (chrome.alarms?.onAlarm?.addListener) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm?.name === SCADA_BACKGROUND_REFRESH_ALARM) {
+      handleScadaBackgroundRefreshAlarm().catch((error) => {
+        console.warn('[SCADA] Background refresh basarisiz.', error?.message || error);
+      });
+      return;
+    }
+    if (!globalThis.DASHBOARD_CONTROLLER?.handleDashboardAlarm) return;
+    globalThis.DASHBOARD_CONTROLLER.handleDashboardAlarm(alarm).catch((error) => {
+      console.warn('[Dashboard] Alarm islenemedi.', error?.message || error);
+    });
+  });
+}
+
+if (chrome.runtime?.onStartup?.addListener) {
+  chrome.runtime.onStartup.addListener(() => {
+    globalThis.DASHBOARD_CONTROLLER?.recoverRuntimeStateOnStartup?.().catch((error) => {
+      console.warn('[Dashboard] Startup recover basarisiz.', error?.message || error);
+    });
+  });
+}
+
+if (chrome.runtime?.onInstalled?.addListener) {
+  chrome.runtime.onInstalled.addListener(() => {
+    globalThis.DASHBOARD_CONTROLLER?.recoverRuntimeStateOnStartup?.().catch((error) => {
+      console.warn('[Dashboard] Installed recover basarisiz.', error?.message || error);
+    });
+  });
+}
 
 async function handleRgdhDiagnosticEvent(payload) {
   const diag = getRgdhDiagnostics();
@@ -3615,6 +3677,85 @@ async function handleScadaFetch(payload) {
     authMode: 'hidden-tab',
     usedFallback: true
   };
+}
+
+function serializeScadaBackgroundRows(rowsByMeasurementId) {
+  if (!(rowsByMeasurementId instanceof Map)) return [];
+  return Array.from(rowsByMeasurementId.entries()).map(([key, row]) => [
+    String(key),
+    {
+      ...row,
+      timestamp: row?.timestamp instanceof Date ? row.timestamp.toISOString() : (row?.timestamp || null)
+    }
+  ]);
+}
+
+function countScadaTransportRows(rawJson) {
+  if (globalThis.SCADA_COMMON?.findDataArray) {
+    const rows = globalThis.SCADA_COMMON.findDataArray(rawJson);
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+  if (Array.isArray(rawJson)) return rawJson.length;
+  if (!rawJson || typeof rawJson !== 'object') return 0;
+  for (const value of Object.values(rawJson)) {
+    const count = countScadaTransportRows(value);
+    if (count) return count;
+  }
+  return 0;
+}
+
+async function handleScadaBackgroundRefreshAlarm() {
+  const stored = await chrome.storage?.local?.get?.(SCADA_BACKGROUND_REFRESH_STATE_KEY);
+  const refreshState = stored?.[SCADA_BACKGROUND_REFRESH_STATE_KEY] || {};
+  if (!refreshState.enabled || !refreshState.payload || typeof refreshState.payload !== 'object') {
+    return { ok: true, skipped: true, reason: 'disabled-or-missing-payload' };
+  }
+  const startedAt = Date.now();
+  const result = await handleScadaFetch(refreshState.payload);
+  const nextState = {
+    ...refreshState,
+    lastRunAt: startedAt,
+    lastFinishedAt: Date.now(),
+    lastOk: Boolean(result?.ok),
+    lastError: result?.ok ? null : (result?.error || result?.errorType || 'SCADA background refresh basarisiz.')
+  };
+  await chrome.storage?.local?.set?.({ [SCADA_BACKGROUND_REFRESH_STATE_KEY]: nextState });
+
+  if (result?.ok && globalThis.SCADA_COMMON?.normalizeMetricRows && refreshState.scope) {
+    const rowsByMeasurementId = globalThis.SCADA_COMMON.normalizeMetricRows(result.data, {
+      elementNames: refreshState.scope.elementNames || refreshState.payload.elementNames || ['P']
+    });
+    const snapshot = {
+      schemaVersion: 1,
+      source: 'background',
+      at: Date.now(),
+      scope: refreshState.scope,
+      fetchMeta: {
+        status: 'success',
+        stage: 'done',
+        triggerType: 'background',
+        triggerLabel: 'Arka plan',
+        phaseLabel: 'Onbellek',
+        phaseMessage: 'SCADA arka plan yenilemesi storage snapshot uretildi.',
+        rawRows: countScadaTransportRows(result.data),
+        normalizedRows: rowsByMeasurementId.size,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAt
+      },
+      lastTransport: {
+        authMode: result.authMode || 'session',
+        usedFallback: Boolean(result.usedFallback),
+        httpStatus: result.httpStatus || null
+      },
+      measurementRows: serializeScadaBackgroundRows(rowsByMeasurementId)
+    };
+    await chrome.storage?.local?.set?.({ [SCADA_DASHBOARD_SNAPSHOT_KEY]: snapshot });
+    try {
+      await chrome.runtime?.sendMessage?.({ type: 'SCADA_DASHBOARD_SNAPSHOT_UPDATED', payload: { at: snapshot.at, source: snapshot.source } });
+    } catch {
+    }
+  }
+  return { ok: Boolean(result?.ok), result };
 }
 
 function buildScadaTransport(payload, authConfig) {

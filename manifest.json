@@ -9,7 +9,8 @@
     "storage",
     "tabs",
     "downloads",
-    "alarms"
+    "alarms",
+    "power"
   ],
   "host_permissions": [
     "<all_urls>"
