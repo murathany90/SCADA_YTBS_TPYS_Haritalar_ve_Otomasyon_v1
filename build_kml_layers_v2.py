@@ -437,6 +437,7 @@ def enrich_hat_candidate(
     polarization_consistent = None
     if polarization_sign is not None and formula_sign in (1, -1):
         polarization_consistent = formula_sign == polarization_sign
+    terminal_exit_resolvable = terminal_side in {"start", "end"}
 
     if target_side == "unknown" and terminal_side == "start":
         inferred_target_side = "end"
@@ -455,6 +456,9 @@ def enrich_hat_candidate(
             "terminalMatchBasis": terminal_match_basis,
             "polarizationSign": polarization_sign,
             "polarizationConsistent": polarization_consistent,
+            "formulaSignMatchesTerminalPolarity": polarization_consistent,
+            "directionModelHint": "terminal-exit-model" if terminal_exit_resolvable else "",
+            "terminalExitResolvable": terminal_exit_resolvable,
             "sourceTmNormalized": normalize_text(source_tm_name),
             "startTmNormalized": normalize_text(start_ref.get("name")),
             "endTmNormalized": normalize_text(end_ref.get("name")),
@@ -821,7 +825,10 @@ def build_validation_report(model: dict[str, Any]) -> str:
         "",
         f"- Terminal tarafi cozulen aday: `{validation['terminalSideResolved']}`",
         f"- Terminal tarafi bilinmeyen aday: `{validation['terminalSideUnknown']}`",
-        f"- Polarizasyon uyumsuz config: `{validation['polarizationMismatch']}`",
+        f"- Formul-terminal isaret farki: `{validation['formulaTerminalSignMismatch']}`",
+        f"- Terminal-exit modeliyle cozumlenebilir aday: `{validation['terminalExitResolvable']}`",
+        f"- Terminal-exit modeliyle cozumlenemeyen aday: `{validation['terminalExitUnresolvable']}`",
+        f"- Polarizasyon uyumsuz config (legacy ad): `{validation['polarizationMismatch']}`",
         "",
         "## Gerilim Overlay",
         "",
@@ -1064,6 +1071,9 @@ def main() -> None:
         "voltageAliasAmbiguous": voltage_alias_ambiguous,
         "terminalSideResolved": sum(1 for row in hat_scada_rows if row.get("terminalSide") in {"start", "end"}),
         "terminalSideUnknown": sum(1 for row in hat_scada_rows if row.get("terminalSide") == "unknown"),
+        "formulaTerminalSignMismatch": sum(1 for row in hat_scada_rows if row.get("polarizationConsistent") is False),
+        "terminalExitResolvable": sum(1 for row in hat_scada_rows if row.get("terminalExitResolvable") is True),
+        "terminalExitUnresolvable": sum(1 for row in hat_scada_rows if row.get("terminalExitResolvable") is not True),
         "polarizationMismatch": sum(1 for row in hat_scada_rows if row.get("polarizationConsistent") is False),
         "voltageStillMissing": sum(
             1

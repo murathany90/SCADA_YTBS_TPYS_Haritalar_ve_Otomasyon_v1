@@ -147,16 +147,24 @@
                 <span class="scada-label">Harita Gosterimi</span>
                 <strong id="scadaDisplayModeLabel">Akis</strong>
               </div>
-              <div class="segmented segmented-scada-display" id="scadaDisplayModeGroup">
-                <button class="segmented-btn active" data-scada-map-display="flow" data-domain="hat">Akis</button>
-                <button class="segmented-btn" data-scada-map-display="heatmap" data-domain="hat">Isi Haritasi</button>
-                <button class="segmented-btn" data-scada-map-display="current" data-domain="hat">Mevcut</button>
-                <button class="segmented-btn" data-scada-map-display="box" data-domain="entity">Kutu</button>
-                <button class="segmented-btn" data-scada-map-display="point-label" data-domain="entity">Nokta
-                  (Ad)</button>
-                <button class="segmented-btn" data-scada-map-display="point" data-domain="entity">Nokta (Adsiz)</button>
-                <button class="segmented-btn" data-scada-map-display="heatmap" data-domain="entity">Isi
-                  Haritasi</button>
+              <div class="scada-display-groups" id="scadaDisplayModeGroup">
+                <div class="scada-display-group" data-scada-display-group="hat">
+                  <span class="scada-display-group-title">Hat modlari</span>
+                  <div class="segmented segmented-scada-display">
+                    <button class="segmented-btn active" data-scada-map-display="flow" data-domain="hat">Akis</button>
+                    <button class="segmented-btn" data-scada-map-display="heatmap" data-domain="hat">Isi Haritasi</button>
+                    <button class="segmented-btn" data-scada-map-display="current" data-domain="hat">Mevcut</button>
+                  </div>
+                </div>
+                <div class="scada-display-group" data-scada-display-group="entity">
+                  <span class="scada-display-group-title">Noktasal overlay</span>
+                  <div class="segmented segmented-scada-display">
+                    <button class="segmented-btn" data-scada-map-display="box" data-domain="entity">Kutu</button>
+                    <button class="segmented-btn" data-scada-map-display="point-label" data-domain="entity">Nokta (Ad)</button>
+                    <button class="segmented-btn" data-scada-map-display="point" data-domain="entity">Nokta (Adsiz)</button>
+                    <button class="segmented-btn" data-scada-map-display="heatmap" data-domain="entity">Isi Haritasi</button>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="scada-stats">
@@ -168,6 +176,7 @@
               <div><span class="scada-label">Hata</span><span id="scadaHata">-</span></div>
             </div>
             <div id="scadaLejant" class="scada-lejant"></div>
+            <div id="scadaQualityChips" class="scada-quality-chips"></div>
             <div id="scadaKalite" class="scada-quality">Kalite ozetleri burada gosterilir.</div>
             <div id="scadaFetchInfo" class="scada-fetch-card">
               <div class="scada-fetch-head">

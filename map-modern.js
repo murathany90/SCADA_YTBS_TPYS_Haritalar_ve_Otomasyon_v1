@@ -1290,6 +1290,18 @@ function buildHatHoverTooltipHtml(row) {
   if (lines.length === 1) {
     lines.push(`<span class="tt-label">${escapeHtml(`${row.startTm || '?'} >> ${row.endTm || '?'}`)}</span>`);
   }
+  if (record && Number.isFinite(record.directionValue)) {
+    const resolutionLabel = record.resolvedTerminalMismatch
+      ? 'Terminal yorumlu'
+      : record.unresolved
+        ? 'Yon belirsiz'
+        : record.candidateConflict || record.backupUsed || record.invalidPct || record.valueInvalid
+          ? 'Uyarili'
+          : 'Cozulmus';
+    const terminalLabel = record.terminalSide || '-';
+    const modelLabel = record.directionResolvedBy || record.directionModel || '-';
+    lines.push(`<span class="tt-label">Model: ${escapeHtml(modelLabel)} · Terminal: ${escapeHtml(terminalLabel)} · Guven: ${escapeHtml(resolutionLabel)}</span>`);
+  }
   return lines.join('<br>');
 }
 

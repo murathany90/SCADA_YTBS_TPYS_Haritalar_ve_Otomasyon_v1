@@ -92,6 +92,8 @@
   state.scada.entityMetricsByKey = state.scada.entityMetricsByKey || new Map();
   state.scada.measurementRowsById = state.scada.measurementRowsById || new Map();
   state.scada.currentScope = state.scada.currentScope || null;
+  state.scada.v2RuntimeActive = true;
+  globalThis.__TPYS_SCADA_V2_RUNTIME_ACTIVE__ = true;
   const SCADA_DASHBOARD_SNAPSHOT_KEY = 'scadaDashboardSnapshot';
   const SCADA_BACKGROUND_REFRESH_STATE_KEY = 'scadaBackgroundRefreshState';
   state.scada.visibleSummary = state.scada.visibleSummary || {
@@ -254,14 +256,49 @@
     return SCADA_CONFIG.UNMATCHED_HAT_COLOR || '#4b5563';
   }
 
-  function hasHatUncertainty(record) {
-    if (!record || record.entityType !== 'hat') return false;
+  function hasHatUncertainty(record, options = {}) {
+    if (!record) return false;
+    if (record.entityType && record.entityType !== 'hat') return false;
+    if (!record.entityType && !options.assumeHat) return false;
+    const hasBlockingUncertainty = Boolean(record.uncertaintyReason && record.uncertaintyReason !== 'resolved-terminal-mismatch');
     return Boolean(record.sourceAmbiguous
       || record.unresolved
       || record.candidateConflict
       || record.backupUsed
-      || record.uncertaintyReason
+      || hasBlockingUncertainty
       || record.valueInvalid);
+  }
+
+  function getHatResolutionClass(record) {
+    if (!record) return 'missing';
+    if (record.sourceAmbiguous || record.unresolved || ['orientation-unknown', 'source-side-unknown', 'polarization-mismatch'].includes(record.unresolvedReason)) return 'unresolved';
+    if (record.candidateConflict || record.backupUsed || record.valueInvalid || record.invalidPct) return 'conflict';
+    if (record.resolvedTerminalMismatch) return 'resolved-with-warning';
+    if (!Number.isFinite(record.primaryValue)) return 'missing';
+    return 'resolved';
+  }
+
+  function getHatResolutionLabel(record) {
+    switch (getHatResolutionClass(record)) {
+      case 'resolved-with-warning':
+        return 'Terminal yorumlu';
+      case 'unresolved':
+        return 'Yon belirsiz';
+      case 'conflict':
+        return 'Uyarili';
+      case 'missing':
+        return 'Eksik';
+      default:
+        return 'Cozulmus';
+    }
+  }
+
+  function getHatFlowDirection(record) {
+    if (!record || record.entityType !== 'hat') return 'unknown';
+    const directionValue = Number.isFinite(record.directionValue) ? record.directionValue : record.primaryValue;
+    if (!Number.isFinite(directionValue)) return 'unknown';
+    if (record.sourceAmbiguous || record.unresolved || record.candidateConflict || record.backupUsed || record.valueInvalid || record.invalidPct) return 'unknown';
+    return directionValue >= 0 ? 'forward' : 'reverse';
   }
 
   function buildHatUncertaintyMeta(record) {
@@ -377,6 +414,10 @@
       const isVisible = modeConfig.domain === 'hat' ? buttonDomain === 'hat' : buttonDomain === 'entity';
       button.classList.toggle('is-hidden', !isVisible);
       button.classList.toggle('active', isVisible && buttonMode === activeMode);
+    });
+    Array.from(document.querySelectorAll('[data-scada-display-group]')).forEach((group) => {
+      const groupDomain = group.dataset.scadaDisplayGroup === 'hat' ? 'hat' : 'entity';
+      group.classList.toggle('is-hidden', modeConfig.domain === 'hat' ? groupDomain !== 'hat' : groupDomain !== 'entity');
     });
     const label = document.getElementById('scadaDisplayModeLabel');
     if (label) label.textContent = getScadaMapDisplayLabel(activeMode);
@@ -892,7 +933,7 @@
       const activeMagnitude = getLoadingHintValue(resolved.active);
       const reactiveMagnitude = getLoadingHintValue(resolved.reactive);
       if (Number.isFinite(activeMagnitude)) {
-        const reactiveForLoading = Number.isFinite(reactiveMagnitude) ? reactiveMagnitude : 1;
+        const reactiveForLoading = Number.isFinite(reactiveMagnitude) ? reactiveMagnitude : 0;
         return Math.sqrt((activeMagnitude ** 2) + (reactiveForLoading ** 2));
       }
       if (Number.isFinite(reactiveMagnitude)) return reactiveMagnitude;
@@ -1516,6 +1557,7 @@
     record.uncertaintyLabel = uncertaintyMeta.label;
     record.uncertaintyTooltip = uncertaintyMeta.shortTooltip;
     record.uncertaintyDetails = uncertaintyMeta.detailLines;
+    record.resolutionClass = entityType === 'hat' ? getHatResolutionClass(record) : '';
     record.displayColor = getDisplayColor(record);
     record.valueInvalid = Boolean(primaryMetric?.valueInvalid);
     record.capacityLimit = Number.isFinite(Number(primaryMetric?.capacityLimit)) ? Number(primaryMetric.capacityLimit) : getCapacityLimit(entityType, entity);
@@ -1550,6 +1592,8 @@
       if (!Number.isFinite(record.primaryValue)) return;
       if (record.primaryStaleState === 'dead') return;
       if (record.sourceAmbiguous || record.unresolved || record.candidateConflict || record.backupUsed) return;
+      const direction = getHatFlowDirection(record);
+      if (direction === 'unknown') return;
       const value = record.primaryValue;
       const displayPct = Number.isFinite(record.displayPct) ? record.displayPct : null;
       const loadingPct = Number.isFinite(record.loadingPct) ? record.loadingPct : null;
@@ -1563,12 +1607,17 @@
         displayPctMode: record.displayPctMode || 'loading',
         invalidPct: Boolean(record.invalidPct),
         capacityMva: Number.isFinite(record.capacityMva) ? record.capacityMva : null,
-        direction: (Number.isFinite(record.directionValue) ? record.directionValue : value) >= 0 ? 'forward' : 'reverse',
+        direction,
         directionMetric: record.directionMetric || modeConfig.primaryMetric,
         directionValue: Number.isFinite(record.directionValue) ? record.directionValue : value,
         directionResolvedBy: record.directionResolvedBy || '',
         orientationMatch: record.orientationMatch || 'unknown',
         aliasMatchBasis: record.aliasMatchBasis || '',
+        terminalSide: record.terminalSide || '',
+        terminalMatchBasis: record.terminalMatchBasis || '',
+        polarizationSign: Number.isFinite(Number(record.polarizationSign)) ? Number(record.polarizationSign) : null,
+        resolvedTerminalMismatch: Boolean(record.resolvedTerminalMismatch),
+        resolutionClass: record.resolutionClass || getHatResolutionClass(record),
         candidateConflict: Boolean(record.candidateConflict),
         backupUsed: Boolean(record.backupUsed),
         orientationRule: record.orientationRule || '',
@@ -1599,6 +1648,7 @@
       unmatched: 0,
       ambiguousLive: 0,
       orientationUnknown: 0,
+      resolvedWithWarning: 0,
       updatedAt: state.scada.lastDataTimestamp,
       filterKey: scope.filterKey,
       metricMode: scope.mode
@@ -1609,7 +1659,7 @@
         summary.unmatched += 1;
         return;
       }
-      if (record.sourceAmbiguous || record.unresolved || record.candidateConflict || record.backupUsed || record.uncertaintyReason || record.valueInvalid) {
+      if (hasHatUncertainty(record, { assumeHat: scope.domain === 'hat' }) || record.invalidPct) {
         summary.ambiguousLive += 1;
         if (record.unresolvedReason === 'orientation-unknown'
           || record.unresolvedReason === 'source-side-unknown'
@@ -1617,6 +1667,9 @@
           summary.orientationUnknown += 1;
         }
         return;
+      }
+      if (record.resolvedTerminalMismatch) {
+        summary.resolvedWithWarning += 1;
       }
       if (!Number.isFinite(record.primaryValue)) {
         summary.unmatched += 1;
@@ -1663,7 +1716,7 @@
     state.scada.matchedLines = visibleSummary.matched;
     state.scada.unmatchedRows = visibleSummary.unmatched;
     state.scada.staleCount = visibleSummary.stale;
-    state.scada.ambiguousRows = [...metricMap.values()].filter((record) => record.candidateConflict || record.sourceAmbiguous || record.unresolved || record.backupUsed || record.uncertaintyReason || record.valueInvalid).map((record) => ({
+    state.scada.ambiguousRows = [...metricMap.values()].filter((record) => hasHatUncertainty(record) || record.invalidPct).map((record) => ({
       type: record.valueInvalid ? 'invalid-value' : (record.candidateConflict || record.backupUsed ? 'ambiguous-warning' : (record.unresolvedReason || record.uncertaintyReason || 'ambiguous-live')),
       entityKey: record.entityKey,
       entityName: record.entity?.name || record.entityId
@@ -2361,6 +2414,24 @@
     }
   }
 
+  function buildScadaQualityChips(summary) {
+    const chips = [
+      { label: 'Canli', value: summary.matched || 0, tone: 'is-live' },
+      { label: 'Gecikmeli', value: summary.delayed || 0, tone: 'is-warn' },
+      { label: 'Bayat', value: summary.dead || 0, tone: 'is-dead' },
+      { label: 'Yon belirsiz', value: summary.orientationUnknown || 0, tone: 'is-unknown', filter: 'orientation-unknown' },
+      { label: 'Terminal yorumlu', value: summary.resolvedWithWarning || 0, tone: 'is-resolved-warning', filter: 'resolved-with-warning' },
+      { label: 'Eksik', value: summary.unmatched || 0, tone: 'is-missing', filter: 'missing' }
+    ];
+    return chips.map((chip) => {
+      const body = `${escapeHtml(chip.label)} <strong>${chip.value}</strong>`;
+      if (chip.filter) {
+        return `<button type="button" class="scada-quality-chip ${chip.tone}" title="${escapeHtml(chip.label)}" data-scada-audit-filter="${escapeHtml(chip.filter)}">${body}</button>`;
+      }
+      return `<span class="scada-quality-chip ${chip.tone}" title="${escapeHtml(chip.label)}">${body}</span>`;
+    }).join('');
+  }
+
   updateScadaCardUI = function () {
     const modeConfig = getModeConfig();
     const summary = state.scada.visibleSummary || refreshScadaVisibleSummary();
@@ -2371,6 +2442,7 @@
     const elStale = document.getElementById('scadaStale');
     const elHata = document.getElementById('scadaHata');
     const elLejant = document.getElementById('scadaLejant');
+    const elQualityChips = document.getElementById('scadaQualityChips');
     const elKalite = document.getElementById('scadaKalite');
     const btnBolt = document.getElementById('btnScadaRanking');
 
@@ -2392,6 +2464,17 @@
       )).join(' ');
     }
 
+    if (elQualityChips) {
+      elQualityChips.innerHTML = buildScadaQualityChips(summary);
+      Array.from(elQualityChips.querySelectorAll('[data-scada-audit-filter]')).forEach((button) => {
+        button.addEventListener('click', () => {
+          if (typeof showScadaMismatchReportModal === 'function') {
+            showScadaMismatchReportModal(button.dataset.scadaAuditFilter || '');
+          }
+        });
+      });
+    }
+
     if (elKalite) {
       const transport = state.scada.lastTransport;
       const parts = [
@@ -2401,6 +2484,7 @@
         `Gorunen kalite: ${summary.matched || 0}/${summary.total || 0}`,
         summary.delayed ? `Gecikmeli: ${summary.delayed}` : null,
         summary.dead ? `Bayat: ${summary.dead}` : null,
+        summary.resolvedWithWarning ? `Terminal yorumlu: ${summary.resolvedWithWarning}` : null,
         `Belirsiz: ${summary.ambiguousLive || 0}`,
         summary.orientationUnknown ? `Yon belirsiz: ${summary.orientationUnknown}` : null,
         `Ham satir kalite: ${state.scada.measurementRowsById?.size || 0}/${state.scada.totalRows || 0}`
@@ -3056,12 +3140,14 @@
       return `
         <div class="ranking-time-cell" title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}">
           <span class="ranking-time-main ${toneClass}">&mdash;</span>
+          <span class="ranking-time-status ${toneClass}">${escapeHtml(label)}</span>
         </div>
       `;
     }
     return `
       <div class="ranking-time-cell" title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}">
         <span class="ranking-time-main ${toneClass}">${escapeHtml(formatPanelTimestampShort(row.timestamp))}</span>
+        <span class="ranking-time-status ${toneClass}">${escapeHtml(label)}</span>
       </div>
     `;
   }
@@ -3426,6 +3512,8 @@
       ambiguousLive: 0,
       ambiguousWarning: 0,
       orientationUnknown: 0,
+      resolvedTerminalMismatch: 0,
+      resolvedWithWarning: 0,
       transportUnavailable: 0,
       unmatchedTotal: 0,
       filterKey: scope.filterKey,
@@ -3458,6 +3546,7 @@
         : [];
       const candidateA = candidateDetails[0] || null;
       const candidateB = candidateDetails[1] || null;
+      const resolutionClass = getHatResolutionClass(record);
       if (!ids.length) {
         summary.missingConfigId += 1;
         summary.unmatchedTotal += 1;
@@ -3506,6 +3595,17 @@
         reason = 'Olcum ID kaynak sorguda bulunamadi.';
         summary.missingSourceRow += 1;
         summary.unmatchedTotal += 1;
+      } else if (record.resolvedTerminalMismatch) {
+        status = record.primaryStaleState === 'dead'
+          ? 'matched-dead'
+          : record.primaryStaleState === 'warn'
+            ? 'matched-delayed'
+            : 'matched-live';
+        reason = 'Formul polarizasyonu farkli; akis yonu terminal-exit modeliyle cozuldu.';
+        summary.structuralMatches += 1;
+        summary.resolvedTerminalMismatch += 1;
+        summary.resolvedWithWarning += 1;
+        incrementTimeBucket(record.primaryStaleState);
       } else if (record.primaryStaleState === 'dead') {
         status = 'matched-dead';
         reason = record.resolvedFromMultiple
@@ -3571,6 +3671,8 @@
         backupUsed: Boolean(record?.backupUsed),
         formulaSignApplied: Number.isFinite(Number(record?.formulaSignApplied)) ? Number(record.formulaSignApplied) : null,
         orientationRule: record?.orientationRule || '',
+        resolutionClass,
+        resolvedTerminalMismatch: Boolean(record?.resolvedTerminalMismatch),
         candidateConflict: Boolean(record?.candidateConflict),
         displayPct: record?.displayPct ?? null,
         displayPctMode: record?.displayPctMode || '',
@@ -3594,7 +3696,8 @@
     return {
       summary,
       rows,
-      mismatches: rows.filter((row) => !String(row.status || '').startsWith('matched-'))
+      mismatches: rows.filter((row) => !String(row.status || '').startsWith('matched-')),
+      resolvedWarnings: rows.filter((row) => row.resolvedTerminalMismatch || row.resolutionClass === 'resolved-with-warning')
     };
   }
 
@@ -3627,6 +3730,7 @@
       'Orientation Match',
       'Alias Match Basis',
       'Resolution Method',
+      'Resolution Class',
       'Uncertainty Reason',
       'Uncertainty Label',
       'Candidate Slot',
@@ -3639,6 +3743,7 @@
       'Selected Candidate',
       'Selected Candidate Reason',
       'Backup Used',
+      'Resolved Terminal Mismatch',
       'Formula Sign Applied',
       'Orientation Rule',
       'Candidate Conflict',
@@ -3680,6 +3785,7 @@
       row.orientationMatch,
       row.aliasMatchBasis,
       row.resolutionMethod,
+      row.resolutionClass,
       row.uncertaintyReason,
       row.uncertaintyLabel,
       row.candidateSlot,
@@ -3692,6 +3798,7 @@
       row.selectedCandidate,
       row.selectedCandidateReason,
       row.backupUsed ? 'yes' : '',
+      row.resolvedTerminalMismatch ? 'yes' : '',
       Number.isFinite(row.formulaSignApplied) ? String(row.formulaSignApplied) : '',
       row.orientationRule,
       row.candidateConflict ? 'yes' : '',
@@ -3714,7 +3821,21 @@
     scadaLog('info', `Denetim CSV indirildi: ${report.rows.length} oge, ${report.mismatches.length} mismatch.`);
   };
 
-  showScadaMismatchReportModal = function () {
+  function getScadaAuditModalRows(report, filter) {
+    if (filter === 'resolved-with-warning') return report.resolvedWarnings || [];
+    if (filter === 'orientation-unknown') return report.rows.filter((row) => row.status === 'orientation-unknown');
+    if (filter === 'missing') return report.rows.filter((row) => ['missing-config-id', 'missing-source-row'].includes(row.status));
+    return report.mismatches || [];
+  }
+
+  function getScadaAuditModalListTitle(filter) {
+    if (filter === 'resolved-with-warning') return 'Terminal yorumlu cozumler';
+    if (filter === 'orientation-unknown') return 'Yon belirsiz kayitlar';
+    if (filter === 'missing') return 'Eksik kayitlar';
+    return 'Ornek problemli kayitlar';
+  }
+
+  showScadaMismatchReportModal = function (filter = '') {
     const report = buildScadaAuditReport();
     if (!report.rows.length) {
       setScadaStatusMessage('Mismatch raporu icin henuz SCADA verisi bulunmuyor.', 'warn');
@@ -3722,7 +3843,9 @@
     }
     const existing = document.getElementById('scadaAuditModalBackdrop');
     if (existing) existing.remove();
-    const mismatchItems = report.mismatches.slice(0, 16).map((row) => `
+    const modalRows = getScadaAuditModalRows(report, filter);
+    const listTitle = getScadaAuditModalListTitle(filter);
+    const mismatchItems = modalRows.slice(0, 16).map((row) => `
       <div class="scada-audit-item">
         <strong>${escapeHtml(row.entityName || row.entityId || '-')}</strong>
         <span>${escapeHtml(row.status || '-')} | ${escapeHtml(row.reason || '-')}</span>
@@ -3751,6 +3874,7 @@
           <div class="scada-audit-stat"><span>Uyarili cozum</span><strong>${report.summary.ambiguousWarning || 0}</strong></div>
           <div class="scada-audit-stat"><span>Belirsiz</span><strong>${report.summary.ambiguousLive || 0}</strong></div>
           <div class="scada-audit-stat"><span>Yon Belirsiz</span><strong>${report.summary.orientationUnknown || 0}</strong></div>
+          <div class="scada-audit-stat"><span>Terminal yorumlu</span><strong>${report.summary.resolvedWithWarning || 0}</strong></div>
           <div class="scada-audit-stat"><span>Eksik</span><strong>${report.summary.unmatchedTotal || 0}</strong></div>
         </div>
         <div class="scada-chart-body">
@@ -3772,15 +3896,16 @@
               <div><span>Kaynakta yok</span><strong>${report.summary.missingSourceRow || 0}</strong></div>
               <div><span>Belirsiz canli</span><strong>${report.summary.ambiguousLive || 0}</strong></div>
               <div><span>Uyarili cozum</span><strong>${report.summary.ambiguousWarning || 0}</strong></div>
+              <div><span>Terminal yorumlu</span><strong>${report.summary.resolvedWithWarning || 0}</strong></div>
               <div><span>Yon belirsiz</span><strong>${report.summary.orientationUnknown || 0}</strong></div>
               <div><span>Gecikmeli</span><strong>${report.summary.delayed || 0}</strong></div>
               <div><span>Bayat</span><strong>${report.summary.dead || 0}</strong></div>
             </div>
           </div>
           <div class="scada-audit-section">
-            <h4>Ornek problemli kayitlar</h4>
+            <h4>${escapeHtml(listTitle)}</h4>
             <div class="scada-audit-list">
-              ${mismatchItems || '<div class="scada-audit-item"><strong>Mismatch yok</strong><span>Problemli kayit bulunmadi.</span></div>'}
+              ${mismatchItems || '<div class="scada-audit-item"><strong>Kayit yok</strong><span>Secili sinifta kayit bulunmadi.</span></div>'}
             </div>
           </div>
         </div>
@@ -3815,7 +3940,24 @@
       const lastCoord = row.coords[row.coords.length - 1];
       const startPt = startTm ? screenPoint(startTm.lon, startTm.lat) : screenPoint(firstCoord[0], firstCoord[1]);
       const endPt = endTm ? screenPoint(endTm.lon, endTm.lat) : screenPoint(lastCoord[0], lastCoord[1]);
-      return `M ${round1(startPt.x)} ${round1(startPt.y)} L ${round1(endPt.x)} ${round1(endPt.y)}`;
+      let fromPt = startPt;
+      let toPt = endPt;
+      if (state.filters.hatDisplayMode === 'sade-ayrik') {
+        const groupKey = [row.startTm || '', row.endTm || ''].sort().join('|||');
+        const allHats = getVisibleHats().filter((hat) => [hat.startTm || '', hat.endTm || ''].sort().join('|||') === groupKey);
+        const index = Math.max(0, allHats.findIndex((hat) => String(hat.id) === String(row.id)));
+        const spacing = 4;
+        const offset = -((allHats.length - 1) * spacing) / 2 + index * spacing;
+        const shifted = offsetLine(startPt, endPt, offset);
+        fromPt = { x: shifted.sx, y: shifted.sy };
+        toPt = { x: shifted.ex, y: shifted.ey };
+      }
+      if (flow.direction === 'reverse') {
+        const tmp = fromPt;
+        fromPt = toPt;
+        toPt = tmp;
+      }
+      return `M ${round1(fromPt.x)} ${round1(fromPt.y)} L ${round1(toPt.x)} ${round1(toPt.y)}`;
     }
     const coords = flow.direction === 'reverse' ? [...row.coords].reverse() : row.coords;
     return coords.map((coord, index) => {
@@ -4013,6 +4155,10 @@
       rebuildLineFlowMap,
       buildVisibleSummary,
       buildScadaAuditReport,
+      buildRenderedFlowPath,
+      buildScadaQualityChips,
+      getHatFlowDirection,
+      getHatResolutionClass,
       getReadableTextColor,
       handleDashboardMapSlotActive,
       serializeScadaDashboardSnapshot,

@@ -460,6 +460,9 @@ test('buildScadaAuditReport exposes terminal and polarization debug fields for r
   assert.equal(report.rows[0].terminalSide, 'start');
   assert.equal(report.rows[0].polarizationConsistent, false);
   assert.equal(report.rows[0].directionModel, 'terminal-exit-model');
+  assert.equal(report.summary.resolvedWithWarning, 1);
+  assert.equal(report.resolvedWarnings.length, 1);
+  assert.equal(report.resolvedWarnings[0].resolutionClass, 'resolved-with-warning');
 });
 
 test('buildScadaAuditReport separates delayed and dead matched records', () => {
@@ -613,7 +616,7 @@ test('buildEntityMetricRecord computes loadingPct when MW exists and MVar is mis
   assert.equal(record.reactive, null);
   assert(Number.isFinite(record.loadingPct));
   assert.equal(record.invalidPct, false);
-  assert.equal(Math.round(record.loadingPct * 100) / 100, 80.01);
+  assert.equal(Math.round(record.loadingPct * 100) / 100, 80);
 });
 
 test('buildEntityMetricRecord keeps loadingPct for source-side-unknown hats via loading hint', () => {
@@ -649,7 +652,63 @@ test('buildEntityMetricRecord keeps loadingPct for source-side-unknown hats via 
   assert.equal(record.unresolvedReason, 'source-side-unknown');
   assert.equal(record.primaryValue, null);
   assert(Number.isFinite(record.loadingPct));
-  assert.equal(Math.round(record.loadingPct * 100) / 100, 55.01);
+  assert.equal(Math.round(record.loadingPct * 100) / 100, 55);
+});
+
+test('resolved terminal mismatch remains flow-eligible as resolved warning', () => {
+  const context = loadRuntime();
+  const { buildEntityMetricRecord, rebuildLineFlowMap } = context.__SCADA_V2_TEST_HOOKS__;
+  const entity = buildTerminalEntity({
+    id: 'hat-terminal-warning',
+    winterCapacityMva: 100,
+    summerCapacityMva: 100,
+    scada: {
+      active: { ids: ['p-1'], rows: [buildTerminalCandidate('p-1', 'end', 1, { polarizationConsistent: false })] },
+      reactive: { ids: [], rows: [] }
+    }
+  });
+  const measurementRows = new Map([
+    ['p-1', { measurementId: 'p-1', tmName: 'TM-B', remoteName: 'TM-A', timestamp: new Date(), value: 25 }]
+  ]);
+
+  const record = buildEntityMetricRecord('hat', entity, {
+    key: 'hat-active',
+    label: 'Hat (MW)',
+    domain: 'hat',
+    primaryMetric: 'active'
+  }, measurementRows);
+  const flowMap = rebuildLineFlowMap({
+    key: 'hat-active',
+    label: 'Hat (MW)',
+    domain: 'hat',
+    primaryMetric: 'active'
+  }, new Map([[record.entityKey, record]]));
+
+  assert.equal(record.resolvedTerminalMismatch, true);
+  assert.equal(record.resolutionClass, 'resolved-with-warning');
+  assert.equal(flowMap.get('hat-terminal-warning').direction, 'reverse');
+  assert.equal(flowMap.get('hat-terminal-warning').resolutionClass, 'resolved-with-warning');
+});
+
+test('buildRenderedFlowPath reverses sade mode path for reverse flow', () => {
+  const context = loadRuntime();
+  const { buildRenderedFlowPath } = context.__SCADA_V2_TEST_HOOKS__;
+  context.state.filters.hatDisplayMode = 'sade';
+  context.state.network.tmMap = new Map([
+    ['TM-A', { lon: 10, lat: 20 }],
+    ['TM-B', { lon: 30, lat: 40 }]
+  ]);
+  context.screenPoint = (lon, lat) => ({ x: lon, y: lat });
+  context.round1 = (value) => Math.round(Number(value) * 10) / 10;
+
+  const pathData = buildRenderedFlowPath({
+    id: 'hat-path',
+    startTm: 'TM-A',
+    endTm: 'TM-B',
+    coords: [[10, 20], [30, 40]]
+  }, { direction: 'reverse' });
+
+  assert.equal(pathData, 'M 30 40 L 10 20');
 });
 
 test('buildEntityMetricRecord flags %300 ustu oranlari gecersiz olarak isaretler', () => {
@@ -695,6 +754,24 @@ test('getReadableTextColor returns dark text for bright chips and white for dark
   assert.equal(getReadableTextColor('#7dd3fc'), 'var(--chip-text-dark)');
   assert.equal(getReadableTextColor('#6b7280'), '#f8fafc');
   assert.equal(getReadableTextColor('#38bdf8'), '#f8fafc');
+});
+
+test('buildScadaQualityChips marks terminal warning chip as an audit filter action', () => {
+  const context = loadRuntime();
+  const { buildScadaQualityChips } = context.__SCADA_V2_TEST_HOOKS__;
+
+  const html = buildScadaQualityChips({
+    matched: 4,
+    delayed: 1,
+    dead: 0,
+    orientationUnknown: 2,
+    resolvedWithWarning: 3,
+    unmatched: 5
+  });
+
+  assert.match(html, /data-scada-audit-filter="resolved-with-warning"/);
+  assert.match(html, />Terminal yorumlu <strong>3<\/strong>/);
+  assert.match(html, /data-scada-audit-filter="orientation-unknown"/);
 });
 
 test('buildEntityMetricRecord keeps loading and display pct null when capacity is unknown', () => {

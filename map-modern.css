@@ -1799,6 +1799,28 @@ html[data-theme="dark"] .entity-inline-label-halo {
   color: var(--text-strong);
 }
 
+.scada-display-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.scada-display-group {
+  display: grid;
+  gap: 4px;
+}
+
+.scada-display-group.is-hidden {
+  display: none;
+}
+
+.scada-display-group-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .segmented-scada-display {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1812,6 +1834,53 @@ html[data-theme="dark"] .entity-inline-label-halo {
 
 .segmented-scada-display .segmented-btn.is-hidden {
   display: none;
+}
+
+.scada-quality-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.scada-quality-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-strong);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+button.scada-quality-chip {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.scada-quality-chip.is-live {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.scada-quality-chip.is-warn,
+.scada-quality-chip.is-resolved-warning {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.scada-quality-chip.is-dead,
+.scada-quality-chip.is-missing {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.scada-quality-chip.is-unknown {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .ranking-entity-tabs {
@@ -1942,7 +2011,9 @@ html[data-theme="dark"] .entity-inline-label-halo {
 
 .ranking-time-cell {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .ranking-time-main {
@@ -1956,6 +2027,19 @@ html[data-theme="dark"] .entity-inline-label-halo {
   padding: 2px 5px;
   background: rgba(148, 163, 184, 0.12);
   color: var(--text-strong);
+}
+
+.ranking-time-status {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 8.5px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .ranking-time-main.is-live-fresh {

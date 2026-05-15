@@ -226,6 +226,10 @@ function getScadaVisibilityFilterKey() {
   return `kv:${kv}|ytm:${ytm}`;
 }
 
+function isScadaV2RuntimeActive() {
+  return Boolean(state?.scada?.v2RuntimeActive || window.__TPYS_SCADA_V2_RUNTIME_ACTIVE__);
+}
+
 function refreshScadaVisibleSummary() {
   const visibleHats = typeof getVisibleHats === 'function' ? getVisibleHats() : [];
   const computed = typeof SCADA_COMMON?.computeVisibleSummary === 'function'
@@ -556,6 +560,10 @@ async function scadaDoFetch(options = {}) {
 }
 
 function applyScadaSnapshot(rowsBySinsid) {
+  if (isScadaV2RuntimeActive()) {
+    return refreshScadaVisibleSummary();
+  }
+
   state.scada.rowsBySinsid = rowsBySinsid;
   state.scada.totalRows = rowsBySinsid.size;
 

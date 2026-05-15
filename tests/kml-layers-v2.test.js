@@ -54,6 +54,9 @@ test('kml_layers_v2 validation metadata matches expected source coverage', () =>
   assert.equal(validation.voltageAliasMatched, 0);
   assert.equal(validation.voltageAliasAmbiguous, 0);
   assert.equal(validation.voltageStillMissing, 1492);
+  assert.equal(validation.formulaTerminalSignMismatch, 4117);
+  assert.equal(validation.terminalExitResolvable, 8515);
+  assert.equal(validation.terminalExitUnresolvable, 0);
 
   assert.deepEqual(validation.missingTmExcelRows, [
     { id: '2674', name: 'TARSUS OSB' }
