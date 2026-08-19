@@ -3848,7 +3848,7 @@ function buildScadaTransport(payload, authConfig) {
   };
 }
 
-async function fetchChartData(config, authMode, usedFallback) {
+async function fetchChartData(config, authMode, usedFallback, timeoutMs = 15000) {
   const url = buildChartUrl(config);
   const csrfToken = await getSupersetCsrfToken(config.baseUrl);
   const headers = {
@@ -3857,7 +3857,7 @@ async function fetchChartData(config, authMode, usedFallback) {
   };
   if (csrfToken) headers['X-CSRFToken'] = csrfToken;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), SCADA_FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {

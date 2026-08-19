@@ -473,6 +473,8 @@
   }
 
   return {
+    CONFIG,
+    buildHistoryPayload,
     buildChartPayload,
     buildChartUrl,
     computeAuditReport,

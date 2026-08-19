@@ -2166,7 +2166,7 @@
         phaseMessage: `${triggerLabel} sorgu icin oturum kontrol ediliyor.`
       });
 
-      const chartPayload = buildChartPayload();
+      const scope = getCurrentScadaScope();
       const result = SCADA_CONFIG.MOCK_ENABLED
         ? await scadaFetchMock()
         : await chrome.runtime.sendMessage({
@@ -2176,7 +2176,11 @@
             dashboardId: SCADA_CONFIG.DASHBOARD_ID,
             chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
             datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-            chartPayload
+            timeRange: 'DATEADD(DATETIME("now"), -10, minute) : now',
+            kvFilters: SCADA_CONFIG.QUERY_KV_FILTERS || [],
+            tearFilters: SCADA_CONFIG.QUERY_TEAR_FILTERS || [],
+            elementNames: scope.elementNames || SCADA_CONFIG.QUERY_ELEMENT_NAMES,
+            measurementIds: scope.measurementIds
           }
         });
 
@@ -2814,7 +2818,7 @@
     };
 
     const chartBtn = document.getElementById('btnShowScadaChart');
-    if (chartBtn) chartBtn.addEventListener('click', () => showScadaChartModal(hat.id, hat.name));
+    if (chartBtn) chartBtn.addEventListener('click', () => openScada24hHistory(`hat:${hat.id}`));
     const toggleBtn = document.getElementById('btnToggleInfoDetails');
     if (toggleBtn) {
       toggleBtn.addEventListener('click', () => {
@@ -2829,62 +2833,7 @@
     requestRender({ forceTiles: Boolean(options.forceTiles) });
   };
 
-  function buildDualSeriesChart(entityKey, entity, options = {}) {
-    const history = state.scada.history.get(entityKey);
-    if (!history || history.length < 2) return '';
-    const width = options.width || 960;
-    const height = options.height || 360;
-    const padL = 52;
-    const padR = 24;
-    const padT = 22;
-    const padB = 42;
-    const values = history.flatMap((point) => [point.active, point.reactive]).filter((value) => Number.isFinite(value));
-    if (!values.length) return '';
-    const maxAbs = Math.max(...values.map((value) => Math.abs(value)), 1);
-    const minY = -maxAbs;
-    const maxY = maxAbs;
-    const minTime = history[0].ts.getTime();
-    const maxTime = history[history.length - 1].ts.getTime();
-    const timeSpan = maxTime - minTime || 1;
-    const toX = (timeMs) => padL + ((timeMs - minTime) / timeSpan) * (width - padL - padR);
-    const toY = (value) => padT + ((maxY - value) / (maxY - minY)) * (height - padT - padB);
-    const makePoints = (key) => history
-      .filter((point) => Number.isFinite(point[key]))
-      .map((point) => `${round1(toX(point.ts.getTime()))},${round1(toY(point[key]))}`)
-      .join(' ');
-
-    const activePoints = makePoints('active');
-    const reactivePoints = makePoints('reactive');
-    const zeroY = round1(toY(0));
-    const capacity = getCapacityMva('hat', entity);
-    const capY = Number.isFinite(capacity) ? round1(toY(Math.min(capacity, maxY))) : null;
-    return `
-      <div class="scada-history-chart scada-history-chart-large">
-        <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" aria-label="scada-hat-grafigi">
-          <line x1="${padL}" y1="${zeroY}" x2="${width - padR}" y2="${zeroY}" stroke="var(--chart-grid)" stroke-width="1.2" />
-          ${capY != null ? `<line x1="${padL}" y1="${capY}" x2="${width - padR}" y2="${capY}" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.75" />` : ''}
-          ${activePoints ? `<polyline points="${activePoints}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
-          ${reactivePoints ? `<polyline points="${reactivePoints}" fill="none" stroke="#ef4444" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
-          <text x="${padL}" y="${height - 12}" fill="var(--muted)" font-size="12">${history[0].ts.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</text>
-          <text x="${width - padR}" y="${height - 12}" fill="var(--muted)" font-size="12" text-anchor="end">${history[history.length - 1].ts.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</text>
-          <text x="${padL - 8}" y="${zeroY - 6}" fill="var(--muted)" font-size="11" text-anchor="end">0</text>
-          <text x="${padL - 8}" y="${padT + 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(maxAbs)}</text>
-          <text x="${padL - 8}" y="${height - padB + 6}" fill="var(--muted)" font-size="11" text-anchor="end">-${formatAxisNumber(maxAbs)}</text>
-        </svg>
-        <div class="scada-history-chart-legend">
-          <span class="legend-active">Aktif Guc (MW)</span>
-          <span class="legend-reactive">Reaktif Guc (MVar)</span>
-        </div>
-      </div>
-    `;
-  }
-
-  function closeScadaChartModal() {
-    const backdrop = document.getElementById('scadaChartModalBackdrop');
-    if (backdrop) backdrop.remove();
-  }
-
-  showScadaChartModal = function (hatId, hatName) {
+  openScada24hHistory = function (hatId, hatName) {
     closeScadaChartModal();
     const hat = state.network?.hatById?.get(String(hatId)) || state.network?.hatLines?.find((entry) => entry.id === hatId);
     const chartHtml = buildDualSeriesChart(`hat:${hatId}`, hat, { width: 960, height: 360 });
@@ -3370,6 +3319,13 @@
       setRankingEntityFilter(button.dataset.entityFilter);
     });
     panel.querySelector('.ranking-body').addEventListener('click', (event) => {
+      const btnHist = event.target.closest('.btn-history');
+      if (btnHist) {
+        event.preventDefault();
+        event.stopPropagation();
+        openScada24hHistory(btnHist.dataset.historyEntity);
+        return;
+      }
       const row = event.target.closest('tr[data-entity-key]');
       if (!row) return;
       openPanelEntity(row.dataset.entityKey);
