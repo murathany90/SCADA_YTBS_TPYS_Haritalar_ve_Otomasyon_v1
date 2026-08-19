@@ -49,11 +49,8 @@
     const chartSliceId = Number(config?.chartSliceId || 454);
     const datasourceId = Number(config?.datasourceId || 3);
     const contract = resolveQueryContract(config);
-    const metrics = [
-      { label: 'MAX(__time)', expressionType: 'SQL', sqlExpression: 'MAX(__time)' },
-      { label: 'AVG(maxValue)', expressionType: 'SQL', sqlExpression: 'AVG(maxValue)' }
-    ];
-    const columns = ['sinsid', 'b1Name', 'b2Name', 'b3Name', 'elementName'];
+    const metrics = [];
+    const columns = ['__time', 'sinsid', 'b1Name', 'b2Name', 'b3Name', 'elementName', 'maxValue'];
     const filters = [];
     const adhocFilters = [];
     if (contract.elementNames.length === 1) {
@@ -81,11 +78,13 @@
       datasource: `${datasourceId}__table`,
       granularity_sqla: '__time',
       time_range: contract.timeRange,
-      groupby: columns.slice(),
-      metrics: metrics.slice(),
+      query_mode: 'raw',
+      columns: columns.slice(),
+      groupby: [],
+      metrics: [],
       adhoc_filters: adhocFilters,
       row_limit: contract.rowLimit,
-      order_desc: true
+      order_by_cols: ['__time DESC']
     };
     return {
       datasource: { id: datasourceId, type: 'table' },
@@ -95,9 +94,9 @@
         time_range: contract.timeRange,
         granularity: '__time',
         columns: columns.slice(),
-        metrics: metrics.slice(),
+        metrics: [],
         filters,
-        orderby: [['MAX(__time)', false]],
+        orderby: [['__time', false]],
         row_limit: contract.rowLimit
       }],
       result_format: 'json',
@@ -194,9 +193,9 @@
       if (allowElements && !allowElements.has(elementName)) continue;
       const measurementId = String(row.sinsid || '').trim();
       if (!measurementId) continue;
-      const value = parseFloat(row['AVG(maxValue)'] ?? row.avgMaxValue);
+      const value = parseFloat(row.maxValue ?? row['AVG(maxValue)'] ?? row.avgMaxValue);
       if (!Number.isFinite(value)) continue;
-      const timestamp = normalizeTimestamp(row['MAX(__time)'] ?? row.maxTime, nowMs);
+      const timestamp = normalizeTimestamp(row.__time ?? row['MAX(__time)'] ?? row.maxTime, nowMs);
       const compositeKey = `${measurementId}|${elementName}`;
       const existing = result.get(compositeKey);
       if (existing && existing.timestamp && timestamp && existing.timestamp >= timestamp) continue;

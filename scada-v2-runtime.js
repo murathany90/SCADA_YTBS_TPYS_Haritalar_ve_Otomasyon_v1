@@ -880,6 +880,9 @@
     const hadPrimaryCandidate = entries.some((item) => (item.candidateSlot || item?.candidate?.candidateSlot) === 'primary');
     return {
       ...entry,
+      value: entry.normalizedValue,
+      sourceValue: entry.rawValue,
+      flowValue: entry.normalizedValue,
       measurementId: measurementIds.join(',') || String(entry.measurementId || entry?.candidate?.measurementId || '').trim(),
       supportingMeasurementIds: measurementIds,
       sourceAmbiguous: Boolean(options.sourceAmbiguous),
@@ -1354,6 +1357,10 @@
       row,
       timestamp: row.timestamp,
       normalizedValue: Number(row.value),
+      value: Number(row.value),
+      rawValue: Number(row.value),
+      sourceValue: Number(row.value),
+      flowValue: Number(row.value),
       measurementId: String(candidate?.measurementId || '')
     })).sort((left, right) => {
       const tsDiff = Number(right.timestamp?.getTime?.() || 0) - Number(left.timestamp?.getTime?.() || 0);
@@ -2696,13 +2703,14 @@
                   : '-';
               return `
                 <div class="technical-note-measurement-row${row.selected ? ' is-selected' : ''}">
-                  <div><span>Olcum Adresi</span><strong>${escapeHtml(row.measurementId || '-')}</strong></div>
-                  <div><span>Formul</span><strong>${escapeHtml(row.formulaRaw || '-')}</strong></div>
-                  <div><span>Ham Deger</span><strong>${escapeHtml(rawText)}</strong></div>
-                  <div><span>Normalize Deger</span><strong>${escapeHtml(normalizedText)}</strong></div>
-                  <div><span>Zaman</span><strong>${escapeHtml(timeText)}</strong></div>
-                  <div><span>Terminal Tarafi</span><strong>${escapeHtml(row.terminalSide || '-')}</strong></div>
-                  <div><span>Secildi mi</span><strong>${row.selected ? 'Evet' : 'Hayir'}</strong></div>
+                  <div><span>Ölçüm Adresi</span><strong>${escapeHtml(row.measurementId || '-')}</strong></div>
+                  <div><span>Formül</span><strong>${escapeHtml(row.formulaRaw || '-')}</strong></div>
+                  <div><span>Superset Kaynak Değeri</span><strong>${escapeHtml(rawText)}</strong></div>
+                  <div><span>Harita Akış Değeri</span><strong>${escapeHtml(normalizedText)}</strong></div>
+                  <div><span>Superset Veri Zamanı</span><strong>${escapeHtml(timeText)}</strong></div>
+                  <div><span>Terminal Tarafı</span><strong>${escapeHtml(row.terminalSide || '-')}</strong></div>
+                  <div><span>Seçim Nedeni</span><strong>${escapeHtml(row.selectedCandidateReason || '-')}</strong></div>
+                  <div><span>Seçildi mi</span><strong>${row.selected ? 'Evet' : 'Hayır'}</strong></div>
                 </div>
               `;
             }).join('')}

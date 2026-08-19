@@ -1,4 +1,4 @@
-﻿# Eklenti "Harita Göster" ve Superset Entegrasyon Analizi
+# Eklenti "Harita Göster" ve Superset Entegrasyon Analizi
 
 Bu rapor, eklentinin (Chrome Extension) "Harita Göster" işlevinin nasıl çalıştığını, Superset üzerinden verileri nasıl çektiğini ve gerçekleştirilen parite düzenlemelerini detaylandırmaktadır.
 
@@ -22,8 +22,9 @@ Kullanıcı eklenti menüsündeki (popup) "Harita Göster" butonuna tıkladığ�
    - **Query Builder Birleştirmesi:** ackground.js içerisinde bulunan kopya fallback query implementation silinmiştir. Tüm sorgu oluşturma işlemleri deterministik bir şekilde SCADA_COMMON.buildChartPayload üzerinden yapılır (kvFilters ve 	earFilters gönderilmemişse boş bırakılır).
 
 3. **Verinin İşlenmesi ve Görselleştirilmesi:**
-   - **Composite Key ve Parser:** Superset'ten dönen yanıt (json.result[0].data ile deterministik şekilde alınır) scada-common.js içindeki 
-ormalizeMetricEntries tarafından işlenir. Ölçümler birbirini ezmemesi için sinsid|elementName (örn. 123|P) composite anahtarıyla tutulur.
+   - **Composite Key ve Parser:** Eski (MAX(__time) + AVG(maxValue)) kullanımından vazgeçilerek, Raw Record semantiğine geçilmiştir.
+Yeni algoritma (Latest-Row): Superset'ten dönen yanıt (json.result[0].data ile deterministik şekilde alınır) scada-common.js içindeki 
+ormalizeMetricEntries tarafından işlenir.Her sinsid + elementName için en yeni __time satırındaki maxValue değeri seçilir. Ölçümler birbirini ezmemesi için sinsid|elementName (örn. 123|P) composite anahtarıyla tutulur.
    - **Saat Farkı (Zaman Dilimi) Düzeltmesi:** Superset'ten gelen 2026-08-19T22:35:00.000Z şeklindeki UTC etiketli ancak aslında yerel (TR) saati ifade eden ham verilerdeki Z (Zulu) karakteri parseSupersetScadaTimestamp fonksiyonu ile kırpılır. Böylece +3 saat kayması önlenir ve Harita saati Superset saati ile birebir aynı kalır.
    - **Aday Çözümü (Tolerance-Primary):** esolveHatMetricByTolerance içerisindeki ölçüm adayı seçim mantığı, candidateSlotRank kullanılarak deterministik hale getirilmiştir (Primary > Secondary > Yeni Timestamp > ID alfabetik sıralama). Tesadüfi entries[0] kullanımı kaldırılmıştır.
    - **Superset Ham Değer / Harita Akış Değeri Ayrımı:** Harita UI'ında, polarizasyon işlemi uygulanmış yönlü akış değeri (Harita Akış Değeri) ile Superset'ten gelen işlenmemiş orijinal değer (Superset Kaynak Değeri) tamamen ayrılmıştır ve kullanıcının görebileceği şekilde kartlara yansıtılmıştır.
