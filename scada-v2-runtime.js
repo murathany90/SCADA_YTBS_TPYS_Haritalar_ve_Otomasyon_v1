@@ -448,9 +448,12 @@
     syncScadaMetricButtons();
     syncScadaMapDisplayButtons();
     if (state.scada.enabled && options.fetch !== false) scadaDoFetch({ trigger: 'mode-change' });
-    if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+    if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
+    else {
+      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+      if (typeof requestRender === 'function') requestRender();
+    }
     if (typeof refreshRankingTable === 'function') refreshRankingTable();
-    if (typeof requestRender === 'function') requestRender();
   }
 
   function setRankingEntityFilter(filter) {
@@ -1836,14 +1839,23 @@
     if (options.apply !== false && rows.size && state.scada.currentScope?.entities?.length) {
       applyGenericScadaSnapshot(rows, state.scada.currentScope);
     }
-    if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+    if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
+    else {
+      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+      if (typeof requestRender === 'function') requestRender();
+    }
     if (typeof refreshRankingTable === 'function') refreshRankingTable();
-    if (typeof requestRender === 'function') requestRender();
     return { ok: true, rows: rows.size };
   }
 
+  let lastSnapshotTime = 0;
   async function persistScadaDashboardSnapshot(options = {}) {
     try {
+      const now = Date.now();
+      if (!options.force && now - lastSnapshotTime < (globalThis.SCADA_COMMON?.CONFIG?.SNAPSHOT_INTERVAL_MS || 300000)) {
+        return { ok: false, skipped: true, reason: 'throttled' };
+      }
+      lastSnapshotTime = now;
       if (typeof chrome === 'undefined' || !chrome.storage?.local?.set) return { ok: false, skipped: true };
       const scope = state.scada.currentScope || getCurrentScadaScope();
       const snapshot = serializeScadaDashboardSnapshot(options);
@@ -1858,10 +1870,12 @@
             dashboardId: SCADA_CONFIG.DASHBOARD_ID,
             chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
             datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+            timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
+            kvFilters: SCADA_CONFIG.QUERY_KV_FILTERS,
+            tearFilters: SCADA_CONFIG.QUERY_TEAR_FILTERS,
             elementNames: scope.elementNames,
             measurementIds: scope.measurementIds,
-            rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, scope.measurementIds.length * 3 || 5000),
-            chartPayload: buildChartPayload()
+            rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, scope.measurementIds.length * 3 || 5000)
           }
         }
       });
@@ -3108,6 +3122,7 @@
           <th class="col-mw" data-sort="mw">MW</th>
           <th class="col-mvar" data-sort="mvar">MVAR</th>
           <th class="col-pct" data-sort="score">%</th>
+          <th class="col-hist" title="Son 24 Saat">24s</th>
         </tr></thead>
       `;
     }
@@ -3222,6 +3237,7 @@
             <td class="col-mw">${row.mwInvalid ? '!' : Number.isFinite(row.mw) ? `${row.mw >= 0 ? '+' : ''}${row.mw.toFixed(1)}` : '&mdash;'}</td>
             <td class="col-mvar">${row.mvarInvalid ? '!' : Number.isFinite(row.mvar) ? `${row.mvar >= 0 ? '+' : ''}${row.mvar.toFixed(1)}` : '-'}</td>
             <td class="col-pct"><span class="ranking-pct-cell${row.invalidPct ? ' is-invalid' : ''}" style="background:${pctColor};color:${pctTextColor}">${pctText}</span></td>
+            <td class="col-hist"><button type="button" class="btn-history" data-history-entity="${row.entityKey}" title="24 Saatlik Grafiği Göster" aria-label="24 Saatlik Grafiği Göster">&#128200;</button></td>
           </tr>
         `;
       }
@@ -3260,7 +3276,9 @@
     let panel = document.getElementById('rankingPanel');
     if (panel) {
       panel.classList.toggle('hidden');
-      if (!panel.classList.contains('hidden')) refreshRankingTable();
+      if (!panel.classList.contains('hidden')) {
+        if (rankingState.dirty !== false) refreshRankingTable();
+      }
       return;
     }
     panel = document.createElement('div');
@@ -3419,6 +3437,11 @@
     const panel = document.getElementById('rankingPanel');
     const table = document.getElementById('rankingTable');
     if (!table || !panel) return;
+    if (panel.classList.contains('hidden')) {
+      rankingState.dirty = true;
+      return;
+    }
+    rankingState.dirty = false;
     panel.classList.toggle('light-mode', state.map?.theme === 'light');
     syncRankingKvFilterControl();
     panel.classList.remove('font-compact', 'font-large');

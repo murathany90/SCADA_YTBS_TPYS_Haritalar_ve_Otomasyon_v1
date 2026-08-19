@@ -5,6 +5,14 @@
   }
   root.SCADA_COMMON = api;
 })(typeof self !== 'undefined' ? self : globalThis, function () {
+  const CONFIG = {
+    LIVE_BATCH_SIZE: 200,
+    LIVE_MAX_CONCURRENCY: 3,
+    LIVE_FETCH_TIMEOUT_MS: 15000,
+    HISTORY_FETCH_TIMEOUT_MS: 30000,
+    SNAPSHOT_INTERVAL_MS: 5 * 60 * 1000
+  };
+
   function stripTrailingSlash(value) {
     return String(value || '').replace(/\/+$/, '');
   }
@@ -23,7 +31,7 @@
       ? config.measurementIds.map((value) => String(value).trim()).filter(Boolean)
       : [];
     const rowLimit = Number(config?.rowLimit || 50000);
-    const timeRange = String(config?.timeRange || 'DATEADD(DATETIME("now"), -24, hour) : now');
+    const timeRange = String(config?.timeRange || 'DATEADD(DATETIME("now"), -10, minute) : now');
     return {
       kvFilters,
       tearFilters,
@@ -98,6 +106,60 @@
         filters,
         orderby: [['__time', false]],
         row_limit: contract.rowLimit
+      }],
+      result_format: 'json',
+      result_type: 'full'
+    };
+  }
+
+  function buildHistoryPayload(config) {
+    const chartSliceId = Number(config?.chartSliceId || 454);
+    const datasourceId = Number(config?.datasourceId || 3);
+    const contract = resolveQueryContract(config);
+    const timeRange = config?.timeRange || 'DATEADD(DATETIME("now"), -24, hour) : now';
+    const columns = ['__time', 'sinsid', 'elementName', 'maxValue', 'b1Name', 'b2Name', 'b3Name'];
+    const filters = [];
+    const adhocFilters = [];
+
+    if (contract.elementNames.length === 1) {
+      filters.push({ col: 'elementName', op: '==', val: contract.elementNames[0] });
+      adhocFilters.push(buildSimpleAdhocFilter('elementName', '==', contract.elementNames[0]));
+    } else if (contract.elementNames.length > 1) {
+      filters.push({ col: 'elementName', op: 'IN', val: contract.elementNames.slice() });
+      adhocFilters.push(buildSimpleAdhocFilter('elementName', 'IN', contract.elementNames.slice()));
+    }
+    if (contract.measurementIds.length) {
+      filters.push({ col: 'sinsid', op: 'IN', val: contract.measurementIds.slice() });
+      adhocFilters.push(buildSimpleAdhocFilter('sinsid', 'IN', contract.measurementIds.slice()));
+    }
+
+    const formData = {
+      slice_id: chartSliceId,
+      viz_type: 'table',
+      datasource: `${datasourceId}__table`,
+      granularity_sqla: '__time',
+      time_range: timeRange,
+      query_mode: 'raw',
+      columns: columns.slice(),
+      groupby: [],
+      metrics: [],
+      adhoc_filters: adhocFilters,
+      row_limit: contract.rowLimit || 10000,
+      order_by_cols: ['__time DESC']
+    };
+
+    return {
+      datasource: { id: datasourceId, type: 'table' },
+      force: true,
+      form_data: formData,
+      queries: [{
+        time_range: timeRange,
+        granularity: '__time',
+        columns: columns.slice(),
+        metrics: [],
+        filters,
+        orderby: [['__time', false]],
+        row_limit: contract.rowLimit || 10000
       }],
       result_format: 'json',
       result_type: 'full'

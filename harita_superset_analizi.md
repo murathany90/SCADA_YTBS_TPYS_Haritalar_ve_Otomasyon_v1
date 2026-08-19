@@ -1,4 +1,4 @@
-# Eklenti "Harita Göster" ve Superset Entegrasyon Analizi
+﻿# Eklenti "Harita Göster" ve Superset Entegrasyon Analizi
 
 Bu rapor, eklentinin (Chrome Extension) "Harita Göster" işlevinin nasıl çalıştığını, Superset üzerinden verileri nasıl çektiğini ve gerçekleştirilen parite düzenlemelerini detaylandırmaktadır.
 
@@ -37,3 +37,10 @@ data/scada_auth.json içerisindeki hassas yetki bilgileri uild-extension.ps1'de
 ## 5. Doğrulama Durumu (Superset Parity)
 - Kod düzeyindeki düzeltmeler (saat farkı, composite key id uyuşmazlıkları, akış ayrımı vb.) tamamlanmıştır.
 - Canlı Superset (Chart 454) doğrulaması agent tarafından yapılamadığından, hazırlanan yeni build kullanılarak **manuel doğrulama kullanıcı tarafından yapılacaktır**.
+
+## 6. Timeout, Performans ve 24 Saat Grafik Güncellemeleri
+- **Batch İstek Mimarisi:** 1148 ölçüm noktası tek bir dev istekte 25 saniyelik timeout sınırına takılmaktaydı. İstekler SCADA_LIVE_BATCH_SIZE = 200 olacak şekilde, max concurrency = 3 ile paralel etch bloklarına ayrıldı. Kısmi başarı (partial success) desteği ile hata alan batch'lerin tüm overlay'i çökertmesi önlendi.
+- **Sorgu Aralığı Küçültüldü:** Canlı veri sorgusunda zaman aralığı (timeRange) son 24 saatten (DATEADD(-24, hour)) son 10 dakikaya (DATEADD(-10, minute)) düşürülerek Superset veritabanı yükü büyük oranda azaltıldı.
+- **Render Ayrıştırması:** SCADA veri güncellemelerinde tüm sayfanın yeniden çizilmesini (topology dahil) engellemek adına, sadece ilgili overlay'i (Hat renkleri, animasyonlar, mw, mvar etiketleri) çizen equestScadaOverlayRender() oluşturuldu. Ranking paneli kapalıyken HTML (innerHTML) üretilmesi durduruldu.
+- **24 Saat Geçmiş Görünümü:** Ranking paneline '24s' butonu eklendi. Çift terminalli hatlar (aynı timestamp, iki P, iki Q) desteklendi ve 5 dakikalık TTL bazlı History cache oluşturuldu.
+

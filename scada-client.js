@@ -380,6 +380,7 @@ async function scadaDoFetch(options = {}) {
   }
 
   const startedAt = new Date();
+  const perfStart = performance.now();
   state.scada.fetchInProgress = true;
   state.scada.error = null;
   state.scada.errorType = null;
@@ -432,7 +433,11 @@ async function scadaDoFetch(options = {}) {
           dashboardId: SCADA_CONFIG.DASHBOARD_ID,
           chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
           datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-          chartPayload: buildChartPayload()
+          timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
+          kvFilters: SCADA_CONFIG.QUERY_KV_FILTERS,
+          tearFilters: SCADA_CONFIG.QUERY_TEAR_FILTERS,
+          elementNames: SCADA_CONFIG.QUERY_ELEMENT_NAMES,
+          measurementIds: getCurrentScadaScope()
         }
       });
 

@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -106,13 +106,13 @@ test('computeVisibleSummary counts visible hats by matched, stale and unmatched 
   });
 });
 
-test('buildChartPayload carries network contract filters and 24-hour window', () => {
+test('buildChartPayload carries network contract filters and 10-minute window', () => {
   const payload = scadaCommon.buildChartPayload({
     chartSliceId: 454,
     datasourceId: 3
   });
 
-  assert.equal(payload.form_data.time_range, 'DATEADD(DATETIME("now"), -24, hour) : now');
+  assert.equal(payload.form_data.time_range, 'DATEADD(DATETIME("now"), -10, minute) : now');
   assert.equal(payload.form_data.row_limit, 50000);
   assert.deepEqual(payload.queries[0].filters, [
     { col: 'elementName', op: '==', val: 'P' },
