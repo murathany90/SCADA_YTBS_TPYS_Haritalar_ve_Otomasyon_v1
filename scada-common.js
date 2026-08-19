@@ -143,13 +143,17 @@
     return null;
   }
 
-  function normalizeTimestamp(rawValue, nowMs) {
+  function parseSupersetScadaTimestamp(rawValue) {
     if (!rawValue) return null;
-    const timestamp = new Date(rawValue);
-    if (Number.isNaN(timestamp.getTime())) return null;
-    // No longer silently subtract hours from "future" timestamps.
-    // Raw timestamp string is preserved; callers can use rawTimestampString for diagnostics.
-    return timestamp;
+    // Superset returns '...T...Z' but the time is actually local time in Turkey.
+    // By stripping 'Z', new Date() parses it as local time, preventing the +3h shift.
+    const localString = String(rawValue).replace(/Z$/, '');
+    const timestamp = new Date(localString);
+    return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+  }
+
+  function normalizeTimestamp(rawValue, nowMs) {
+    return parseSupersetScadaTimestamp(rawValue);
   }
 
   function normalizeScadaEntries(rawRows, options) {
@@ -193,9 +197,10 @@
       const value = parseFloat(row['AVG(maxValue)'] ?? row.avgMaxValue);
       if (!Number.isFinite(value)) continue;
       const timestamp = normalizeTimestamp(row['MAX(__time)'] ?? row.maxTime, nowMs);
-      const existing = result.get(measurementId);
+      const compositeKey = `${measurementId}|${elementName}`;
+      const existing = result.get(compositeKey);
       if (existing && existing.timestamp && timestamp && existing.timestamp >= timestamp) continue;
-      result.set(measurementId, {
+      const rowData = {
         measurementId,
         sinsid: measurementId,
         elementName,
@@ -204,7 +209,13 @@
         remoteName: row.b3Name || '',
         timestamp,
         value
-      });
+      };
+      result.set(compositeKey, rowData);
+      // For backward compatibility, update the default if it doesn't exist, OR if it's the same element name being updated
+      const defaultExisting = result.get(measurementId);
+      if (!defaultExisting || defaultExisting.elementName === elementName) {
+        result.set(measurementId, rowData);
+      }
     }
     return result;
   }

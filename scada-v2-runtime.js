@@ -1039,7 +1039,15 @@
     const maxValue = Math.max(...values);
     if ((maxValue - minValue) > getHatResolutionTolerance(entity)) return null;
     const candidateMean = values.reduce((sum, value) => sum + value, 0) / values.length;
-    const primary = entries[0];
+    const primary = entries.slice().sort((left, right) => {
+      const slotDiff = candidateSlotRank(left) - candidateSlotRank(right);
+      if (slotDiff !== 0) return slotDiff;
+      const timeDiff = Number(right.timestamp?.getTime?.() || 0) - Number(left.timestamp?.getTime?.() || 0);
+      if (timeDiff !== 0) return timeDiff;
+      const idLeft = String(left.measurementId || '');
+      const idRight = String(right.measurementId || '');
+      return idLeft.localeCompare(idRight);
+    })[0];
     return finalizeResolvedHatEntry({
       ...primary,
       normalizedValue: primary.normalizedValue,
@@ -1358,10 +1366,14 @@
 
   function resolveMetricCandidate(entityType, entity, metricType, measurementRowsById) {
     const rows = Array.isArray(entity?.scada?.[metricType]?.rows) ? entity.scada[metricType].rows : [];
-    const present = rows.map((candidate) => ({
-      candidate,
-      row: measurementRowsById.get(String(candidate.measurementId || ''))
-    })).filter((entry) => entry.row);
+    const elementName = metricType === 'active' ? 'P' : (metricType === 'reactive' ? 'Q' : 'U');
+    const present = rows.map((candidate) => {
+      const id = String(candidate.measurementId || '');
+      return {
+        candidate,
+        row: measurementRowsById.get(`${id}|${elementName}`) || measurementRowsById.get(id)
+      };
+    }).filter((entry) => entry.row);
     if (!present.length) return null;
     return entityType === 'hat'
       ? resolveHatMetric(entity, metricType, present)
@@ -2235,8 +2247,9 @@
         error: null
       });
 
-      const ambiguousText = visibleSummary.ambiguousLive
-        ? ` ${visibleSummary.ambiguousLive} belirsiz kayit audit listesinde.${visibleSummary.orientationUnknown ? ` ${visibleSummary.orientationUnknown} adedi yon belirsiz.` : ''}`
+      const unresolvedCount = (visibleSummary.ambiguousLive || 0) + (visibleSummary.unmatched || 0) + (visibleSummary.dead || 0);
+      const ambiguousText = unresolvedCount > 0
+        ? ` Çözümlenemeyen kayıt: ${unresolvedCount} (Aday çakışması: ${visibleSummary.ambiguousLive || 0}, Yön belirsiz: ${visibleSummary.orientationUnknown || 0}, Kaynak eksik: ${visibleSummary.unmatched || 0}, Geçersiz/eski veri: ${visibleSummary.dead || 0})`
         : '';
       setScadaStatusMessage(
         `SCADA verisi guncellendi (${scope.modeLabel}).${ambiguousText}`,

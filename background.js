@@ -3810,7 +3810,7 @@ async function fetchChartData(config, authMode, usedFallback) {
       invalidateSupersetCsrfToken(config.baseUrl);
       return {
         ok: false,
-        error: `SCADA chart auth hatasi (${response.status}).`,
+        error: `SCADA verisi alınamadı: yetkilendirme hatası (${response.status}).`,
         errorType: 'AUTH_REQUIRED',
         httpStatus: response.status,
         authMode,

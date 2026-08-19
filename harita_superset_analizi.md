@@ -13,33 +13,26 @@ Kullanıcı eklenti menüsündeki (popup) "Harita Göster" butonuna tıkladığ�
 
 ## 3. Superset'ten Veri Çekme Akışı (Data Flow)
 
-Haritadaki verilerin güncellenmesi ve Superset'e bağlanılması scada-v2-runtime.js ve arkaplan (background) servisi üzerinden gerçekleştirilir. Süreç şu şekilde ilerler:
-
 1. **İstekte Bulunma (scada-v2-runtime.js):**
-   Zamanlanmış (auto-refresh) veya manuel tetiklenen güncellemeler scadaDoFetch fonksiyonuyla başlar. Bu fonksiyon eklentinin arkaplan servisine chrome.runtime.sendMessage({ type: 'SCADA_FETCH', payload: ... }) ile mesaj gönderir. Eklentilerde dış kaynaklara doğrudan istek atmak yerine işlem arkaplan servis çalışanına (background worker) devredilir.
+   Zamanlanmış (auto-refresh) veya manuel tetiklenen güncellemeler scadaDoFetch fonksiyonuyla başlar. Bu fonksiyon eklentinin arkaplan servisine chrome.runtime.sendMessage({ type: 'SCADA_FETCH', payload: ... }) ile mesaj gönderir. Eklentilerde dış kaynaklara doğrudan istek atmak yerine işlem arkaplan servis çalışanına devredilir.
 
 2. **Arkaplan İşlemleri (background.js):**
    Arkaplan dosyası gelen isteği yakalar ve handleScadaFetch fonksiyonuna yönlendirir.
-   - **Yetkilendirme (CSRF Token):** Superset API'si kimlik doğrulama gerektirir. İstek öncesinde getSupersetCsrfToken fonksiyonu ile /api/v1/security/csrf_token/ uç noktasına gidilerek güncel bir CSRF token alınır. Ayrıca /api/v1/me uç noktası kullanılarak oturumun geçerliliği alidateSupersetSession ile test edilir. Bu adımdaki kimlik bilgileri diagnosticUser ile saklanır.
-   - **Veri Çekme (Fetch):** Kimlik doğrulama başarılı olduğunda, uildChartPayload kullanılarak sorgu yapısı oluşturulur. Ardından /api/v1/chart/data?dashboard_id=&force=true adresine POST isteği atılır. Bu aşamada V2 haritası varsayılan olarak kvFilters ve 	earFilters kısıtlamalarını göndermez.
+   - **Yetkilendirme (CSRF Token) ve 401 Retry:** İstek öncesinde güncel bir CSRF token alınır ve session doğrulanır. Eğer POST /api/v1/chart/data isteğinde 401 (Unauthorized) hatası alınırsa, sistem token'ı iptal ederek mevcut oturumu bir kez daha doğrular ve (başarılıysa) otomatik 1 defalık session-retry dener. Bu mekanizma geçici session düşmelerinde kullanıcıyı rahatsız etmeden toparlar.
+   - **Query Builder Birleştirmesi:** ackground.js içerisinde bulunan kopya fallback query implementation silinmiştir. Tüm sorgu oluşturma işlemleri deterministik bir şekilde SCADA_COMMON.buildChartPayload üzerinden yapılır (kvFilters ve 	earFilters gönderilmemişse boş bırakılır).
 
 3. **Verinin İşlenmesi ve Görselleştirilmesi:**
-   - ackground.js'den dönen JSON verisi scada-v2-runtime.js'e iletilir.
-   - scada-common.js içindeki 
-ormalizeMetricRows fonksiyonu ile Superset veri dizisi taranarak (deterministik parser kullanılarak) ölçüm ID'lerine göre gruplanır.
-   - esolveHatMetricByTolerance fonksiyonu, ölçüm adaylarını (candidate resolution) değerlendirir. 	olerance-primary yöntemi kullanılarak birincil (primary) aday tercih edilir. Önceden kullanılan ortalama alma (tolerance-mean) yöntemi iptal edilerek Superset'teki orijinal sourceValue değeri korunur.
-   - İşlenen veriler ctive.sourceValue (Superset'ten alınan gerçek değer) ve ctive.flowValue (haritadaki yön/polarizasyon hesaplarında kullanılan değer) olarak birbirinden ayrılır.
-   - İşlem sonrasında değerler, haritada CANLI veya ÖNBELLEK olduğu ayırt edilerek gösterilir.
-   - Timestamp'ler üzerinde otomatik saat çıkarma işlemi yapılmadan, awTimestampString korunarak deterministik bir şekilde ele alınır.
+   - **Composite Key ve Parser:** Superset'ten dönen yanıt (json.result[0].data ile deterministik şekilde alınır) scada-common.js içindeki 
+ormalizeMetricEntries tarafından işlenir. Ölçümler birbirini ezmemesi için sinsid|elementName (örn. 123|P) composite anahtarıyla tutulur.
+   - **Saat Farkı (Zaman Dilimi) Düzeltmesi:** Superset'ten gelen 2026-08-19T22:35:00.000Z şeklindeki UTC etiketli ancak aslında yerel (TR) saati ifade eden ham verilerdeki Z (Zulu) karakteri parseSupersetScadaTimestamp fonksiyonu ile kırpılır. Böylece +3 saat kayması önlenir ve Harita saati Superset saati ile birebir aynı kalır.
+   - **Aday Çözümü (Tolerance-Primary):** esolveHatMetricByTolerance içerisindeki ölçüm adayı seçim mantığı, candidateSlotRank kullanılarak deterministik hale getirilmiştir (Primary > Secondary > Yeni Timestamp > ID alfabetik sıralama). Tesadüfi entries[0] kullanımı kaldırılmıştır.
+   - **Superset Ham Değer / Harita Akış Değeri Ayrımı:** Harita UI'ında, polarizasyon işlemi uygulanmış yönlü akış değeri (Harita Akış Değeri) ile Superset'ten gelen işlenmemiş orijinal değer (Superset Kaynak Değeri) tamamen ayrılmıştır ve kullanıcının görebileceği şekilde kartlara yansıtılmıştır.
+   - **Cache / Canlı Gösterimi:** Kullanıcının hangi veriye baktığını netleştirmek için SCADA yenileme mesajlarına (Canlı — 12 sn önce) veya (Önbellek — 6 dk eski) şeklinde doğrudan UI bildirimleri eklenmiştir.
+   - **Belirsiz Kayıtlar:** Daha önce toplu gösterilen belirsiz kayıt mesajı, UI üzerinde (Aday çakışması, Yön belirsiz, Kaynak eksik vb.) olarak detaylandırılmıştır.
 
-## 4. Query Builder Birleştirmesi
-Daha önce ackground.js ve scada-common.js'de tekrarlanan uildChartPayload sorgu yapılandırması tekilleştirilmiştir. Artık ackground.js de SCADA_COMMON.buildChartPayload kullanarak tek source-of-truth ilkesine uymaktadır.
+## 4. Güvenlik İyileştirmeleri (Credential Gate)
+data/scada_auth.json içerisindeki hassas yetki bilgileri uild-extension.ps1'deki denetim bloğu ile build/dist ZIP dosyasının içine girmesi kesin olarak engellenmiştir (Secret Scan).
 
-## 5. Güvenlik İyileştirmeleri (Credential Gate)
-data/scada_auth.json içerisindeki hassas yetki bilgileri uild-extension.ps1'deki bir denetim bloğu ile build/dist ZIP dosyasının içine girmesi kesin olarak engellenmiştir. Örnek bir data/scada_auth.example.json oluşturulmuştur.
-Not: Eklenti manifestosundaki <all_urls> izni, TPYS ve RGDH modüllerine bağlı sebeplerden ötürü şu an için daraltılmamış, bir güvenlik borcu olarak değerlendirilmiştir.
-
-## 6. Doğrulama Durumu (Superset Parity)
-- Kod ve fixture düzeyinde Superset parity (veri eşitliği) sorunları (tolerance-mean hatası, source/flow ayrımı vb.) çözülmüştür.
-- Koddaki Query Contract'ta MAX(__time) ve AVG(maxValue) yapısı mevcuttur. Ancak canlı Superset bağlantısına ulaşılamadığı için, Chart 454 üzerindeki canlı query sözleşmesi doğrudan **doğrulanamamıştır**.
-
+## 5. Doğrulama Durumu (Superset Parity)
+- Kod düzeyindeki düzeltmeler (saat farkı, composite key id uyuşmazlıkları, akış ayrımı vb.) tamamlanmıştır.
+- Canlı Superset (Chart 454) doğrulaması agent tarafından yapılamadığından, hazırlanan yeni build kullanılarak **manuel doğrulama kullanıcı tarafından yapılacaktır**.

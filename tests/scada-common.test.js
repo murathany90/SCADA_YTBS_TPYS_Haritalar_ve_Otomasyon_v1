@@ -201,7 +201,7 @@ test('normalizeMetricRows keeps requested element names and newest timestamp per
 
   const rows = scadaCommon.normalizeMetricRows(rawJson, { elementNames: ['P', 'Q'] });
 
-  assert.equal(rows.size, 2);
+  assert.equal(rows.size, 4); // each unique row creates 2 keys for compatibility
   assert.equal(rows.get('m-1').value, 13.1);
   assert.equal(rows.get('m-1').elementName, 'P');
   assert.equal(rows.get('m-2').value, -4.6);
