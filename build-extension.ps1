@@ -5,131 +5,68 @@ $extensionRoot = Join-Path $dist 'chrome-extension'
 $manifestPath = Join-Path $root 'manifest.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 function Get-SafeArtifactName([string]$value) {
-  if ([string]::IsNullOrWhiteSpace($value)) {
-    $safe = 'chrome-extension'
-  } else {
-    $safe = $value.Trim()
-  }
+  if ([string]::IsNullOrWhiteSpace($value)) { $safe = 'chrome-extension' } else { $safe = $value.Trim() }
   $safe = $safe -replace '[\\/:*?"<>|]+', ' '
   $safe = $safe -replace '\s+', ' '
-  $safe = $safe.Trim()
-  $safe = $safe -replace ' ', '_'
+  $safe = $safe.Trim() -replace ' ', '_'
   return $safe
 }
 $extensionName = Get-SafeArtifactName $manifest.name
-if ([string]::IsNullOrWhiteSpace([string]$manifest.version)) {
-  $extensionVersion = '0.0.0'
-} else {
-  $extensionVersion = [string]$manifest.version
-}
+if ([string]::IsNullOrWhiteSpace([string]$manifest.version)) { $extensionVersion = '0.0.0' } else { $extensionVersion = [string]$manifest.version }
 $buildDate = Get-Date -Format 'yyyyMMdd_HHmmss'
 $zipFileName = '{0}_v{1}_{2}.zip' -f $extensionName, $extensionVersion, $buildDate
 $zipPath = Join-Path $dist $zipFileName
 $files = @(
-  'manifest.json',
-  'background.js',
-  'dashboard-controller.js',
-  'content-script.js',
-  'tpys-csv-automation-core.js',
-  'tpys-csv-standardizer.js',
-  'tpys-csv-planner.js',
-  'popup.html',
-  'popup.css',
-  'tpys-periodic-rgdh-planner.js',
-  'tpys-extjs-main-apply.js',
-  'popup.js',
-  'dashboard-settings.html',
-  'dashboard-settings.css',
-  'dashboard-settings.js',
-  'rgdh-monitor.html',
-  'rgdh-monitor.css',
-  'rgdh-monitor.js',
-  'rgdh-api-client.js',
-  'rgdh-normalizer.js',
-  'rgdh-pivot.js',
-  'rgdh-reactive-engine.js',
-  'rgdh-comparison.js',
-  'rgdh-charts.js',
-  'rgdh-raw-pagination.js',
-  'rgdh-local-ekc-loader.js',
-  'rgdh-csv.js',
-  'rgdh-storage.js',
-  'rgdh-dom-bridge.js',
-  'rgdh-diagnostics.js',
-  'rgdh-catalog-data.js',
-  'rgdh-auxiliary-catalog.js',
-  'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_v2.csv',
-  'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv',
-  'yks-rgdh-instrumentation.js',
-  'yks-rgdh-diagnostic-bridge.js',
-  'map.html',
-  'map.css',
-  'map.js',
-  'map-common.js',
-  'map-modern.html',
-  'map-modern.css',
-  'map-modern.js',
-  'map-v2-runtime.js',
-  'scada-common.js',
-  'scada-client.js',
-  'scada-flow.js',
-  'scada-v2-runtime.js'
+  'manifest.json', 'background.js', 'dashboard-controller.js', 'content-script.js', 'tpys-csv-automation-core.js',
+  'tpys-csv-standardizer.js', 'tpys-csv-planner.js', 'popup.html', 'popup.css', 'tpys-periodic-rgdh-planner.js',
+  'tpys-extjs-main-apply.js', 'popup.js', 'dashboard-settings.html', 'dashboard-settings.css', 'dashboard-settings.js',
+  'rgdh-monitor.html', 'rgdh-monitor.css', 'rgdh-monitor.js', 'rgdh-api-client.js', 'rgdh-normalizer.js',
+  'rgdh-pivot.js', 'rgdh-reactive-engine.js', 'rgdh-comparison.js', 'rgdh-charts.js', 'rgdh-raw-pagination.js',
+  'rgdh-local-ekc-loader.js', 'rgdh-csv.js', 'rgdh-storage.js', 'rgdh-dom-bridge.js', 'rgdh-diagnostics.js',
+  'rgdh-catalog-data.js', 'rgdh-auxiliary-catalog.js', 'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_v2.csv',
+  'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv', 'yks-rgdh-instrumentation.js', 'yks-rgdh-diagnostic-bridge.js',
+  'map.html', 'map.css', 'map.js', 'map-common.js', 'map-modern.html', 'map-modern.css', 'map-modern.js',
+  'map-v2-runtime.js', 'scada-common.js', 'scada-client.js', 'scada-flow.js', 'scada-v2-runtime.js'
 )
-$directories = @(
-  'data',
-  'lib'
-)
-if (Test-Path -LiteralPath $extensionRoot) {
-  Remove-Item -LiteralPath $extensionRoot -Recurse -Force
-}
+$directories = @('data', 'lib')
+if (Test-Path -LiteralPath $extensionRoot) { Remove-Item -LiteralPath $extensionRoot -Recurse -Force }
 New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
 foreach ($relativePath in $files) {
   $sourcePath = Join-Path $root $relativePath
   $targetPath = Join-Path $extensionRoot $relativePath
   $targetDirectory = Split-Path -Parent $targetPath
-  if (-not (Test-Path -LiteralPath $targetDirectory)) {
-    New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
-  }
+  if (-not (Test-Path -LiteralPath $targetDirectory)) { New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null }
   Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
 }
 foreach ($relativePath in $directories) {
   $sourcePath = Join-Path $root $relativePath
   Copy-Item -LiteralPath $sourcePath -Destination $extensionRoot -Recurse -Force
 }
-# Secret gate: remove scada_auth.json from staging to prevent credential leak
-$secretFiles = @('data/scada_auth.json', 'data\scada_auth.json')
-foreach ($secretRelPath in $secretFiles) {
-  $secretPath = Join-Path $extensionRoot $secretRelPath
-  if (Test-Path -LiteralPath $secretPath) {
-    Remove-Item -LiteralPath $secretPath -Force
-    Write-Output "[SECURITY] Removed secret file from staging: $secretRelPath"
-  }
+
+$authSource = Join-Path $root 'data\scada_auth.json'
+if (-not (Test-Path -LiteralPath $authSource)) { throw "SCADA build hatasi: data/scada_auth.json bulunamadi." }
+$authConfig = Get-Content -LiteralPath $authSource -Raw | ConvertFrom-Json
+if (-not $authConfig.enabled) { throw "SCADA build hatasi: scada_auth.json enabled=true olmali." }
+if ([string]::IsNullOrWhiteSpace([string]$authConfig.username) -or [string]::IsNullOrWhiteSpace([string]$authConfig.password)) {
+    throw "SCADA build hatasi: Superset kullanici adi veya parola bos."
 }
-$reservedPaths = Get-ChildItem -LiteralPath $extensionRoot -Recurse -Force -File |
-  Where-Object { $_.Name.StartsWith('_') -and -not $_.Name.EndsWith('.csv') } |
-  Select-Object -ExpandProperty FullName
-if ($reservedPaths) {
-  throw "Chrome reserved path bulundu:`n$($reservedPaths -join "`n")"
-}
-if (Test-Path -LiteralPath $zipPath) {
-  Remove-Item -LiteralPath $zipPath -Force
-}
+Write-Output "[OK] SCADA yerel kimlik dosyasi pakete eklendi."
+
+$reservedPaths = Get-ChildItem -LiteralPath $extensionRoot -Recurse -Force -File | Where-Object { $_.Name.StartsWith('_') -and -not $_.Name.EndsWith('.csv') } | Select-Object -ExpandProperty FullName
+if ($reservedPaths) { throw "Chrome reserved path bulundu:`n$($reservedPaths -join "`n")" }
+if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 Compress-Archive -Path (Join-Path $extensionRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
 Write-Output "[OK] Unpacked: $extensionRoot"
-Write-Output "[OK] Zip: $zipPath"
-# Post-build secret verification
+
 $zipCheck = $false
 try {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
   $secretInZip = $zipArchive.Entries | Where-Object { $_.FullName -like '*scada_auth.json' }
   $zipArchive.Dispose()
-  if ($secretInZip) {
-    Remove-Item -LiteralPath $zipPath -Force
-    throw "[SECURITY FAIL] ZIP contains credential file: $($secretInZip.FullName). Build aborted and ZIP deleted."
-  }
+  if (-not $secretInZip) { throw "[FAIL] ZIP MUST contain credential file for local build." }
   $zipCheck = $true
 } catch {
   if (-not $zipCheck) { throw $_ }
 }
-Write-Output "[OK] Secret scan: PASS"
+Write-Output "[OK] Zip: $zipPath"

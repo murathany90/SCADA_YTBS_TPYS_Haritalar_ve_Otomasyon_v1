@@ -3634,41 +3634,26 @@ async function rgdhPageFetchMainWorld(request) {
   }
 }
 
-async function handleScadaFetch(payload) {
-  if (payload?.mockData) {
-    return {
-      ok: true,
-      data: payload.mockData,
-      authMode: 'mock',
-      usedFallback: false,
-      httpStatus: 200
-    };
-  }
-
-  const authConfig = await loadScadaAuthConfig();
-  const transport = buildScadaTransport(payload, authConfig);
-  const sessionAttempt = await fetchChartData(transport, 'session', false);
-  if (sessionAttempt.ok || !sessionAttempt.shouldRetryAuth) {
-    return sessionAttempt;
-  }
-
-  if (!authConfig.enabled || !authConfig.username || !authConfig.password) {
-    return sessionAttempt;
-  }
-
+async function executeAuthWrapper(authConfig, batchPayload, timeoutMs) {
+  const transport = buildScadaTransport(batchPayload, authConfig);
+  const sessionAttempt = await fetchChartData(transport, 'session', false, timeoutMs);
+  if (sessionAttempt.ok || !sessionAttempt.shouldRetryAuth) return sessionAttempt;
+  
+  if (!authConfig.enabled || !authConfig.username || !authConfig.password) return sessionAttempt;
+  
   const directLogin = await tryDirectLogin(authConfig);
   if (directLogin.ok) {
     invalidateSupersetCsrfToken(authConfig.baseUrl);
-    const directAttempt = await fetchChartData(transport, 'direct-login', false);
+    const directAttempt = await fetchChartData(transport, 'direct-login', false, timeoutMs);
     if (directAttempt.ok || !directAttempt.shouldRetryAuth) return directAttempt;
   }
-
+  
   const hiddenTabLogin = await tryHiddenTabLogin(authConfig);
   if (hiddenTabLogin.ok) {
     invalidateSupersetCsrfToken(authConfig.baseUrl);
-    return fetchChartData(transport, 'hidden-tab', true);
+    return fetchChartData(transport, 'hidden-tab', true, timeoutMs);
   }
-
+  
   return {
     ok: false,
     error: hiddenTabLogin.error || directLogin.error || sessionAttempt.error || 'SCADA auth yenilenemedi.',
@@ -3677,6 +3662,84 @@ async function handleScadaFetch(payload) {
     authMode: 'hidden-tab',
     usedFallback: true
   };
+}
+
+async function handleScadaFetch(payload) {
+  if (payload?.mockData) return { ok: true, data: payload.mockData, authMode: 'mock', usedFallback: false, httpStatus: 200 };
+
+  const authConfig = await loadScadaAuthConfig();
+  const mIds = Array.isArray(payload.measurementIds) ? payload.measurementIds : [];
+  const batchSize = (globalThis.SCADA_COMMON?.CONFIG?.LIVE_BATCH_SIZE) || 200;
+  const maxConcurrency = (globalThis.SCADA_COMMON?.CONFIG?.LIVE_MAX_CONCURRENCY) || 3;
+  const timeoutMs = (globalThis.SCADA_COMMON?.CONFIG?.LIVE_FETCH_TIMEOUT_MS) || 15000;
+  
+  const chunks = [];
+  for (let i = 0; i < mIds.length; i += batchSize) {
+    chunks.push(mIds.slice(i, i + batchSize));
+  }
+  if (!chunks.length) chunks.push([]);
+
+  let successfulBatchCount = 0;
+  let failedBatchCount = 0;
+  let allDataRows = [];
+  let lastAuthMode = 'session';
+  let lastError = null;
+  let lastErrorType = null;
+
+  const firstChunk = chunks.shift();
+  const firstPayload = { ...payload, measurementIds: firstChunk, chartPayload: null };
+  const firstResult = await executeAuthWrapper(authConfig, firstPayload, timeoutMs);
+  
+  if (firstResult.ok) {
+    successfulBatchCount++;
+    lastAuthMode = firstResult.authMode;
+    if (firstResult.data && globalThis.SCADA_COMMON?.findDataArray) {
+       const rows = globalThis.SCADA_COMMON.findDataArray(firstResult.data);
+       if (Array.isArray(rows)) allDataRows.push(...rows);
+    }
+  } else {
+    failedBatchCount++;
+    lastError = firstResult.error;
+    lastErrorType = firstResult.errorType;
+    if (firstResult.shouldRetryAuth) return firstResult;
+  }
+  
+  for (let i = 0; i < chunks.length; i += maxConcurrency) {
+    const activeTasks = chunks.slice(i, i + maxConcurrency).map(chunk => {
+       const chunkPayload = { ...payload, measurementIds: chunk, chartPayload: null };
+       return executeAuthWrapper(authConfig, chunkPayload, timeoutMs);
+    });
+    const batchResults = await Promise.all(activeTasks);
+    for (const r of batchResults) {
+      if (r.ok) {
+        successfulBatchCount++;
+        if (r.data && globalThis.SCADA_COMMON?.findDataArray) {
+           const rows = globalThis.SCADA_COMMON.findDataArray(r.data);
+           if (Array.isArray(rows)) allDataRows.push(...rows);
+        }
+      } else {
+        failedBatchCount++;
+        lastError = r.error;
+        lastErrorType = r.errorType;
+      }
+    }
+  }
+  
+  const hasPartialSuccess = successfulBatchCount > 0 && failedBatchCount > 0;
+  if (successfulBatchCount > 0) {
+    return { ok: true, partialFailure: hasPartialSuccess, successfulBatchCount, failedBatchCount, data: { result: [{ data: allDataRows }] }, authMode: lastAuthMode, usedFallback: false, httpStatus: 200 };
+  }
+  return { ok: false, error: lastError || 'SCADA fetch failed', errorType: lastErrorType || 'FETCH_ERROR', authMode: lastAuthMode, successfulBatchCount, failedBatchCount };
+}
+
+async function handleScadaHistoryFetch(payload) {
+  const authConfig = await loadScadaAuthConfig();
+  const timeoutMs = (globalThis.SCADA_COMMON?.CONFIG?.HISTORY_FETCH_TIMEOUT_MS) || 25000;
+  const historyPayload = { ...payload, chartPayload: null };
+  if (globalThis.SCADA_COMMON?.buildHistoryPayload) {
+     historyPayload.chartPayload = globalThis.SCADA_COMMON.buildHistoryPayload(historyPayload);
+  }
+  return executeAuthWrapper(authConfig, historyPayload, timeoutMs);
 }
 
 function serializeScadaBackgroundRows(rowsByMeasurementId) {
@@ -3905,14 +3968,18 @@ function invalidateSupersetCsrfToken(baseUrl) {
 async function loadScadaAuthConfig() {
   try {
     const response = await fetch(chrome.runtime.getURL(SCADA_AUTH_CONFIG_PATH));
-    if (!response.ok) return { ...SCADA_DEFAULTS };
+    if (!response.ok) {
+      console.warn('SCADA kimlik dosyasi bulunamadi. Mevcut Superset oturumu kullanilacak.');
+      return { ...SCADA_DEFAULTS };
+    }
     const json = await response.json();
     return {
       ...SCADA_DEFAULTS,
       ...json,
       baseUrl: normalizeBaseUrl(json?.baseUrl || SCADA_DEFAULTS.baseUrl)
     };
-  } catch {
+  } catch (err) {
+    console.warn('SCADA kimlik dosyasi okunamadi. Mevcut Superset oturumu kullanilacak.', err);
     return { ...SCADA_DEFAULTS };
   }
 }
