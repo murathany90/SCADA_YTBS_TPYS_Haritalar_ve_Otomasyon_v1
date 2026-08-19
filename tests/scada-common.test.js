@@ -253,3 +253,24 @@ test('computeAuditReport classifies visible hats by mismatch reason', () => {
   assert.equal(report.rows.find((row) => row.hatId === 'missing-id').status, 'missing-active-id');
   assert.equal(report.rows.find((row) => row.hatId === 'missing-source').status, 'missing-source-row');
 });
+
+test('buildChartPayload with empty kvFilters and tearFilters retains empty arrays and does not use defaults', () => {
+  const payload = scadaCommon.buildChartPayload({
+    chartSliceId: 454,
+    datasourceId: 3,
+    kvFilters: [],
+    tearFilters: [],
+    elementNames: ['P'],
+    measurementIds: ['123', '456']
+  });
+
+  const filters = payload.queries[0].filters;
+  const adhocFilters = payload.form_data.adhoc_filters;
+
+  // Should not contain b2Name (kv) or tear filters
+  assert.equal(filters.some(f => f.col === 'b2Name'), false);
+  assert.equal(filters.some(f => f.col === 'tear'), false);
+
+  assert.equal(adhocFilters.some(f => f.subject === 'b2Name'), false);
+  assert.equal(adhocFilters.some(f => f.subject === 'tear'), false);
+});

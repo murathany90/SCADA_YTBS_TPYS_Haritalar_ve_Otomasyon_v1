@@ -113,6 +113,15 @@
 
   function findDataArray(obj, seen) {
     if (!obj || typeof obj !== 'object') return null;
+    // Deterministic path: prefer Superset standard response schema result[0].data
+    if (Array.isArray(obj.result) && obj.result.length > 0) {
+      const firstResult = obj.result[0];
+      if (firstResult && Array.isArray(firstResult.data) && firstResult.data.length && typeof firstResult.data[0] === 'object') {
+        const row = firstResult.data[0];
+        if ('sinsid' in row || 'elementName' in row) return firstResult.data;
+      }
+    }
+    // Fallback: recursive search for backward compatibility
     seen = seen || new WeakSet();
     if (seen.has(obj)) return null;
     seen.add(obj);
@@ -138,12 +147,8 @@
     if (!rawValue) return null;
     const timestamp = new Date(rawValue);
     if (Number.isNaN(timestamp.getTime())) return null;
-    const currentMs = Number.isFinite(nowMs) ? nowMs : Date.now();
-    const diffMs = timestamp.getTime() - currentMs;
-    if (diffMs > 5 * 60 * 1000) {
-      const hoursAhead = Math.round(diffMs / 3600000);
-      return new Date(timestamp.getTime() - hoursAhead * 3600000);
-    }
+    // No longer silently subtract hours from "future" timestamps.
+    // Raw timestamp string is preserved; callers can use rawTimestampString for diagnostics.
     return timestamp;
   }
 

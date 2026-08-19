@@ -556,7 +556,7 @@
     const variants = new Set();
     const compact = compactAlias(value);
     if (compact) variants.add(compact);
-    const rawParts = String(value || '').split(/[^0-9A-Za-zçğıöşüÇĞİÖŞÜ]+/);
+    const rawParts = String(value || '').split(/[^0-9A-Za-zÃ§ÄŸÄ±Ã¶ÅŸÃ¼Ã‡ÄÄ°Ã–ÅÃœ]+/);
     const normalizedParts = String(normalizeText(value || '') || '').split(/[^0-9a-zA-Z]+/);
     [...rawParts, ...normalizedParts].forEach((part) => {
       const token = compactAlias(part);
@@ -991,8 +991,8 @@
         return capacityFiltered ? 'Kapasite filtresini gecen en yeni aday secildi.' : 'En yeni aday secildi.';
       case 'same-value':
         return 'Adaylar ayni degeri verdigi icin secildi.';
-      case 'tolerance-mean':
-        return 'Adaylar tolerans icinde oldugu icin ortalama deger kullanildi.';
+      case 'tolerance-primary':
+        return 'Adaylar tolerans icinde oldugu icin primary aday secildi.';
       case 'primary-conflict':
         return 'Adaylar tolerans disi oldugu icin primary/start adayi tercih edildi.';
       case 'invalid-value':
@@ -1038,19 +1038,21 @@
     const minValue = Math.min(...values);
     const maxValue = Math.max(...values);
     if ((maxValue - minValue) > getHatResolutionTolerance(entity)) return null;
-    const meanValue = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const candidateMean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const primary = entries[0];
     return finalizeResolvedHatEntry({
-      ...entries[0],
-      normalizedValue: meanValue,
-      directionValue: meanValue,
-      loadingHintValue: Math.abs(meanValue)
+      ...primary,
+      normalizedValue: primary.normalizedValue,
+      directionValue: primary.directionValue != null ? primary.directionValue : primary.normalizedValue,
+      loadingHintValue: Math.abs(primary.normalizedValue),
+      candidateMean
     }, {
       entries,
       sourceAmbiguous: false,
       unresolved: false,
       resolvedFromMultiple: entries.length > 1,
-      resolutionMethod: 'tolerance-mean',
-      selectedCandidateReason: getHatSelectionReason('tolerance-mean')
+      resolutionMethod: 'tolerance-primary',
+      selectedCandidateReason: getHatSelectionReason('tolerance-primary')
     });
   }
 
@@ -2211,6 +2213,8 @@
 
       const visibleSummary = applyGenericScadaSnapshot(rowsByMeasurementId, scope);
       state.scada.lastFetchAt = new Date();
+      state.scada.sourceKind = 'live';
+      state.scada.snapshotAt = null;
       const finishedAt = new Date();
       updateScadaFetchMeta({
         status: 'success',
@@ -2859,7 +2863,7 @@
             <p class="info-kicker">SCADA Grafik</p>
             <h3>${escapeHtml(hatName || hat?.name || '-')}</h3>
           </div>
-          <button id="btnCloseScadaChart" class="info-close" title="Kapat">×</button>
+          <button id="btnCloseScadaChart" class="info-close" title="Kapat">Ã—</button>
         </div>
         <div class="scada-chart-body">
           ${chartHtml || '<div class="scada-chart-empty">Grafik icin yeterli gecmis veri yok.</div>'}
@@ -3247,7 +3251,7 @@
         <div class="ranking-header-left">
           <span>SCADA Paneli</span>
         </div>
-        <button id="btnRankingClose">×</button>
+        <button id="btnRankingClose">Ã—</button>
       </div>
       <div class="ranking-entity-tabs">
         <button type="button" data-entity-filter="hat">Hatlar</button>
@@ -3865,7 +3869,7 @@
           </div>
           <div class="info-actions">
             <button id="btnExportAuditFromModal" class="secondary">Denetim CSV</button>
-            <button id="btnCloseScadaAudit" class="info-close" title="Kapat">×</button>
+            <button id="btnCloseScadaAudit" class="info-close" title="Kapat">Ã—</button>
           </div>
         </div>
         <div class="scada-audit-summary">

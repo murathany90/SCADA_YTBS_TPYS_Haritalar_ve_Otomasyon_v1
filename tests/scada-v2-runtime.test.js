@@ -157,7 +157,10 @@ test('resolveHatMetric tolerates close same-timestamp dual terminal values', () 
   assert.equal(resolved.sourceAmbiguous, false);
   assert.equal(resolved.resolvedFromMultiple, true);
   assert.equal(resolved.measurementId, 'm-1,m-2');
-  assert.equal(Math.round(resolved.normalizedValue * 10) / 10, 104);
+  // After tolerance-primary fix: primary candidate value is kept, not mean
+  assert.equal(resolved.normalizedValue, 100);
+  assert.ok(Number.isFinite(resolved.candidateMean), 'candidateMean should be set as diagnostic');
+  assert.equal(Math.round(resolved.candidateMean * 10) / 10, 104);
   assert.equal(resolved.directionResolvedBy, 'terminal-exit-model');
   assert.equal(resolved.orientationMatch, 'forward');
 });

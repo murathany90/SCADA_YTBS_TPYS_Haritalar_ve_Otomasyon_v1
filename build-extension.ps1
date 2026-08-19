@@ -1,11 +1,9 @@
 $ErrorActionPreference = 'Stop'
-
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root 'dist'
 $extensionRoot = Join-Path $dist 'chrome-extension'
 $manifestPath = Join-Path $root 'manifest.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-
 function Get-SafeArtifactName([string]$value) {
   if ([string]::IsNullOrWhiteSpace($value)) {
     $safe = 'chrome-extension'
@@ -18,17 +16,15 @@ function Get-SafeArtifactName([string]$value) {
   $safe = $safe -replace ' ', '_'
   return $safe
 }
-
 $extensionName = Get-SafeArtifactName $manifest.name
 if ([string]::IsNullOrWhiteSpace([string]$manifest.version)) {
   $extensionVersion = '0.0.0'
 } else {
   $extensionVersion = [string]$manifest.version
 }
-$buildDate = Get-Date -Format 'yyyyMMdd'
+$buildDate = Get-Date -Format 'yyyyMMdd_HHmmss'
 $zipFileName = '{0}_v{1}_{2}.zip' -f $extensionName, $extensionVersion, $buildDate
 $zipPath = Join-Path $dist $zipFileName
-
 $files = @(
   'manifest.json',
   'background.js',
@@ -79,18 +75,14 @@ $files = @(
   'scada-flow.js',
   'scada-v2-runtime.js'
 )
-
 $directories = @(
   'data',
   'lib'
 )
-
 if (Test-Path -LiteralPath $extensionRoot) {
   Remove-Item -LiteralPath $extensionRoot -Recurse -Force
 }
-
 New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
-
 foreach ($relativePath in $files) {
   $sourcePath = Join-Path $root $relativePath
   $targetPath = Join-Path $extensionRoot $relativePath
@@ -100,25 +92,44 @@ foreach ($relativePath in $files) {
   }
   Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
 }
-
 foreach ($relativePath in $directories) {
   $sourcePath = Join-Path $root $relativePath
   Copy-Item -LiteralPath $sourcePath -Destination $extensionRoot -Recurse -Force
 }
-
+# Secret gate: remove scada_auth.json from staging to prevent credential leak
+$secretFiles = @('data/scada_auth.json', 'data\scada_auth.json')
+foreach ($secretRelPath in $secretFiles) {
+  $secretPath = Join-Path $extensionRoot $secretRelPath
+  if (Test-Path -LiteralPath $secretPath) {
+    Remove-Item -LiteralPath $secretPath -Force
+    Write-Output "[SECURITY] Removed secret file from staging: $secretRelPath"
+  }
+}
 $reservedPaths = Get-ChildItem -LiteralPath $extensionRoot -Recurse -Force -File |
   Where-Object { $_.Name.StartsWith('_') -and -not $_.Name.EndsWith('.csv') } |
   Select-Object -ExpandProperty FullName
-
 if ($reservedPaths) {
   throw "Chrome reserved path bulundu:`n$($reservedPaths -join "`n")"
 }
-
 if (Test-Path -LiteralPath $zipPath) {
   Remove-Item -LiteralPath $zipPath -Force
 }
-
 Compress-Archive -Path (Join-Path $extensionRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
-
 Write-Output "[OK] Unpacked: $extensionRoot"
 Write-Output "[OK] Zip: $zipPath"
+# Post-build secret verification
+$zipCheck = $false
+try {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+  $secretInZip = $zipArchive.Entries | Where-Object { $_.FullName -like '*scada_auth.json' }
+  $zipArchive.Dispose()
+  if ($secretInZip) {
+    Remove-Item -LiteralPath $zipPath -Force
+    throw "[SECURITY FAIL] ZIP contains credential file: $($secretInZip.FullName). Build aborted and ZIP deleted."
+  }
+  $zipCheck = $true
+} catch {
+  if (-not $zipCheck) { throw $_ }
+}
+Write-Output "[OK] Secret scan: PASS"
