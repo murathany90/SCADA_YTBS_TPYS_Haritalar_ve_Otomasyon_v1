@@ -242,13 +242,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message?.type === 'SCADA_FETCH') {
     handleScadaFetch(message.payload || {}).then(sendResponse).catch((error) => {
-      sendResponse({
-        ok: false,
-        error: error.message || String(error),
-        errorType: 'BACKGROUND_ERROR',
-        authMode: 'session',
-        usedFallback: false
-      });
+      sendResponse({ ok: false, error: error.message || String(error), errorType: 'BACKGROUND_ERROR', authMode: 'session', usedFallback: false });
+    });
+    return true;
+  }
+  if (message?.type === 'SCADA_HISTORY_FETCH') {
+    handleScadaHistoryFetch(message.payload || {}).then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, error: error.message || String(error), errorType: 'BACKGROUND_ERROR', authMode: 'session', usedFallback: false });
     });
     return true;
   }
@@ -3908,7 +3908,7 @@ async function fetchChartData(config, authMode, usedFallback, timeoutMs = 15000)
     return {
       ok: false,
       error: isTimeout
-        ? `SCADA chart fetch zaman asimina ugradi (${Math.round(SCADA_FETCH_TIMEOUT_MS / 1000)} sn).`
+        ? `SCADA chart fetch zaman asimina ugradi (${Math.round(timeoutMs / 1000)} sn).`
         : (error.message || String(error)),
       errorType: isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
       httpStatus: null,

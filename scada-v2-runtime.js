@@ -1871,8 +1871,8 @@
             chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
             datasourceId: SCADA_CONFIG.DATASOURCE_ID,
             timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
-            kvFilters: SCADA_CONFIG.QUERY_KV_FILTERS,
-            tearFilters: SCADA_CONFIG.QUERY_TEAR_FILTERS,
+            kvFilters: [],
+            tearFilters: [],
             elementNames: scope.elementNames,
             measurementIds: scope.measurementIds,
             rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, scope.measurementIds.length * 3 || 5000)
@@ -2177,9 +2177,9 @@
             chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
             datasourceId: SCADA_CONFIG.DATASOURCE_ID,
             timeRange: 'DATEADD(DATETIME("now"), -10, minute) : now',
-            kvFilters: SCADA_CONFIG.QUERY_KV_FILTERS || [],
-            tearFilters: SCADA_CONFIG.QUERY_TEAR_FILTERS || [],
-            elementNames: scope.elementNames || SCADA_CONFIG.QUERY_ELEMENT_NAMES,
+            kvFilters: [],
+            tearFilters: [],
+            elementNames: scope.elementNames,
             measurementIds: scope.measurementIds
           }
         });
@@ -2684,173 +2684,32 @@
       </div>
     `;
   }
-
-  function renderHatMeasurementCard(record) {
-    if (!record) return '';
-    const sections = [];
-    const renderRows = (title, metricRecord, unit) => {
-      const rows = Array.isArray(metricRecord?.candidateDetails) ? metricRecord.candidateDetails : [];
-      if (!rows.length) return '';
-      const selectedValue = metricRecord?.valueInvalid
-        ? '!'
-        : Number.isFinite(metricRecord?.value)
-          ? `${metricRecord.value >= 0 ? '+' : ''}${metricRecord.value.toFixed(2)} ${unit}`
-          : '-';
-      return `
-        <div class="technical-note-card">
-          <div class="technical-note-title">${escapeHtml(title)}</div>
-          <div class="technical-note-grid">
-            <div class="technical-note-item"><span>Secilen Olcum</span><strong>${escapeHtml(metricRecord?.measurementId || '-')}</strong></div>
-            <div class="technical-note-item"><span>Secilen Deger</span><strong>${escapeHtml(selectedValue)}</strong></div>
-            <div class="technical-note-item technical-note-item-wide"><span>Secim Nedeni</span><strong>${escapeHtml(metricRecord?.selectedCandidateReason || record.selectedCandidateReason || '-')}</strong></div>
-          </div>
-          <div class="technical-note-measurements">
-            ${rows.map((row) => {
-              const timeText = row.timestamp
-                ? `${row.timestamp.toLocaleDateString('tr-TR')} ${row.timestamp.toLocaleTimeString('tr-TR')}`
-                : '-';
-              const rawText = row.valueInvalid
-                ? '!'
-                : Number.isFinite(row.rawValue)
-                  ? `${row.rawValue >= 0 ? '+' : ''}${row.rawValue.toFixed(2)}`
-                  : '-';
-              const normalizedText = row.valueInvalid
-                ? '!'
-                : Number.isFinite(row.normalizedValue)
-                  ? `${row.normalizedValue >= 0 ? '+' : ''}${row.normalizedValue.toFixed(2)} ${unit}`
-                  : '-';
-              return `
-                <div class="technical-note-measurement-row${row.selected ? ' is-selected' : ''}">
-                  <div><span>Ölçüm Adresi</span><strong>${escapeHtml(row.measurementId || '-')}</strong></div>
-                  <div><span>Formül</span><strong>${escapeHtml(row.formulaRaw || '-')}</strong></div>
-                  <div><span>Superset Kaynak Değeri</span><strong>${escapeHtml(rawText)}</strong></div>
-                  <div><span>Harita Akış Değeri</span><strong>${escapeHtml(normalizedText)}</strong></div>
-                  <div><span>Superset Veri Zamanı</span><strong>${escapeHtml(timeText)}</strong></div>
-                  <div><span>Terminal Tarafı</span><strong>${escapeHtml(row.terminalSide || '-')}</strong></div>
-                  <div><span>Seçim Nedeni</span><strong>${escapeHtml(row.selectedCandidateReason || '-')}</strong></div>
-                  <div><span>Seçildi mi</span><strong>${row.selected ? 'Evet' : 'Hayır'}</strong></div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      `;
-    };
-    sections.push(renderRows('Aktif Guc Olcumleri', record.active, 'MW'));
-    sections.push(renderRows('Reaktif Guc Olcumleri', record.reactive, 'MVar'));
-    return sections.filter(Boolean).join('');
-  }
-
-  function buildHatPopupModel(hat) {
-    const record = state.scada.entityMetricsByKey.get(`hat:${hat.id}`);
-    const directionText = buildHatDirectionText(hat, record);
-    const pctLabel = record?.displayPctMode === 'reactive-ratio' ? 'MVar/MW Orani' : 'Yuklenme';
-    const pctValue = record?.invalidPct
-      ? '!'
-      : Number.isFinite(record?.displayPct)
-        ? `${record.displayPct.toFixed(1)}%`
-        : '-';
-    const compactFields = [
-      ['Uzunluk', formatNumber(hat.lengthKm, ' km')],
-      ['Kapasite', formatNumber(getCapacityMva('hat', hat), ' MVA')],
-      ['Aktif Guc (MW)', record?.active?.valueInvalid ? '!' : Number.isFinite(record?.active?.value) ? `${record.active.value >= 0 ? '+' : ''}${record.active.value.toFixed(1)}` : '-'],
-      ['Reaktif Guc (MVar)', record?.reactive?.valueInvalid ? '!' : Number.isFinite(record?.reactive?.value) ? `${record.reactive.value >= 0 ? '+' : ''}${record.reactive.value.toFixed(1)}` : '-'],
-      [pctLabel, pctValue],
-      ['Akis Yonu', directionText],
-      ['Olcum Zamani', record?.primaryTimestamp ? record.primaryTimestamp.toLocaleTimeString('tr-TR') : '-']
-    ];
-    const detailFields = [
-      ['Hat ID', hat.kmlDescriptionId || '-'],
-      ['YTM', (hat.ytmNames || []).join(' / ') || '-'],
-      ['Hat Kesit', formatKesit(hat.characteristic || '-')],
-      ['Aktif Olcum ID', record?.active?.measurementId || '-'],
-      ['Reaktif Olcum ID', record?.reactive?.measurementId || '-'],
-      ['Veri Durumu', record?.primaryStatusText || '-'],
-      ['Yon Cozumleme', record?.directionResolvedBy || '-'],
-      ['Alias Eslesme', record?.aliasMatchBasis || '-'],
-      ['Formula Sign', Number.isFinite(Number(record?.formulaSign)) ? String(record.formulaSign) : '-'],
-      ['Cozum Yontemi', record?.resolutionMethod || '-'],
-      ['Secim Nedeni', record?.selectedCandidateReason || '-'],
-      ['Terminal Tarafi', record?.terminalSide || '-'],
-      ['Polarizasyon', Number.isFinite(record?.polarizationSign) ? `${record.polarizationSign > 0 ? '+' : ''}${record.polarizationSign}` : '-'],
-      ['Polarizasyon Tutarliligi', record?.polarizationConsistent == null ? '-' : (record.polarizationConsistent ? 'Uyumlu' : 'Uyumsuz')],
-      ['Veri Durumu', record?.timeStateLabel || record?.primaryStatusText || '-'],
-      ['Veri Yasi', record?.ageLabel || '-']
-    ];
-    return {
-      title: hat.name,
-      subtitle: hat.kv ? `${hat.kv} kV Hat` : 'Hat',
-      tags: [(hat.ytmNames || []).join(' / ') || '-'],
-      compactFields,
-      detailFields,
-      detailExtraHtml: `${renderHatMeasurementCard(record)}${renderHatUncertaintyCard(record)}`
-    };
-  }
-
-  openScadaHatDetails = function (hat, options = {}) {
-    if (!hat) return;
-    state.selection = { kind: 'hat', id: hat.id, measureSourceId: '', measureTargetIds: [] };
-    const model = buildHatPopupModel(hat);
-    const anchorCoord = options.anchorCoord || getHatAnchorCoord(hat);
-    const expanded = typeof options.expanded === 'boolean'
-      ? options.expanded
-      : Boolean(state.ui.activeEntityPopup?.expanded && state.ui.activeEntityPopup?.entityId === hat.id);
-
-    showInfo({
-      title: model.title,
-      subtitle: model.subtitle,
-      tags: model.tags,
-      compactFields: model.compactFields,
-      detailFields: model.detailFields,
-      detailExtraHtml: model.detailExtraHtml,
-      actions: [{ id: 'btnShowScadaChart', label: 'Grafik Goster' }],
-      anchor: { hatId: hat.id, coord: anchorCoord },
-      expanded,
-      classes: ['hat-popup']
-    });
-
-    state.ui.activeEntityPopup = {
-      entityType: 'hat',
-      entityId: hat.id,
-      anchorCoord,
-      expanded,
-      screenPosition: null
-    };
-
-    const chartBtn = document.getElementById('btnShowScadaChart');
-    if (chartBtn) chartBtn.addEventListener('click', () => openScada24hHistory(`hat:${hat.id}`));
-    const toggleBtn = document.getElementById('btnToggleInfoDetails');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        openScadaHatDetails(hat, {
-          anchorCoord,
-          expanded: !expanded,
-          forceTiles: false
-        });
-      });
-    }
-
-    requestRender({ forceTiles: Boolean(options.forceTiles) });
+  closeScadaChartModal = function () {
+    const backdrop = document.getElementById('scadaChartModalBackdrop');
+    if (backdrop) backdrop.remove();
   };
 
-  openScada24hHistory = function (hatId, hatName) {
+  openScada24hHistory = async function (entityKey) {
     closeScadaChartModal();
-    const hat = state.network?.hatById?.get(String(hatId)) || state.network?.hatLines?.find((entry) => entry.id === hatId);
-    const chartHtml = buildDualSeriesChart(`hat:${hatId}`, hat, { width: 960, height: 360 });
+    const isHat = entityKey.startsWith('hat:');
+    const entityId = entityKey.split(':')[1];
+    const hat = isHat ? (state.network?.hatById?.get(String(entityId)) || state.network?.hatLines?.find((entry) => String(entry.id) === String(entityId))) : null;
+    const name = hat?.name || entityId;
+
     const backdrop = document.createElement('div');
     backdrop.id = 'scadaChartModalBackdrop';
     backdrop.className = 'scada-chart-backdrop';
     backdrop.innerHTML = `
-      <div class="scada-chart-modal" role="dialog" aria-modal="true" aria-label="SCADA grafik">
+      <div class="scada-chart-modal" role="dialog" aria-modal="true" aria-label="SCADA 24 Saat Grafik">
         <div class="scada-chart-header">
           <div>
-            <p class="info-kicker">SCADA Grafik</p>
-            <h3>${escapeHtml(hatName || hat?.name || '-')}</h3>
+            <p class="info-kicker">Son 24 Saat</p>
+            <h3>${escapeHtml(name)}</h3>
           </div>
-          <button id="btnCloseScadaChart" class="info-close" title="Kapat">Ã—</button>
+          <button id="btnCloseScadaChart" class="info-close" title="Kapat">X</button>
         </div>
-        <div class="scada-chart-body">
-          ${chartHtml || '<div class="scada-chart-empty">Grafik icin yeterli gecmis veri yok.</div>'}
+        <div class="scada-chart-body" id="scadaChartModalBody">
+          <div class="scada-chart-empty">Gecmis veri yukleniyor...</div>
         </div>
       </div>
     `;
@@ -2861,7 +2720,117 @@
     if (mapShell) mapShell.appendChild(backdrop);
     const closeBtn = document.getElementById('btnCloseScadaChart');
     if (closeBtn) closeBtn.addEventListener('click', closeScadaChartModal);
+
+    const mIds = new Set();
+    const entry = state.scada.entityMetricsByKey.get(entityKey);
+    if (entry) {
+      if (entry.supportingMeasurementIds?.length) {
+        entry.supportingMeasurementIds.forEach(id => mIds.add(id));
+      } else if (entry.measurementId) {
+        entry.measurementId.split(',').forEach(id => mIds.add(id));
+      }
+    }
+    
+    if (mIds.size === 0) {
+      document.getElementById('scadaChartModalBody').innerHTML = '<div class="scada-chart-empty">Veri alinamadi <button onclick="openScada24hHistory(\'' + entityKey + '\')">Yenile</button></div>';
+      return;
+    }
+
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'SCADA_HISTORY_FETCH',
+        payload: {
+          baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+          dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+          chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+          datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+          measurementIds: Array.from(mIds)
+        }
+      });
+
+      if (!result.ok || !result.data || !result.data.result || !result.data.result[0].data) {
+        throw new Error('Veri alinmadi');
+      }
+
+      const rows = result.data.result[0].data;
+      const term1Rows = [];
+      const term2Rows = [];
+      
+      const uniqueMIds = Array.from(mIds);
+      const mId1 = uniqueMIds[0];
+      const mId2 = uniqueMIds.length > 1 ? uniqueMIds[1] : null;
+
+      rows.forEach(row => {
+         const t = new Date(row.__time);
+         t.setHours(t.getHours() + 3);
+         const mw = typeof row.maxValue === 'number' ? row.maxValue : typeof row['MAX(value)'] === 'number' ? row['MAX(value)'] : row.AVG_maxValue;
+         const point = { ts: t, mw: Number(mw) };
+         if (String(row.sinsid) === String(mId1)) {
+            term1Rows.push(point);
+         } else if (mId2 && String(row.sinsid) === String(mId2)) {
+            term2Rows.push(point);
+         }
+      });
+
+      term1Rows.sort((a, b) => a.ts - b.ts);
+      term2Rows.sort((a, b) => a.ts - b.ts);
+
+      document.getElementById('scadaChartModalBody').innerHTML = buildSuperset24hChart(term1Rows, term2Rows, hat);
+    } catch (err) {
+      document.getElementById('scadaChartModalBody').innerHTML = '<div class="scada-chart-empty">Veri alinamadi <button onclick="openScada24hHistory(\'' + entityKey + '\')">Yenile</button></div>';
+    }
   };
+
+  function buildSuperset24hChart(term1, term2, hat) {
+    if (!term1.length && !term2.length) return '<div class="scada-chart-empty">Grafik icin yeterli gecmis veri yok.</div>';
+    const width = 960;
+    const height = 360;
+    const padL = 52;
+    const padR = 24;
+    const padT = 22;
+    const padB = 42;
+    const values = [...term1.map(p => p.mw), ...term2.map(p => p.mw)].filter((value) => Number.isFinite(value));
+    const maxAbs = Math.max(...values.map((value) => Math.abs(value)), 1);
+    const minY = -maxAbs;
+    const maxY = maxAbs;
+    const allTs = [...term1.map(p => p.ts.getTime()), ...term2.map(p => p.ts.getTime())];
+    const minTime = Math.min(...allTs);
+    const maxTime = Math.max(...allTs);
+    const timeSpan = maxTime - minTime || 1;
+    const toX = (timeMs) => padL + ((timeMs - minTime) / timeSpan) * (width - padL - padR);
+    const toY = (value) => padT + ((maxY - value) / (maxY - minY)) * (height - padT - padB);
+    const makePoints = (arr) => arr
+      .filter((point) => Number.isFinite(point.mw))
+      .map((point) => `${toX(point.ts.getTime()).toFixed(1)},${toY(point.mw).toFixed(1)}`)
+      .join(' ');
+
+    const t1Pts = makePoints(term1);
+    const t2Pts = makePoints(term2);
+    const zeroY = toY(0).toFixed(1);
+    const capacity = getCapacityMva('hat', hat);
+    const capY = Number.isFinite(capacity) ? toY(Math.min(capacity, maxY)).toFixed(1) : null;
+    
+    return `
+      <div class="scada-history-chart scada-history-chart-large">
+        <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" aria-label="scada-hat-grafigi">
+          <line x1="${padL}" y1="${zeroY}" x2="${width - padR}" y2="${zeroY}" stroke="var(--chart-grid)" stroke-width="1.2" />
+          ${capY != null ? `<line x1="${padL}" y1="${capY}" x2="${width - padR}" y2="${capY}" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.75" />` : ''}
+          ${t1Pts ? `<polyline points="${t1Pts}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
+          ${t2Pts ? `<polyline points="${t2Pts}" fill="none" stroke="#ef4444" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.8" />` : ''}
+          <text x="${padL}" y="${height - 12}" fill="var(--muted)" font-size="12">${new Date(minTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</text>
+          <text x="${width - padR}" y="${height - 12}" fill="var(--muted)" font-size="12" text-anchor="end">${new Date(maxTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</text>
+          <text x="${padL - 8}" y="${zeroY - 6}" fill="var(--muted)" font-size="11" text-anchor="end">0</text>
+          <text x="${padL - 8}" y="${padT + 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(maxAbs)}</text>
+          <text x="${padL - 8}" y="${height - padB + 6}" fill="var(--muted)" font-size="11" text-anchor="end">-${formatAxisNumber(maxAbs)}</text>
+        </svg>
+        <div class="scada-history-chart-legend">
+          ${term1.length ? `<span class="legend-active">Terminal 1 (MW)</span>` : ''}
+          ${term2.length ? `<span class="legend-reactive" style="color: #ef4444;">Terminal 2 (MW)</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
 
   function buildPanelRows() {
     const filter = rankingState.entityFilter;
@@ -3159,7 +3128,7 @@
   function renderRankingRows(rows, pageStart = 0) {
     const filter = rankingState.entityFilter;
     if (!rows.length) {
-      const colSpan = 7;
+      const colSpan = 8;
       return `<tr class="ranking-empty-row"><td colspan="${colSpan}">Secili filtrede kayit bulunamadi.</td></tr>`;
     }
     return rows.map((row, index) => {
