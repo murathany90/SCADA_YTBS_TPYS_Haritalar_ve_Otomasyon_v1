@@ -1267,3 +1267,170 @@ test('mode switch during in-flight fallback discards the stale response', async 
   assert.equal(statuses.at(-1)?.message, 'Superset yanitinda veri bulunamadi.');
   assert.doesNotMatch(statuses.at(-1)?.message || '', /Eksik olcum kurtarmasi/);
 });
+
+test('historical freshness ages against the selected instant; live view stays dead', () => {
+  const context = loadRuntime();
+  const { getStaleState, getDisplayColor } = context.__SCADA_V2_TEST_HOOKS__;
+  const selectedMs = Date.UTC(2026, 7, 16, 7, 5, 0);
+  const rowTime = new Date(selectedMs - 60 * 1000); // 07:04, 60 saniye once
+
+  context.state.scada.timeMode = 'historical';
+  context.state.scada.historicalAt = selectedMs;
+  assert.equal(getStaleState(rowTime), 'live', 'secili andan 60 sn once gelen kayit gecmiste gecerlidir');
+  assert.equal(getStaleState(new Date(selectedMs - 2 * 3600 * 1000)), 'dead', 'secili andan 2 saat once gelen kayit gecmiste Eskidir');
+  assert.equal(
+    getDisplayColor({ primaryStaleState: 'dead', primaryValue: 80, displayPct: 40, displayPctMode: 'loading', primaryMetric: 'active' }),
+    '#22c55e',
+    'historical dead kayit threshold rengini korur, griye dusmez'
+  );
+
+  context.state.scada.timeMode = 'live';
+  context.state.scada.historicalAt = null;
+  assert.equal(getStaleState(rowTime), 'dead', 'aynı kayit canli gorunumde bayattir');
+  assert.equal(
+    getDisplayColor({ primaryStaleState: 'dead', primaryValue: 80, displayPct: 40, displayPctMode: 'loading', primaryMetric: 'active' }),
+    context.SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af',
+    'canli dead kayit gri renge cekilir'
+  );
+});
+
+test('historical dead hat keeps its flow entry with warning; live drops it', () => {
+  const context = loadRuntime();
+  const { rebuildLineFlowMap } = context.__SCADA_V2_TEST_HOOKS__;
+  const modeConfig = { domain: 'hat', primaryMetric: 'active' };
+  const record = {
+    entityType: 'hat',
+    entityId: 'hat-1',
+    entityKey: 'hat:hat-1',
+    entity: buildTerminalEntity({ id: 'hat-1' }),
+    active: { value: 80 },
+    reactive: { value: 0 },
+    primaryMetric: 'active',
+    primaryValue: 80,
+    primaryMeasurementId: 'm-1',
+    primaryTimestamp: new Date(Date.UTC(2026, 7, 16, 7, 4, 0)),
+    primaryStaleState: 'dead',
+    sourceAmbiguous: false,
+    unresolved: false,
+    unresolvedReason: '',
+    candidateConflict: false,
+    backupUsed: false,
+    valueInvalid: false,
+    invalidPct: false,
+    displayPct: 40,
+    displayPctMode: 'loading',
+    capacityMva: 200,
+    loadingPct: 40,
+    directionValue: 80,
+    directionResolvedBy: 'terminal-exit-model',
+    resolvedTerminalMismatch: false,
+    resolutionClass: 'resolved'
+  };
+
+  context.state.scada.timeMode = 'historical';
+  context.state.scada.historicalAt = Date.UTC(2026, 7, 16, 7, 5, 0);
+  const flow = rebuildLineFlowMap(modeConfig, new Map([['hat:hat-1', record]]));
+  assert.ok(flow.has('hat-1'), 'historical dead hat akis haritasindan dusurulmez');
+  assert.equal(flow.get('hat-1').primaryValue, 80, 'ak yonu ve MW degeri korunur');
+  assert.equal(flow.get('hat-1').direction, 'forward', 'yuk akis oku cizilir');
+  assert.equal(flow.get('hat-1').historicalStale, true, 'historical-stale uyari bayragi tasinir');
+  assert.equal(flow.get('hat-1').color, '#22c55e', 'threshold rengi korunur, gri olmaz');
+
+  context.state.scada.timeMode = 'live';
+  const liveFlow = rebuildLineFlowMap(modeConfig, new Map([['hat:hat-1', record]]));
+  assert.equal(liveFlow.size, 0, 'canli gorunumde dead hat akistan dusurulur');
+});
+
+test('summary available feeds the historical badge count', () => {
+  const context = loadRuntime();
+  const hooks = context.__SCADA_V2_TEST_HOOKS__;
+  let badgeText = '';
+  let badgeHidden = null;
+  const badgeEl = {
+    classList: {
+      add: (className) => { if (className === 'hidden') badgeHidden = true; },
+      remove: (className) => { if (className === 'hidden') badgeHidden = false; }
+    }
+  };
+  Object.defineProperty(badgeEl, 'textContent', {
+    set(value) { badgeText = value; },
+    get() { return badgeText; }
+  });
+  context.document.getElementById = (id) => (id === 'scadaTimeBadge' ? badgeEl : null);
+
+  const entity = buildTerminalEntity({ id: 'hat-1' });
+  const rowTime = new Date(Date.UTC(2026, 7, 16, 7, 4, 0));
+  const record = {
+    entityType: 'hat',
+    entityId: 'hat-1',
+    entityKey: 'hat:hat-1',
+    entity,
+    primaryMetric: 'active',
+    primaryValue: 80,
+    primaryMeasurementId: 'm-1',
+    primaryTimestamp: rowTime,
+    primaryStaleState: 'live',
+    sourceAmbiguous: false,
+    unresolved: false,
+    invalidPct: false,
+    valueInvalid: false,
+    resolvedTerminalMismatch: false
+  };
+
+  context.state.scada.timeMode = 'historical';
+  context.state.scada.historicalAt = rowTime.getTime() + 60 * 1000;
+  const summary = hooks.buildVisibleSummary(
+    { entities: [entity], domain: 'hat', filterKey: 'test-filter', mode: 'hat-active' },
+    new Map([['hat:hat-1', record]])
+  );
+  assert.equal(summary.available, 1, 'secili an icin gecerli kayit available sayilir');
+  assert.equal(summary.matched, 1, 'tazelik sorunu olmayan kayit matched sayilir');
+  assert.equal(summary.missing, 0);
+
+  hooks.updateScadaTimeBadge();
+  assert.equal(badgeHidden, false, 'historical badge gorunur');
+  assert.match(badgeText, /^GECMIS VERI - .+ \| 1\/1 veri$/, 'rozet available/total sayisini gosterir');
+});
+
+test('freshKeys guard lets recovery replace an old row but never a fresh one', async () => {
+  const context = loadRuntime();
+  const { enrichMissingScadaIds } = context.__SCADA_V2_TEST_HOOKS__;
+  context.getScadaVisibilityFilterKey = () => 'test-filter';
+  context.chrome.runtime.sendMessage = async () => ({
+    ok: true,
+    data: {
+      result: [{
+        data: [{ sinsid: 'm-1', elementName: 'P', maxValue: 80, __timestamp: '2026-08-16T07:04:00.000Z' }]
+      }]
+    }
+  });
+
+  const arm = { filterKey: 'test-filter|mode:hat-active', mode: 'hat-active', fetchSeq: 1 };
+  const staleRow = { measurementId: 'm-1', elementName: 'P', value: 50, timestamp: new Date(Date.UTC(2026, 7, 15, 10, 0, 0)) };
+
+  context.state.scada.timeMode = 'live';
+  context.state.scada.fetchSeq = 1;
+  context.state.scada.measurementRowsById = new Map([['m-1|P', staleRow], ['m-1', staleRow]]);
+  context.state.scada.missingIdFallbackByScope = {};
+
+  await enrichMissingScadaIds({
+    measurementIds: ['m-1'],
+    elementNames: ['P'],
+    ...arm,
+    freshKeys: new Set(),
+    throttleKey: 'freshkeys-test-slot1'
+  });
+  assert.equal(context.state.scada.measurementRowsById.get('m-1|P').value, 80, 'bos ana sorgu: kurtarma eski bayat satirin yerine gecer');
+
+  context.state.scada.measurementRowsById = new Map([['m-1|P', staleRow], ['m-1', staleRow]]);
+  context.state.scada.missingIdFallbackByScope = {};
+
+  await enrichMissingScadaIds({
+    measurementIds: ['m-1'],
+    elementNames: ['P'],
+    ...arm,
+    freshKeys: new Set(['m-1|P', 'm-1']),
+    throttleKey: 'freshkeys-test-slot2'
+  });
+  assert.equal(context.state.scada.measurementRowsById.get('m-1|P').value, 50, 'ana sorguda gelen taze satir genis-pencere sonucuyla ezilmez');
+});

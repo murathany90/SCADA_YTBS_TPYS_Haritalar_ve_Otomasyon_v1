@@ -3713,9 +3713,32 @@ async function tryRecoverWithExistingSession(authConfig, transport, authMode, ti
   };
 }
 
+// Fire-and-forget progress broadcast to every open tab (the content script
+// ignores it when the requestId does not match its active operation).
+function broadcastScadaProgress(progress) {
+  if (!progress || !progress.requestId) return;
+  try {
+    chrome.tabs.query({}).then((tabs) => {
+      (tabs || []).forEach((tab) => {
+        if (tab?.id == null) return;
+        try {
+          chrome.tabs.sendMessage(tab.id, { type: 'SCADA_FETCH_PROGRESS', payload: progress }, () => {
+            void chrome.runtime.lastError;
+          });
+        } catch (err) {
+          // Receiving-end lifecycle races are normal; nothing to do.
+        }
+      });
+    }).catch(() => {});
+  } catch (err) {
+    // Broadcast failure must never fail the fetch itself.
+  }
+}
+
 async function handleScadaFetch(payload) {
   if (payload?.mockData) return { ok: true, data: payload.mockData, authMode: 'mock', usedFallback: false, httpStatus: 200 };
 
+  const requestId = payload?.requestId || null;
   const authConfig = await loadScadaAuthConfig();
   const mIds = Array.isArray(payload.measurementIds) ? payload.measurementIds : [];
   const batchSize = (globalThis.SCADA_COMMON?.CONFIG?.LIVE_BATCH_SIZE) || 200;
@@ -3749,12 +3772,13 @@ let successfulBatchCount = 0;
        const rows = globalThis.SCADA_COMMON.findDataArray(firstResult.data);
        if (Array.isArray(rows)) allDataRows.push(...rows);
     }
-  } else {
+} else {
     failedBatchCount++;
     lastError = firstResult.error;
     lastErrorType = firstResult.errorType;
     if (firstResult.shouldRetryAuth) return firstResult;
   }
+  broadcastScadaProgress({ requestId, stage: 'batches', completedBatches: successfulBatchCount + failedBatchCount, totalBatches: totalBatchCount });
   
   for (let i = 0; i < chunks.length; i += maxConcurrency) {
     const activeTasks = chunks.slice(i, i + maxConcurrency).map(chunk => {
@@ -3775,6 +3799,7 @@ let successfulBatchCount = 0;
         lastErrorType = r.errorType;
       }
     }
+    broadcastScadaProgress({ requestId, stage: 'batches', completedBatches: successfulBatchCount + failedBatchCount, totalBatches: totalBatchCount });
   }
   
 const hasPartialSuccess = successfulBatchCount > 0 && failedBatchCount > 0;
@@ -3875,6 +3900,7 @@ function filterHistoricalSnapshots(rows, atMs, requestedIds) {
 }
 
 async function handleScadaHistoricalSnapshotFetch(payload) {
+  const requestId = payload?.requestId || null;
   const at = Number(payload?.at);
   if (!Number.isFinite(at)) {
     return { ok: false, error: 'Gecmis an (at) eksik veya gecersiz.', errorType: 'INVALID_PAYLOAD', authMode: 'session', usedFallback: false };
@@ -3957,6 +3983,7 @@ async function handleScadaHistoricalSnapshotFetch(payload) {
         }
       }
     }
+    broadcastScadaProgress({ requestId, stage: 'batches', completedBatches: Math.min(chunks.length, i + activeTasks.length), totalBatches: chunks.length });
   }
 
   const requestedIds = new Set(mIds);
@@ -3981,6 +4008,7 @@ async function handleScadaHistoricalSnapshotFetch(payload) {
     } else {
       const blockedUntil = historicalSnapshotFallbackBlockedUntil.get(fallbackKey) || 0;
       if (now >= blockedUntil) {
+        broadcastScadaProgress({ requestId, stage: 'fallback', completedBatches: chunks.length, totalBatches: chunks.length });
         try {
           const wideRange = buildSnapshotRange(at - 24 * 3600 * 1000, at);
           const fallbackResult = await executeAuthWrapper(authConfig, buildChunkPayload(missingIds, wideRange), timeoutMs);

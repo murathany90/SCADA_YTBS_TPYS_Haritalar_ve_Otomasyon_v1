@@ -124,6 +124,12 @@
         <details class="panel" id="scadaCard" open>
           <summary>SCADA Veri</summary>
           <div class="scada-card-body">
+            <div class="scada-header-line">
+              <strong id="scadaHeaderState" class="scada-header-state is-live">● CANLI</strong>
+              <span id="scadaAvailable" class="scada-summary-available">0/0 veri</span>
+              <span class="scada-summary-eksik-label">Eksik <strong id="scadaEksik">0</strong></span>
+              <span class="scada-summary-son-label">Son <span id="scadaSonVeri">-</span></span>
+            </div>
             <div class="scada-controls">
               <label class="toggle-row"><input type="checkbox" data-scada-switch="enabled"><span>Katman</span></label>
               <label class="toggle-row"><input type="checkbox" data-scada-switch="autoRefresh" checked><span>Oto.
@@ -131,8 +137,6 @@
               <div class="scada-btns">
                 <button data-scada-btn="refresh" class="tiny scada-refresh-btn" title="Manuel Yenile"><span
                     id="scadaRefreshBtnLabel">Yenile</span></button>
-                <button data-scada-btn="log" class="tiny" title="Log Paneli">Log</button>
-                <button data-scada-btn="mock" class="tiny" id="btnScadaMock" title="Mock/Canli Gecisi">Kaynak</button>
               </div>
             </div>
             <div class="scada-time-mode">
@@ -161,7 +165,7 @@
                 </div>
               </div>
             </div>
-            <div class="segmented segmented-scada-mode">
+            <div class="segmented segmented-scada-mode" id="scadaMetricRow">
               <button class="segmented-btn active" data-scada-metric="hat-active">Hat (MW)</button>
               <button class="segmented-btn" data-scada-metric="hat-reactive">Hat (MVar)</button>
               <button class="segmented-btn" data-scada-metric="trafo-active">Trafo (MW)</button>
@@ -193,45 +197,64 @@
                 </div>
               </div>
             </div>
-            <div class="scada-stats">
-              <div><span class="scada-label">Son Veri</span><span id="scadaSonVeri">-</span></div>
-              <div><span class="scada-label">Toplam</span><span id="scadaToplam">0</span></div>
-              <div><span class="scada-label">Eslesen</span><span id="scadaEslesen">0</span></div>
-              <div><span class="scada-label">Eslesmeyen</span><span id="scadaEslesmeyen">0</span></div>
-              <div><span class="scada-label">Bayat</span><span id="scadaStale">0</span></div>
-              <div><span class="scada-label">Hata</span><span id="scadaHata">-</span></div>
-            </div>
-            <div id="scadaLejant" class="scada-lejant"></div>
-            <div id="scadaQualityChips" class="scada-quality-chips"></div>
-            <div id="scadaKalite" class="scada-quality">Kalite ozetleri burada gosterilir.</div>
-            <div id="scadaFetchInfo" class="scada-fetch-card">
-              <div class="scada-fetch-head">
-                <strong>Son Sorgu</strong>
-                <span id="scadaFetchBadge" class="scada-fetch-badge is-idle">Hazir</span>
-              </div>
-              <div id="scadaFetchMessage" class="scada-fetch-message">Henuz sorgu yapilmadi.</div>
-              <div class="scada-fetch-grid">
-                <div><span class="scada-label">Tetik</span><strong id="scadaFetchTrigger">-</strong></div>
-                <div><span class="scada-label">Baslangic</span><strong id="scadaFetchStart">-</strong></div>
-                <div><span class="scada-label">Bitis</span><strong id="scadaFetchEnd">-</strong></div>
-                <div><span class="scada-label">Sure</span><strong id="scadaFetchDuration">-</strong></div>
-                <div><span class="scada-label">Ham Veri</span><strong id="scadaFetchRawRows">0</strong></div>
-                <div><span class="scada-label">Tekil Olcum</span><strong id="scadaFetchNormalizedRows">0</strong></div>
-                <div><span class="scada-label">Gorunen</span><strong id="scadaFetchVisibleRows">0/0</strong></div>
-                <div><span class="scada-label">Tasima</span><strong id="scadaFetchTransport">-</strong></div>
-              </div>
-            </div>
-            <div class="scada-audit-actions">
-              <button data-scada-btn="audit" class="tiny">Denetim CSV</button>
-              <button data-scada-btn="report" class="tiny">Mismatch Raporu</button>
-            </div>
-            <div class="scada-season-toggle">
+            <div class="scada-season-toggle" id="scadaSeasonToggle">
               <span class="scada-label">Kapasite:</span>
               <div class="segmented segmented-mini">
                 <button id="btnSeasonWinter" class="segmented-btn active" data-season="winter">Kis</button>
                 <button id="btnSeasonSummer" class="segmented-btn" data-season="summer">Yaz</button>
               </div>
             </div>
+            <div id="scadaFetchInfo" class="scada-fetch-card">
+              <div class="scada-fetch-head">
+                <strong>Son Sorgu</strong>
+                <span id="scadaFetchBadge" class="scada-fetch-badge is-idle">Hazir</span>
+              </div>
+              <div id="scadaFetchMessage" class="scada-fetch-message">Henuz sorgu yapilmadi.</div>
+              <div id="scadaFetchSummary" class="scada-fetch-summary">-</div>
+              <div class="scada-progress" id="scadaProgress" hidden>
+                <div class="scada-progress-head">
+                  <span id="scadaProgressTitle">Canli veri yenileniyor</span>
+                  <strong id="scadaProgressPct">0%</strong>
+                </div>
+                <div class="scada-progress-track"><div class="scada-progress-bar" id="scadaProgressBar"></div></div>
+                <div class="scada-progress-sub" id="scadaProgressSub"></div>
+              </div>
+              <div class="scada-enrich-hint" id="scadaEnrichHint" hidden></div>
+              <details class="scada-fetch-details">
+                <summary>Detaylar</summary>
+                <div class="scada-fetch-grid">
+                  <div><span class="scada-label">Tetik</span><strong id="scadaFetchTrigger">-</strong></div>
+                  <div><span class="scada-label">Baslangic</span><strong id="scadaFetchStart">-</strong></div>
+                  <div><span class="scada-label">Bitis</span><strong id="scadaFetchEnd">-</strong></div>
+                  <div><span class="scada-label">Sure</span><strong id="scadaFetchDuration">-</strong></div>
+                  <div><span class="scada-label">Ham Veri</span><strong id="scadaFetchRawRows">0</strong></div>
+                  <div><span class="scada-label">Tekil Olcum</span><strong id="scadaFetchNormalizedRows">0</strong></div>
+                  <div><span class="scada-label">Gorunen</span><strong id="scadaFetchVisibleRows">0/0</strong></div>
+                  <div><span class="scada-label">Tasima</span><strong id="scadaFetchTransport">-</strong></div>
+                </div>
+              </details>
+            </div>
+            <div id="scadaLejant" class="scada-lejant"></div>
+            <div id="scadaQualityChips" class="scada-quality-chips"></div>
+            <div id="scadaKalite" class="scada-quality">Kalite ozetleri burada gosterilir.</div>
+            <details class="scada-tanilama">
+              <summary>Gelismis / Tanilama</summary>
+              <div class="scada-tanilama-body">
+                <div class="scada-tanilama-actions">
+                  <button data-scada-btn="audit" class="tiny">Denetim CSV</button>
+                  <button data-scada-btn="report" class="tiny">Mismatch Raporu</button>
+                  <button data-scada-btn="log" class="tiny" title="Log Paneli">Log</button>
+                  <button data-scada-btn="mock" class="tiny" id="btnScadaMock" title="Mock/Canli Gecisi">Kaynak</button>
+                </div>
+                <div class="scada-stats">
+                  <div><span class="scada-label">Toplam</span><span id="scadaToplam">0</span></div>
+                  <div><span class="scada-label">Eslesen</span><span id="scadaEslesen">0</span></div>
+                  <div><span class="scada-label">Eslesmeyen</span><span id="scadaEslesmeyen">0</span></div>
+                  <div><span class="scada-label">Bayat</span><span id="scadaStale">0</span></div>
+                  <div><span class="scada-label">Hata</span><span id="scadaHata">-</span></div>
+                </div>
+              </div>
+            </details>
           </div>
         </details>
 

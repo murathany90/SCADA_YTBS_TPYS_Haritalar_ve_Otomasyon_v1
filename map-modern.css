@@ -1130,6 +1130,96 @@ html[data-theme="dark"] .bara-set-label-box {
   flex: 1;
 }
 
+/* ───────── Compact SCADA header line ───────── */
+.scada-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 6px;
+  font-size: 11px;
+}
+.scada-header-state {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+.scada-header-state.is-live { color: #16a34a; }
+.scada-header-state.is-historical { color: #f59e0b; }
+.scada-summary-available { color: var(--muted); }
+.scada-summary-eksik-label { color: var(--muted); margin-left: auto; }
+.scada-summary-eksik-label strong { color: #dc2626; }
+.scada-summary-son-label { color: var(--muted); }
+.scada-summary-son-label span { color: var(--text-muted, #64748b); }
+.scada-fetch-summary {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.scada-progress { margin-top: 8px; }
+.scada-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+.scada-progress-head strong { color: #2563eb; }
+.scada-progress-track {
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+}
+.scada-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
+  transition: width 0.4s ease;
+}
+.scada-progress-sub {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.scada-enrich-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #d97706;
+  line-height: 1.35;
+}
+.scada-fetch-details {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.scada-fetch-details summary {
+  cursor: pointer;
+  color: #2563eb;
+}
+.scada-tanilama {
+  margin-top: 8px;
+  font-size: 11px;
+}
+.scada-tanilama summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.scada-tanilama-body {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+.scada-tanilama-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.scada-tanilama-actions button {
+  flex: 1;
+  min-width: 90px;
+}
+
 /* ───────── Flow Arrow Animation ───────── */
 #flowLayer polygon { transition: opacity 0.3s; }
 #flowLayer g:hover polygon { opacity: 1 !important; filter: drop-shadow(0 0 3px currentColor); }

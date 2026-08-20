@@ -239,7 +239,12 @@
 
   function getDisplayColor(record, options = {}) {
     if (!record) return SCADA_CONFIG.UNMATCHED_HAT_COLOR || '#4b5563';
-    if (record.invalidPct || record.valueInvalid || record.primaryStaleState === 'dead') {
+    if (record.invalidPct || record.valueInvalid) {
+      return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
+    }
+    // Live dead records are faded; historical dead records still carry their
+    // threshold color so an old snapshot never collapses to gray.
+    if (state.scada.timeMode !== 'historical' && record.primaryStaleState === 'dead') {
       return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
     }
     if (options.respectStale !== false && record.primaryStaleState === 'warn') {
@@ -422,10 +427,21 @@
   }
 
   function syncScadaMetricButtons() {
+    const modeConfig = getModeConfig();
     const buttons = Array.from(document.querySelectorAll('[data-scada-metric]'));
     buttons.forEach((button) => {
+      if (button.dataset.scadaMetric === 'active' || button.dataset.scadaMetric === 'reactive') {
+        button.classList.toggle('active', modeConfig.domain !== 'bara' && modeConfig.primaryMetric === button.dataset.scadaMetric);
+        return;
+      }
       button.classList.toggle('active', button.dataset.scadaMetric === state.filters.scadaMetric);
     });
+    // The MW/MVar row and the season control are power-mode only; the voltage
+    // mode shows neither.
+    const metricRow = document.getElementById('scadaMetricRow');
+    if (metricRow) metricRow.classList.toggle('hidden', modeConfig.domain === 'bara');
+    const seasonToggle = document.getElementById('scadaSeasonToggle');
+    if (seasonToggle) seasonToggle.classList.toggle('hidden', modeConfig.domain === 'bara');
   }
 
   function syncScadaMapDisplayButtons() {
@@ -539,9 +555,28 @@
     return null;
   }
 
+  // Freshness reference: historical views age records against the selected
+  // instant instead of the clock, so a snapshot is not "stale" just because
+  // it is older than today.
+  function getScadaReferenceTimeMs() {
+    return state.scada.timeMode === 'historical' &&
+      Number.isFinite(Number(state.scada.historicalAt))
+        ? Number(state.scada.historicalAt)
+        : Date.now();
+  }
+
+  function formatAgeSeconds(ageSec) {
+    if (ageSec < 60) return `${ageSec} sn`;
+    const ageMin = Math.floor(ageSec / 60);
+    if (ageMin < 60) return `${ageMin} dk`;
+    const ageHour = Math.floor(ageMin / 60);
+    const restMin = ageMin % 60;
+    return restMin ? `${ageHour} sa ${restMin} dk` : `${ageHour} sa`;
+  }
+
   function getStaleState(timestamp) {
     if (!timestamp) return 'dead';
-    const ageSec = (Date.now() - timestamp.getTime()) / 1000;
+    const ageSec = (getScadaReferenceTimeMs() - timestamp.getTime()) / 1000;
     if (ageSec > SCADA_CONFIG.STALE_DEAD_SEC) return 'dead';
     if (ageSec > SCADA_CONFIG.STALE_WARN_SEC) return 'warn';
     return 'live';
@@ -549,13 +584,59 @@
 
   function getAgeLabel(timestamp) {
     if (!timestamp) return '';
-    const ageSec = Math.max(0, Math.floor((Date.now() - timestamp.getTime()) / 1000));
-    if (ageSec < 60) return `${ageSec} sn`;
-    const ageMin = Math.floor(ageSec / 60);
-    if (ageMin < 60) return `${ageMin} dk`;
-    const ageHour = Math.floor(ageMin / 60);
-    const restMin = ageMin % 60;
-    return restMin ? `${ageHour} sa ${restMin} dk` : `${ageHour} sa`;
+    const ageSec = Math.max(0, Math.floor((getScadaReferenceTimeMs() - timestamp.getTime()) / 1000));
+    const ageText = formatAgeSeconds(ageSec);
+    return state.scada.timeMode === 'historical' ? `Secili andan ${ageText} once` : ageText;
+  }
+
+  // Single visible progress component feeds from this operation record. Only
+  // the active requestId may mutate it, so stale async replies never move the
+  // bar. Stage-based percentages: prepare 0-10, auth 10-20, batches 20-75
+  // (background reports real completed batches), fallback 75-85, normalize
+  // 85-92, match/render 92-100.
+  function setScadaOperationMeta(patch) {
+    state.scada.operationMeta = {
+      ...(state.scada.operationMeta || {}),
+      ...(patch || {}),
+      updatedAt: new Date()
+    };
+    if (typeof syncScadaFetchUi === 'function') syncScadaFetchUi();
+    return state.scada.operationMeta;
+  }
+
+  function clearScadaOperationMeta() {
+    state.scada.operationMeta = null;
+    if (typeof syncScadaFetchUi === 'function') syncScadaFetchUi();
+  }
+
+  // Background batch progress only moves the active operation; any other
+  // requestId (older fetch, superseded project) is ignored.
+  function handleScadaFetchProgressMessage(progress) {
+    const op = state.scada.operationMeta;
+    if (!op?.requestId || progress?.requestId !== op.requestId) return;
+    const completed = Number(progress.completedBatches) || 0;
+    const total = Number(progress.totalBatches) || 1;
+    const totalMeasurements = Number(op.totalMeasurements) || 0;
+    if (progress.stage === 'fallback') {
+      setScadaOperationMeta({
+        stage: 'fallback',
+        progressPct: Math.max(75, Math.min(85, Number(progress.progressPct) || 80)),
+        message: op.kind === 'enrichment'
+          ? 'Eksik olcumler genis pencereden tamamlaniyor...'
+          : 'Bos veriler genis pencereden tamamlaniyor'
+      });
+      return;
+    }
+    const pct = Math.max(20, Math.min(75, 20 + Math.round((completed / total) * 55)));
+    setScadaOperationMeta({
+      stage: 'batches',
+      progressPct: pct,
+      completedBatches: completed,
+      totalBatches: total,
+      message: op.kind === 'enrichment'
+        ? `Eksik olcumler arka planda tamamlaniyor (batch ${completed}/${total})...`
+        : `Batch ${completed}/${total} • ${totalMeasurements} olcum sorgulaniyor`
+    });
   }
 
   function sameTimestamp(left, right) {
@@ -1522,6 +1603,12 @@
     const statusKey = primaryMetric?.sourceAmbiguous
       ? 'ambiguous'
       : primaryStaleState;
+    const historicalStatusText = state.scada.timeMode === 'historical'
+      ? (primaryStaleState === 'dead' ? 'Eski' : primaryStaleState === 'warn' ? 'Gecikmeli' : 'Gecerli')
+      : null;
+    const primaryStatusText = statusKey === 'ambiguous'
+      ? (STATUS_TEXT.ambiguous || 'Belirsiz')
+      : (historicalStatusText || STATUS_TEXT[statusKey] || STATUS_TEXT.live);
     const record = {
       entityType,
       entityId: entity.id,
@@ -1586,7 +1673,7 @@
       primaryMeasurementId: getResolvedMeasurementId(primaryMetric),
       primaryTimestamp,
       primaryStaleState,
-      primaryStatusText: STATUS_TEXT[statusKey] || STATUS_TEXT.live,
+      primaryStatusText,
       sourceAmbiguous: Boolean(primaryMetric?.sourceAmbiguous),
       unresolved: Boolean(primaryMetric?.unresolved),
       unresolvedReason: primaryMetric?.unresolvedReason || '',
@@ -1608,7 +1695,7 @@
       displayPctMode: displayMetrics.displayPctMode,
       invalidPct: Boolean(displayMetrics.invalidPct),
       timeState: primaryStaleState,
-      timeStateLabel: STATUS_TEXT[primaryStaleState] || STATUS_TEXT.live,
+      timeStateLabel: primaryStatusText,
       ageLabel: getAgeLabel(primaryTimestamp)
     };
     const uncertaintyMeta = entityType === 'hat' ? buildHatUncertaintyMeta(record) : { label: '', shortTooltip: '', detailLines: [], reasons: [] };
@@ -1649,11 +1736,15 @@
     metricMap.forEach((record) => {
       if (record.entityType !== 'hat') return;
       if (!Number.isFinite(record.primaryValue)) return;
-      if (record.primaryStaleState === 'dead') return;
+      // Live dead records are dropped; historical snapshots keep the flow with
+      // a historical-stale flag so the arrow stays visible with a warning.
+      if (record.primaryStaleState === 'dead' && state.scada.timeMode !== 'historical') return;
       if (record.sourceAmbiguous || record.unresolved || record.candidateConflict || record.backupUsed) return;
       const direction = getHatFlowDirection(record);
       if (direction === 'unknown') return;
       const value = record.primaryValue;
+      const staleState = record.primaryStaleState;
+      const historicalStale = state.scada.timeMode === 'historical' && staleState === 'dead';
       const displayPct = Number.isFinite(record.displayPct) ? record.displayPct : null;
       const loadingPct = Number.isFinite(record.loadingPct) ? record.loadingPct : null;
       next.set(record.entityId, {
@@ -1680,7 +1771,8 @@
         candidateConflict: Boolean(record.candidateConflict),
         backupUsed: Boolean(record.backupUsed),
         orientationRule: record.orientationRule || '',
-        staleState: record.primaryStaleState,
+        staleState,
+        historicalStale,
         color: getDisplayColor(record),
         width: getFlowWidth(Number.isFinite(displayPct) ? displayPct : 0),
         timestamp: record.primaryTimestamp,
@@ -1708,6 +1800,8 @@
       ambiguousLive: 0,
       orientationUnknown: 0,
       resolvedWithWarning: 0,
+      available: 0,
+      missing: 0,
       updatedAt: state.scada.lastDataTimestamp,
       filterKey: scope.filterKey,
       metricMode: scope.mode
@@ -1716,7 +1810,17 @@
       const record = metricMap.get(`${scope.domain === 'bara' ? 'bara' : scope.domain}:${entity.id}`);
       if (!record) {
         summary.unmatched += 1;
+        summary.missing += 1;
         return;
+      }
+      // available = entity with a real value valid at the reference moment
+      // (selected instant for historical views, now for live). This is the
+      // semantic the summary/badge/ranking share; freshness does not erase it.
+      const hasValue = Number.isFinite(record.primaryValue) && record.primaryTimestamp instanceof Date;
+      if (hasValue && getScadaReferenceTimeMs() - record.primaryTimestamp.getTime() >= 0) {
+        summary.available += 1;
+      } else {
+        summary.missing += 1;
       }
       if (hasHatUncertainty(record, { assumeHat: scope.domain === 'hat' }) || record.invalidPct) {
         summary.ambiguousLive += 1;
@@ -2117,11 +2221,27 @@
     const armedFilterKey = String(options?.filterKey || '');
     const armedMode = String(options?.mode || '');
     const armedFetchSeq = Number(options?.fetchSeq) || 0;
+    // Composite keys that really appeared in the main 10-minute response; any
+    // recovered row for those keys is skipped, everything else (including an
+    // older snapshot row) may be replaced by the wider-window result.
+    const freshKeys = options?.freshKeys instanceof Set ? options.freshKeys : null;
     if (!missingIds.length) return;
     state.scada.missingIdFallbackByScope = state.scada.missingIdFallbackByScope || {};
     const nowMs = Date.now();
     const lastFallbackAt = state.scada.missingIdFallbackByScope[throttleKey] || 0;
     if (nowMs - lastFallbackAt < 5 * 60 * 1000) return;
+    // Secondary, non-blocking status: the main progress must not flash back to
+    // loading because missing ids are being recovered in the background.
+    const enrichRequestId = `enr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setScadaOperationMeta({
+      requestId: enrichRequestId,
+      kind: 'enrichment',
+      stage: 'running',
+      progressPct: 0,
+      message: `Eksik ${missingIds.length} olcum arka planda tamamlaniyor...`,
+      totalMeasurements: missingIds.length,
+      startedAt: new Date()
+    });
     try {
       const fallbackResult = await chrome.runtime.sendMessage({
         type: 'SCADA_FETCH',
@@ -2135,17 +2255,33 @@
           tearFilters: [],
           elementNames,
           measurementIds: missingIds,
-          rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, missingIds.length * 3 || 5000)
+          rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, missingIds.length * 3 || 5000),
+          requestId: enrichRequestId
         }
       });
-      if (!fallbackResult?.ok) return; // failure never throttles a retry
-      if (state.scada.timeMode !== 'live' || state.scada.snapshotAt != null) return;
+      if (!fallbackResult?.ok) {
+        setScadaOperationMeta({ stage: 'done', message: 'Eksik olcum kurtarmasi tamamlanamadi.' });
+        return; // failure never throttles a retry
+      }
+      if (state.scada.timeMode !== 'live' || state.scada.snapshotAt != null) {
+        setScadaOperationMeta({ stage: 'done' });
+        return;
+      }
       // A stale response from an older fetch generation is never merged.
-      if ((state.scada.fetchSeq || 0) !== armedFetchSeq) return;
+      if ((state.scada.fetchSeq || 0) !== armedFetchSeq) {
+        setScadaOperationMeta({ stage: 'done' });
+        return;
+      }
       const liveScope = typeof getCurrentScadaScope === 'function' ? getCurrentScadaScope() : null;
       if (liveScope) {
-        if (armedFilterKey && String(liveScope.filterKey || '') !== armedFilterKey) return;
-        if (armedMode && String(liveScope.mode || '') !== armedMode) return;
+        if (armedFilterKey && String(liveScope.filterKey || '') !== armedFilterKey) {
+          setScadaOperationMeta({ stage: 'done' });
+          return;
+        }
+        if (armedMode && String(liveScope.mode || '') !== armedMode) {
+          setScadaOperationMeta({ stage: 'done' });
+          return;
+        }
       }
       const fallbackRows = SCADA_COMMON.normalizeMetricRows(fallbackResult.data, { elementNames });
       const currentRows = state.scada.measurementRowsById instanceof Map
@@ -2156,13 +2292,18 @@
       fallbackRows.forEach((row, key) => {
         const id = String(row.measurementId || row.sinsid || '').trim();
         if (!id || !missingIds.includes(id)) return;
-        if (merged.has(key)) return;
+        if (freshKeys) {
+          if (freshKeys.has(key)) return;
+        } else if (merged.has(key)) {
+          return;
+        }
         merged.set(key, row);
         added += 1;
       });
       state.scada.missingIdFallbackByScope[throttleKey] = nowMs;
       if (!added) {
         scadaLog('warn', `SCADA eksik olcum fallback: ${missingIds.length} ID icin genis pencere sorgusu yapildi, kurtarilan satir yok.`);
+        setScadaOperationMeta({ stage: 'done', message: 'Eksik olcum kurtarmasi tamamlandi; ek satir yok.' });
         return;
       }
       state.scada.measurementRowsById = merged;
@@ -2197,8 +2338,10 @@
         void persistScadaDashboardSnapshot({ source: 'enrich' });
       }
       setScadaStatusMessage(`Eksik olcum kurtarmasi: ${added} satir genis pencereden eklendi.`, 'info');
+      setScadaOperationMeta({ stage: 'done', message: `Eksik olcum kurtarmasi tamamlandi: ${added} satir uygulandi.` });
       scadaLog('info', `SCADA eksik olcum fallback: ${missingIds.length} ID icin genis pencere sorgusu yapildi, ${added} satir kurtarildi.`);
     } catch (fallbackError) {
+      setScadaOperationMeta({ stage: 'done', message: 'Eksik olcum kurtarmasi tamamlanamadi.' });
       scadaLog('warn', 'SCADA eksik olcum fallback basarisiz.', fallbackError?.message || String(fallbackError));
     }
   }
@@ -2282,6 +2425,18 @@
     state.scada.fetchInProgress = true;
     state.scada.error = null;
     state.scada.errorType = null;
+    const requestId = `${triggerType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    state.scada.operationMeta = null;
+    setScadaOperationMeta({
+      requestId,
+      kind: triggerType === 'live-return' ? 'live-return' : 'live',
+      stage: 'prepare',
+      progressPct: 6,
+      message: 'Sorgu hazirlaniyor',
+      totalMeasurements: scope.measurementIds.length,
+      totalEntities: scope.entities.length,
+      startedAt
+    });
 
     updateScadaFetchMeta({
       status: 'loading',
@@ -2290,7 +2445,9 @@
       triggerType,
       triggerLabel,
       phaseLabel: 'Sorgu',
-      phaseMessage: `${triggerLabel} yenileme ${startedAt.toLocaleTimeString('tr-TR')} icin baslatildi.`,
+      phaseMessage: triggerType === 'live-return'
+        ? 'Son canli goruntu gosteriliyor; yeni veri kontrol ediliyor...'
+        : `${triggerLabel} yenileme ${startedAt.toLocaleTimeString('tr-TR')} icin baslatildi.`,
       startedAt,
       finishedAt: null,
       durationMs: null,
@@ -2317,6 +2474,11 @@
     );
 
     try {
+      setScadaOperationMeta({
+        stage: 'auth',
+        progressPct: 15,
+        message: 'Veri aliniyor; oturum kontrol ediliyor'
+      });
       updateScadaFetchMeta({
         stage: 'auth',
         progressPct: 24,
@@ -2338,7 +2500,8 @@
             kvFilters: [],
             tearFilters: [],
             elementNames: scope.elementNames,
-            measurementIds: scope.measurementIds
+            measurementIds: scope.measurementIds,
+            requestId
           }
         });
 
@@ -2362,6 +2525,14 @@
           durationMs: finishedAt.getTime() - startedAt.getTime(),
           error: errorMessage
         });
+        if (triggerType === 'live-return') {
+          // Returning to live: the last successful snapshot stays visible and
+          // only a warning is raised - the map is never blanked by a failure.
+          setScadaOperationMeta({ stage: 'error', progressPct: 100, message: errorMessage });
+          setScadaStatusMessage(`${errorMessage} Son canli goruntu korundu.`, 'warn');
+          scadaLog('warn', 'SCADA canli donus sorgusu basarisiz; son goruntu korundu.');
+          return;
+        }
         markScadaFlowsUnavailable(errorMessage, result?.errorType || SCADA_ERROR.NETWORK_ERROR);
         scadaLog('error', 'SCADA fetch hatasi', result?.error || result?.errorType || 'bilinmeyen hata');
         return;
@@ -2411,6 +2582,7 @@
           error: errorMessage
         });
         markScadaFlowsUnavailable(errorMessage, SCADA_ERROR.EMPTY_DATA);
+        setScadaOperationMeta({ stage: 'error', progressPct: 100, message: errorMessage });
         scadaLog('warn', 'SCADA verisi bos dondu.');
         // Zero rows in the live 10-minute window means every requested id is
         // missing; recover all of them from the wide window in the background.
@@ -2421,7 +2593,8 @@
           throttleKey: missingFallbackThrottleKey,
           filterKey: fallbackScopeKey,
           mode: scope.mode,
-          fetchSeq: state.scada.fetchSeq
+          fetchSeq: state.scada.fetchSeq,
+          freshKeys: new Set()
         });
         return;
       }
@@ -2439,6 +2612,11 @@
       state.scada.lastFetchAt = new Date();
       state.scada.sourceKind = 'live';
       state.scada.snapshotAt = null;
+      setScadaOperationMeta({
+        stage: 'done',
+        progressPct: 100,
+        message: 'Tamamlandi'
+      });
       const finishedAt = new Date();
       updateScadaFetchMeta({
         status: 'success',
@@ -2482,7 +2660,8 @@
           throttleKey: missingFallbackThrottleKey,
           filterKey: fallbackScopeKey,
           mode: scope.mode,
-          fetchSeq: state.scada.fetchSeq
+          fetchSeq: state.scada.fetchSeq,
+          freshKeys: new Set(rowsByMeasurementId.keys())
         });
       }
     } catch (error) {
@@ -2498,8 +2677,15 @@
         durationMs: finishedAt.getTime() - startedAt.getTime(),
         error: errorMessage
       });
-      markScadaFlowsUnavailable(errorMessage, SCADA_ERROR.NETWORK_ERROR);
-      scadaLog('error', 'SCADA fetch istisnasi', errorMessage);
+      if (triggerType === 'live-return') {
+        setScadaOperationMeta({ stage: 'error', progressPct: 100, message: errorMessage });
+        setScadaStatusMessage(`${errorMessage} Son canli goruntu korundu.`, 'warn');
+        scadaLog('warn', 'SCADA canli donus sorgusu basarisiz; son goruntu korundu.');
+      } else {
+        markScadaFlowsUnavailable(errorMessage, SCADA_ERROR.NETWORK_ERROR);
+        setScadaOperationMeta({ stage: 'error', progressPct: 100, message: errorMessage });
+        scadaLog('error', 'SCADA fetch istisnasi', errorMessage);
+      }
     } finally {
       state.scada.fetchInProgress = false;
       if (state.scada.autoRefresh && state.scada.enabled) {
@@ -2570,8 +2756,11 @@
 
   function syncScadaFetchUi() {
     const fetchMeta = state.scada.fetchMeta || {};
+    const op = state.scada.operationMeta || {};
+    const opActive = Boolean(op.kind && op.stage && op.stage !== 'done' && op.stage !== 'error');
     const elFetchBadge = document.getElementById('scadaFetchBadge');
     const elFetchMessage = document.getElementById('scadaFetchMessage');
+    const elFetchSummary = document.getElementById('scadaFetchSummary');
     const elFetchTrigger = document.getElementById('scadaFetchTrigger');
     const elFetchStart = document.getElementById('scadaFetchStart');
     const elFetchEnd = document.getElementById('scadaFetchEnd');
@@ -2580,6 +2769,12 @@
     const elFetchNormalizedRows = document.getElementById('scadaFetchNormalizedRows');
     const elFetchVisibleRows = document.getElementById('scadaFetchVisibleRows');
     const elFetchTransport = document.getElementById('scadaFetchTransport');
+    const elProgress = document.getElementById('scadaProgress');
+    const elProgressTitle = document.getElementById('scadaProgressTitle');
+    const elProgressPct = document.getElementById('scadaProgressPct');
+    const elProgressBar = document.getElementById('scadaProgressBar');
+    const elProgressSub = document.getElementById('scadaProgressSub');
+    const elEnrichHint = document.getElementById('scadaEnrichHint');
     const btnRefresh = document.querySelector('[data-scada-btn="refresh"]');
     const btnRefreshLabel = document.getElementById('scadaRefreshBtnLabel');
 
@@ -2599,7 +2794,8 @@
       return `${minutes} dk ${seconds} sn`;
     };
 
-    const fetchStatusClass = fetchMeta.status === 'loading'
+    const displayPct = opActive ? (Number(op.progressPct) || 0) : (Number(fetchMeta.progressPct) || 0);
+    const fetchStatusClass = fetchMeta.status === 'loading' || opActive
       ? 'is-loading'
       : fetchMeta.status === 'error'
         ? 'is-error'
@@ -2609,15 +2805,34 @@
 
     if (elFetchBadge) {
       elFetchBadge.className = `scada-fetch-badge ${fetchStatusClass}`;
-      elFetchBadge.textContent = fetchMeta.status === 'loading'
-        ? `${fetchMeta.phaseLabel || 'Sorgu'} ${Math.max(1, Number(fetchMeta.progressPct) || 0)}%`
+      elFetchBadge.textContent = fetchMeta.status === 'loading' || opActive
+        ? `${Math.max(1, displayPct)}%`
         : fetchMeta.status === 'error'
           ? 'Hata'
           : fetchMeta.status === 'success'
             ? 'Tamam'
             : 'Hazir';
     }
-    if (elFetchMessage) elFetchMessage.textContent = fetchMeta.phaseMessage || 'Henuz sorgu yapilmadi.';
+    if (elFetchMessage) {
+      elFetchMessage.textContent = opActive && op.message
+        ? op.message
+        : (fetchMeta.phaseMessage || 'Henuz sorgu yapilmadi.');
+    }
+    // Compact "Son sorgu" summary line (e.g. "364 olcum • 267/312").
+    if (elFetchSummary) {
+      const details = [];
+      const normalizedRows = Number(fetchMeta.normalizedRows) || 0;
+      if (normalizedRows > 0) details.push(`${normalizedRows} olcum`);
+      const summary = state.scada.visibleSummary;
+      if (summary) {
+        const available = Number.isFinite(Number(summary.available)) ? Number(summary.available) : (Number(summary.matched) || 0);
+        const total = Number(summary.total) || 0;
+        if (total > 0) details.push(`${available}/${total}`);
+      }
+      const durationText = formatDuration(fetchMeta.durationMs);
+      if (durationText !== '-') details.push(durationText);
+      elFetchSummary.textContent = details.length ? details.join(' • ') : fetchMeta.status === 'success' ? 'Tamam' : '-';
+    }
     if (elFetchTrigger) elFetchTrigger.textContent = fetchMeta.triggerLabel || '-';
     if (elFetchStart) elFetchStart.textContent = formatClock(fetchMeta.startedAt);
     if (elFetchEnd) elFetchEnd.textContent = formatClock(fetchMeta.finishedAt);
@@ -2637,6 +2852,33 @@
       elFetchTransport.textContent = transportParts.join(' / ') || '-';
     }
 
+    // Single visible progress component; enrichment keeps its own small hint.
+    if (elProgress) {
+      const showProgress = opActive && op.kind !== 'enrichment';
+      elProgress.classList.toggle('hidden', !showProgress);
+      if (showProgress) {
+        if (elProgressTitle) {
+          elProgressTitle.textContent = op.kind === 'live-return'
+            ? 'CANLIYA DONULUYOR'
+            : op.kind === 'historical'
+              ? 'Gecmis veri yukleniyor'
+              : 'Canli veri yenileniyor';
+        }
+        if (elProgressPct) elProgressPct.textContent = `${Math.max(0, Math.min(100, Math.round(displayPct)))}%`;
+        if (elProgressBar) elProgressBar.style.width = `${Math.max(0, Math.min(100, Math.round(displayPct)))}%`;
+        const subParts = [];
+        if (op.kind === 'live-return') subParts.push('Son canli goruntu gosteriliyor; yeni veri kontrol ediliyor');
+        if (op.completedBatches && op.totalBatches) subParts.push(`Batch ${op.completedBatches}/${op.totalBatches}`);
+        if (op.message && !subParts.includes(op.message)) subParts.push(op.message);
+        if (elProgressSub) elProgressSub.textContent = subParts.join(' • ');
+      }
+    }
+    if (elEnrichHint) {
+      const showHint = opActive && op.kind === 'enrichment';
+      elEnrichHint.textContent = showHint ? (op.message || 'Eksik olcumler arka planda tamamlaniyor...') : '';
+      elEnrichHint.classList.toggle('hidden', !showHint);
+    }
+
     if (btnRefresh) {
       btnRefresh.disabled = Boolean(state.scada.fetchInProgress);
       btnRefresh.classList.toggle('is-loading', Boolean(state.scada.fetchInProgress));
@@ -2647,8 +2889,8 @@
         : 'Manuel Yenile';
     }
     if (btnRefreshLabel) {
-      btnRefreshLabel.textContent = state.scada.fetchInProgress
-        ? `${Math.max(1, Number(fetchMeta.progressPct) || 0)}%`
+      btnRefreshLabel.textContent = state.scada.fetchInProgress || opActive
+        ? `${Math.max(1, displayPct)}%`
         : fetchMeta.status === 'error'
           ? 'Hata'
           : 'Yenile';
@@ -2656,10 +2898,11 @@
   }
 
   function buildScadaQualityChips(summary) {
+    const historical = state.scada.timeMode === 'historical';
     const chips = [
-      { label: 'Canli', value: summary.matched || 0, tone: 'is-live' },
+      { label: historical ? 'Gecerli' : 'Canli', value: summary.matched || 0, tone: 'is-live' },
       { label: 'Gecikmeli', value: summary.delayed || 0, tone: 'is-warn' },
-      { label: 'Bayat', value: summary.dead || 0, tone: 'is-dead' },
+      { label: historical ? 'Eski' : 'Bayat', value: summary.dead || 0, tone: 'is-dead' },
       { label: 'Yon belirsiz', value: summary.orientationUnknown || 0, tone: 'is-unknown', filter: 'orientation-unknown' },
       { label: 'Terminal yorumlu', value: summary.resolvedWithWarning || 0, tone: 'is-resolved-warning', filter: 'resolved-with-warning' },
       { label: 'Eksik', value: summary.unmatched || 0, tone: 'is-missing', filter: 'missing' }
@@ -2682,11 +2925,23 @@
     const elEslesmeyen = document.getElementById('scadaEslesmeyen');
     const elStale = document.getElementById('scadaStale');
     const elHata = document.getElementById('scadaHata');
+    const elAvailable = document.getElementById('scadaAvailable');
+    const elEksik = document.getElementById('scadaEksik');
+    const elHeaderState = document.getElementById('scadaHeaderState');
     const elLejant = document.getElementById('scadaLejant');
     const elQualityChips = document.getElementById('scadaQualityChips');
     const elKalite = document.getElementById('scadaKalite');
     const btnBolt = document.getElementById('btnScadaRanking');
 
+    const summaryAvailable = Number.isFinite(Number(summary.available)) ? Number(summary.available) : (Number(summary.matched) || 0);
+    const summaryMissing = Number.isFinite(Number(summary.missing)) ? Number(summary.missing) : (Number(summary.total) || 0) - summaryAvailable;
+
+    if (elHeaderState) {
+      const historicalState = state.scada.timeMode === 'historical';
+      elHeaderState.textContent = historicalState ? '● GECMIS' : '● CANLI';
+      elHeaderState.classList.toggle('is-historical', historicalState);
+      elHeaderState.classList.toggle('is-live', !historicalState);
+    }
     if (elSonVeri) {
       elSonVeri.textContent = state.scada.lastDataTimestamp
         ? state.scada.lastDataTimestamp.toLocaleTimeString('tr-TR')
@@ -2697,6 +2952,8 @@
     if (elEslesmeyen) elEslesmeyen.textContent = String((summary.unmatched || 0) + (summary.ambiguousLive || 0));
     if (elStale) elStale.textContent = String(summary.dead || 0);
     if (elHata) elHata.textContent = state.scada.error || '-';
+    if (elAvailable) elAvailable.textContent = `${summaryAvailable}/${summary.total || 0} veri`;
+    if (elEksik) elEksik.textContent = String(Math.max(0, summaryMissing));
 
     if (elLejant) {
       const legendCounts = getMetricLegendCounts(modeConfig);
@@ -4467,7 +4724,7 @@ function _formatHistoryAxisLabel(timestampMs) {
     if (!row?.timestamp) return 'is-missing';
     if (row.timeState === 'dead') return 'is-dead';
     if (row.timeState === 'warn') return 'is-warn';
-    const ageMs = Date.now() - row.timestamp.getTime();
+    const ageMs = getScadaReferenceTimeMs() - row.timestamp.getTime();
     if (!Number.isFinite(ageMs) || ageMs < 0) return 'is-live-fresh';
     const ageSec = ageMs / 1000;
     if (ageSec <= 120) return 'is-live-fresh';
@@ -4476,7 +4733,8 @@ function _formatHistoryAxisLabel(timestampMs) {
   }
 
   function renderPanelTimeCell(row) {
-    const label = row.timeStateLabel || (row.staleState === 'warn' ? 'Gecikmeli' : row.staleState === 'dead' ? 'Bayat' : 'Canli');
+    const historicalMode = state.scada.timeMode === 'historical';
+    const label = row.timeStateLabel || (row.staleState === 'warn' ? 'Gecikmeli' : row.staleState === 'dead' ? (historicalMode ? 'Eski' : 'Bayat') : (historicalMode ? 'Gecerli' : 'Canli'));
     const tooltip = row.timestamp
       ? `${label}${row.ageLabel ? ` - ${row.ageLabel}` : ''}`
       : (row.statusLabel || 'Veri yok');
@@ -5482,6 +5740,8 @@ function _formatHistoryAxisLabel(timestampMs) {
           handleDashboardMapSlotActive(message.payload || {});
         } else if (message?.type === 'SCADA_DASHBOARD_SNAPSHOT_UPDATED') {
           restoreScadaDashboardSnapshotFromStorage();
+        } else if (message?.type === 'SCADA_FETCH_PROGRESS') {
+          handleScadaFetchProgressMessage(message.payload || {});
         }
       });
     }
@@ -5576,13 +5836,13 @@ function _formatHistoryAxisLabel(timestampMs) {
       return;
     }
     const atMs = state.scada.historicalAt;
-    const matched = state.scada.visibleSummary?.matched ?? 0;
+    const available = Number(state.scada.visibleSummary?.available) || 0;
     const total = state.scada.visibleSummary?.total ?? 0;
     badge.classList.remove('hidden');
-    badge.textContent = `GECMIS VERI${atMs ? ` - ${_formatTimeBadge(atMs)}` : ''} | ${matched}/${total} eslesme`;
+    badge.textContent = `GECMIS VERI${atMs ? ` - ${_formatTimeBadge(atMs)}` : ''} | ${available}/${total} veri`;
   }
 
-  async function fetchScadaHistoricalSnapshot(atMs) {
+  async function fetchScadaHistoricalSnapshot(atMs, options = {}) {
     const scope = getCurrentScadaScope({ history: true });
     if (!scope.measurementIds.length) {
       return { ok: false, error: 'Secili mod icin olcum ID bulunamadi.' };
@@ -5597,7 +5857,8 @@ function _formatHistoryAxisLabel(timestampMs) {
         datasourceId: SCADA_CONFIG.DATASOURCE_ID,
         scopeKey: String(scope.filterKey || scope.mode || 'default'),
         elementNames: scope.elementNames,
-        measurementIds: scope.measurementIds
+        measurementIds: scope.measurementIds,
+        requestId: options?.requestId || null
       }
     });
     if (!result?.ok || !result.data) {
@@ -5660,14 +5921,27 @@ function _formatHistoryAxisLabel(timestampMs) {
       const seq = state.scada.historicalFetchSeq + 1;
       state.scada.historicalFetchSeq = seq;
       state.scada.pendingHistoricalFetch = { seq, targetMs };
+      const histScopeForOp = getCurrentScadaScope({ history: true });
+      const histRequestId = `hist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setScadaOperationMeta({
+        requestId: histRequestId,
+        kind: 'historical',
+        stage: 'prepare',
+        progressPct: 6,
+        message: 'Gecmis veri yukleniyor',
+        totalMeasurements: histScopeForOp.measurementIds.length,
+        totalEntities: histScopeForOp.entities.length,
+        startedAt: new Date()
+      });
       setScadaStatusMessage(`Gecmis mod: ${_formatTimeBadge(targetMs)} anindaki SCADA verisi yukleniyor.`, 'info');
       // Transactional: the snapshot is fetched while the map stays LIVE; the
       // historical mode is committed only after a successful, non-empty reply.
-      const result = await fetchScadaHistoricalSnapshot(targetMs);
+      const result = await fetchScadaHistoricalSnapshot(targetMs, { requestId: histRequestId });
       if (state.scada.historicalFetchSeq !== seq) return; // superseded or cancelled
       state.scada.pendingHistoricalFetch = null;
       const historyScope = getCurrentScadaScope({ history: true });
       if (result.ok && result.rowsByMeasurementId.size) {
+        setScadaOperationMeta({ stage: 'normalize', progressPct: 92, message: 'Gecmis veri esleniyor' });
         const wasHistorical = state.scada.timeMode === 'historical';
         state.scada.timeMode = 'historical';
         state.scada.historicalAt = targetMs;
@@ -5682,6 +5956,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         if (typeof refreshRankingTable === 'function') refreshRankingTable();
         if (state.scada.pollState) state.scada.pollState.pendingAutoRefresh = false;
         updateScadaTimeBadge();
+        setScadaOperationMeta({ stage: 'done', progressPct: 100, message: 'Gecmis veri tamamlandi' });
         const recoveredText = result.meta?.recoveredViaFallback ? ' (genis pencere tamamlamasi ile)' : '';
         setScadaStatusMessage(`Gecmis gorunum: ${_formatTimeBadge(targetMs)} anindaki veri gosteriliyor${recoveredText}`, 'info');
         return;
@@ -5690,6 +5965,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       const failMessage = !result.ok
         ? (result.error || 'Gecmis veri alinamadi.')
         : 'Secilen an icin veri bulunamadi; daha yakin bir zaman secin.';
+      setScadaOperationMeta({ stage: 'error', progressPct: 100, message: failMessage });
       state.scada.timeMode = 'live';
       state.scada.historicalAt = null;
       const lastLive = state.scada.lastLiveSnapshot;
@@ -5816,7 +6092,18 @@ function _formatHistoryAxisLabel(timestampMs) {
     buttons.forEach((button) => {
       if (button.dataset.bound) return;
       button.dataset.bound = '1';
-      button.addEventListener('click', () => setScadaMetric(button.dataset.scadaMetric));
+      button.addEventListener('click', () => {
+        const value = button.dataset.scadaMetric;
+        if (value === 'active' || value === 'reactive') {
+          // MW/MVar row: keep the current entity (defaulting to hat) and only
+          // swap the metric part of the combined key.
+          const modeConfig = getModeConfig();
+          const entity = modeConfig.domain === 'bara' ? 'hat' : modeConfig.domain;
+          setScadaMetric(`${entity}-${value}`);
+        } else {
+          setScadaMetric(value);
+        }
+      });
     });
     const displayButtons = Array.from(document.querySelectorAll('[data-scada-map-display]'));
     displayButtons.forEach((button) => {
@@ -5865,6 +6152,10 @@ function _formatHistoryAxisLabel(timestampMs) {
       buildHistoryCapacitySeries,
       buildVoltageReferenceLines,
       buildPositiveAxisScale,
+      getStaleState,
+      getDisplayColor,
+      updateScadaTimeBadge,
+      enrichMissingScadaIds,
       getLiveMetricTypes,
       getHistoryMetricTypes,
       getCurrentScadaScope,
