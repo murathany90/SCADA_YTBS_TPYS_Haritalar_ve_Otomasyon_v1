@@ -117,8 +117,14 @@
     const chartSliceId = Number(config?.chartSliceId || 454);
     const datasourceId = Number(config?.datasourceId || 3);
     const contract = resolveQueryContract(config);
-    const timeRange = config?.timeRange || 'DATEADD(DATETIME("now"), -24, hour) : now';
+    const defaultTimeRange = 'DATEADD(DATETIME("now"), -24, hour) : now';
+    const resolvedTimeRange = (config?.startTime != null && config?.endTime != null)
+      ? (formatSupersetTimeRange(config.startTime, config.endTime) || config?.timeRange || defaultTimeRange)
+      : (config?.timeRange || defaultTimeRange);
     const queryMode = config?.queryMode === 'timeseries' ? 'aggregate' : 'raw';
+    const requestedGrain = queryMode === 'aggregate'
+      ? (config?.timeGrain || 'PT1M')
+      : undefined;
     const columns = ['__time', 'sinsid', 'elementName', 'maxValue', 'b1Name', 'b2Name', 'b3Name'];
     const filters = [];
     const adhocFilters = [];
@@ -140,7 +146,7 @@
       viz_type: queryMode === 'aggregate' ? 'echarts_timeseries_line' : 'table',
       datasource: `${datasourceId}__table`,
       granularity_sqla: '__time',
-      time_range: timeRange,
+      time_range: resolvedTimeRange,
       query_mode: queryMode,
       columns: queryMode === 'raw' ? columns.slice() : undefined,
       groupby: queryMode === 'aggregate' ? ['sinsid'] : [],
@@ -148,7 +154,7 @@
       adhoc_filters: adhocFilters,
       row_limit: contract.rowLimit || CONFIG.HISTORY_ROW_LIMIT || 50000,
       order_by_cols: queryMode === 'raw' ? ['__time DESC'] : undefined,
-      time_grain_sqla: queryMode === 'aggregate' ? 'PT1M' : undefined
+      time_grain_sqla: queryMode === 'aggregate' ? requestedGrain : undefined
     };
 
     return {
@@ -156,9 +162,9 @@
       force: true,
       form_data: formData,
       queries: [{
-        time_range: timeRange,
+        time_range: resolvedTimeRange,
         granularity: '__time',
-        time_grain_sqla: queryMode === 'aggregate' ? 'PT1M' : undefined,
+        time_grain_sqla: queryMode === 'aggregate' ? requestedGrain : undefined,
         is_timeseries: queryMode === 'aggregate' ? true : undefined,
         groupby: queryMode === 'aggregate' ? ['sinsid'] : undefined,
         metrics: queryMode === 'aggregate' ? [{ aggregate: 'AVG', column: { column_name: 'maxValue' }, expressionType: 'SIMPLE', label: 'AVG(maxValue)' }] : undefined,
@@ -319,23 +325,77 @@
     return { byMid, perMidStats, maxPoints, maxPointsMid, stats };
   }
 
+  // Resolves both active (P/MW) and reactive (Q/MVar) histories for hat/trafo,
+  // and voltage (U/kV) for bara. Never mixes measurement ids across metric types.
+  function resolveHistoryMetricsByEntity(entityType, entity) {
+    const pickIds = (metricType) => {
+      const config = Array.isArray(entity?.scada?.[metricType]?.rows)
+        ? entity.scada[metricType].rows
+        : [];
+      const ids = [...new Set(
+        config.map((row) => String(row?.measurementId || '').trim()).filter(Boolean)
+      )];
+      if (!ids.length) {
+        const configuredIds = Array.isArray(entity?.scada?.[metricType]?.ids) ? entity.scada[metricType].ids : [];
+        configuredIds.forEach((id) => ids.push(String(id)));
+      }
+      return ids;
+    };
+    if (entityType === 'bara') {
+      return {
+        voltage: { metricType: 'voltage', elementName: 'U', unit: 'kV', measurementIds: pickIds('voltage') }
+      };
+    }
+    return {
+      active: { metricType: 'active', elementName: 'P', unit: 'MW', measurementIds: pickIds('active') },
+      reactive: { metricType: 'reactive', elementName: 'Q', unit: 'MVar', measurementIds: pickIds('reactive') }
+    };
+  }
+
   // Metric selection for the 24h history chart, never hard-coded to 'P'.
   // hat/trafo-active -> P/MW, hat/trafo-reactive -> Q/MVar, voltage -> U/kV.
   function resolveHistoryMetricByEntity(mode, entityType, entity) {
-    const metricType = entityType === 'bara' ? 'voltage' : (mode === 'hat-reactive' || mode === 'trafo-reactive' ? 'reactive' : 'active');
-    const elementName = metricType === 'voltage' ? 'U' : (metricType === 'reactive' ? 'Q' : 'P');
-    const unit = metricType === 'voltage' ? 'kV' : (metricType === 'reactive' ? 'MVar' : 'MW');
-    const config = Array.isArray(entity?.scada?.[metricType]?.rows)
-      ? entity.scada[metricType].rows
-      : [];
-    const ids = [...new Set(
-      config.map((row) => String(row?.measurementId || '').trim()).filter(Boolean)
-    )];
-    if (!ids.length) {
-      const configuredIds = Array.isArray(entity?.scada?.[metricType]?.ids) ? entity.scada[metricType].ids : [];
-      configuredIds.forEach((id) => ids.push(String(id)));
+    const metrics = resolveHistoryMetricsByEntity(entityType, entity);
+    const fallbackEmpty = (metricType, elementName, unit) => ({ metricType, elementName, unit, measurementIds: [] });
+    if (entityType === 'bara') {
+      return metrics.voltage || fallbackEmpty('voltage', 'U', 'kV');
     }
-    return { metricType, elementName, unit, measurementIds: ids };
+    const reactive = mode === 'hat-reactive' || mode === 'trafo-reactive';
+    return reactive
+      ? (metrics.reactive || fallbackEmpty('reactive', 'Q', 'MVar'))
+      : (metrics.active || fallbackEmpty('active', 'P', 'MW'));
+  }
+
+  // TR local naive ISO formatting, same convention as Superset's local-time rows.
+  // Never appends a timezone suffix (strip-Z behavior) and never shifts +3h.
+  function formatSupersetDateTime(valueMs) {
+    const date = valueMs instanceof Date ? valueMs : new Date(Number(valueMs));
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  function formatSupersetTimeRange(startMs, endMs) {
+    const startText = typeof startMs === 'string' ? startMs : formatSupersetDateTime(startMs);
+    const endText = typeof endMs === 'string' ? endMs : formatSupersetDateTime(endMs);
+    if (!startText || !endText) return '';
+    return `${startText} : ${endText}`;
+  }
+
+  // Adaptive resolution for history queries: keep raw queries short so huge
+  // 24h/50k-row raw downloads are never the default path.
+  function resolveHistoryAdaptiveStrategy(startMs, endMs) {
+    const start = Number(startMs);
+    const end = Number(endMs);
+    const spanHours = Number.isFinite(start) && Number.isFinite(end) ? (end - start) / 3600000 : 24;
+    if (spanHours <= 2) return { queryMode: 'raw', timeGrain: null, label: 'Ham' };
+    if (spanHours <= 48) return { queryMode: 'timeseries', timeGrain: 'PT1M', label: '1 dk ozet' };
+    return { queryMode: 'timeseries', timeGrain: 'PT5M', label: '5 dk ozet' };
+  }
+
+  // Composite key that never mixes P and Q rows of the same measurement id.
+  function historySeriesId(measurementId, elementName) {
+    return `${String(measurementId)}|${String(elementName || '')}`;
   }
 
   function formatHistoryAxisLabel(timestampMs) {
@@ -610,10 +670,15 @@
     computeVisibleSummary,
     findDataArray,
     formatHistoryAxisLabel,
+    formatSupersetDateTime,
+    formatSupersetTimeRange,
+    historySeriesId,
     normalizeMetricEntries,
     normalizeMetricRows,
+    resolveHistoryAdaptiveStrategy,
     resolveHistoryMeasurementId,
     resolveHistoryMetricByEntity,
+    resolveHistoryMetricsByEntity,
     resolveHistoryTimestamp,
     resolveHistoryValue,
     resolveQueryContract,

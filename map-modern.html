@@ -135,6 +135,20 @@
                 <button data-scada-btn="mock" class="tiny" id="btnScadaMock" title="Mock/Canli Gecisi">Kaynak</button>
               </div>
             </div>
+            <div class="scada-time-mode">
+              <div class="segmented segmented-scada-time">
+                <button class="segmented-btn active" data-scada-time="live">CANLI</button>
+                <button class="segmented-btn" data-scada-time="historical">GEÇMİŞ</button>
+              </div>
+              <div id="scadaHistoricalControls" class="scada-historical-controls hidden">
+                <input type="datetime-local" id="scadaHistoricalAtInput" step="60"
+                  title="Geçmiş harita için tarih ve saat">
+                <div class="scada-historical-actions">
+                  <button id="btnScadaHistoricalShow" class="tiny">Haritada Göster</button>
+                  <button id="btnScadaHistoricalLive" class="tiny">Canlıya Dön</button>
+                </div>
+              </div>
+            </div>
             <div class="segmented segmented-scada-mode">
               <button class="segmented-btn active" data-scada-metric="hat-active">Hat (MW)</button>
               <button class="segmented-btn" data-scada-metric="hat-reactive">Hat (MVar)</button>
@@ -238,6 +252,7 @@
 
       <div id="infoCard" class="info-card hidden"></div>
       <div id="hoverTooltip" class="hover-tooltip hidden"></div>
+      <div id="scadaTimeBadge" class="scada-time-badge hidden"></div>
       <button id="btnScadaRanking" class="floating-bolt hidden" title="SCADA Paneli"></button>
     </main>
   </div>

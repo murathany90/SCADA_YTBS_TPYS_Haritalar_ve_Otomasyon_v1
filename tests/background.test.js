@@ -18,6 +18,8 @@ const rgdhCsvPath = path.join(__dirname, '..', 'rgdh-csv.js');
 const rgdhCsvCode = fs.readFileSync(rgdhCsvPath, 'utf8');
 const diagnosticsPath = path.join(__dirname, '..', 'rgdh-diagnostics.js');
 const diagnosticsCode = fs.existsSync(diagnosticsPath) ? fs.readFileSync(diagnosticsPath, 'utf8') : '';
+const scadaCommonPath = path.join(__dirname, '..', 'scada-common.js');
+const scadaCommonCode = fs.readFileSync(scadaCommonPath, 'utf8');
 
 function loadBackground(options = {}) {
   const storageValues = { ...(options.storage || {}) };
@@ -92,6 +94,7 @@ function loadBackground(options = {}) {
   vm.runInContext(rgdhApiClientCode, context);
   vm.runInContext(rgdhCsvCode, context);
   if (diagnosticsCode) vm.runInContext(diagnosticsCode, context);
+  vm.runInContext(scadaCommonCode, context);
   vm.runInContext(backgroundCode, context);
   return context;
 }
@@ -1819,7 +1822,7 @@ test('RGDH fetch jobs keep row payloads out of status and expose chunks separate
   const unitChunk = await context.handleRgdhFetchRows({ jobId: started.jobId, kind: 'conventionalUnitRows', offset: 0, limit: 2 });
 
   assert.equal(completed.status, 'completed');
-  assert.equal(completed.result.conventionalRows, undefined);
+assert.equal(completed.result.conventionalRows, undefined);
   assert.equal(completed.result.conventionalUnitRows, undefined);
   assert.equal(completed.result.rowCounts.conventionalRows, 2);
   assert.equal(completed.result.rowCounts.conventionalUnitRows, 2);
@@ -1828,4 +1831,129 @@ test('RGDH fetch jobs keep row payloads out of status and expose chunks separate
   assert.equal(chunk.total, 2);
   assert.deepEqual(unitChunk.rows, [{ id: 'u1' }, { id: 'u2' }]);
   assert.equal(unitChunk.total, 2);
+});
+
+function makeSnapshotRow(id, timeEpochSec, value) {
+  return { sinsid: id, __time: timeEpochSec, maxValue: value };
+}
+
+test('filterHistoricalSnapshots keeps newest row per id at-or-before the instant', () => {
+  const context = loadBackground({ fetch: async () => ({ ok: false, status: 404 }) });
+  const at = 1800000000000;
+  const rows = [
+    makeSnapshotRow('A', (at - 300000) / 1000, 10),
+    makeSnapshotRow('A', (at - 120000) / 1000, 12),
+    makeSnapshotRow('B', (at - 60000) / 1000, 5),
+    makeSnapshotRow('A', (at + 60000) / 1000, 99),
+    makeSnapshotRow('C', (at - 50000) / 1000, 1)
+  ];
+  const result = context.filterHistoricalSnapshots(rows, at, ['A', 'B']);
+
+  assert.equal(result.received, 4);
+  assert.deepEqual([...result.best.keys()], ['A', 'B']);
+  assert.equal(result.best.get('A').ts.getTime(), at - 120000);
+  assert.equal(result.best.get('B').ts.getTime(), at - 60000);
+  assert.equal(result.best.get('C'), undefined);
+});
+
+test('handleScadaHistoricalSnapshotFetch rejects missing at without any network call', async () => {
+  let fetchCount = 0;
+  const context = loadBackground({
+    fetch: async () => {
+      fetchCount += 1;
+      return { ok: false, status: 404 };
+    }
+  });
+
+  const result = await context.handleScadaHistoricalSnapshotFetch({ measurementIds: ['A', 'B'] });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.errorType, 'INVALID_PAYLOAD');
+  assert.equal(fetchCount, 0);
+});
+
+test('handleScadaHistoricalSnapshotFetch fetches short window and reports metadata', async () => {
+  const at = 1800000000000;
+  const postedBodies = [];
+  const context = loadBackground({
+    fetch: async (url, options = {}) => {
+      if (String(url).includes('scada_auth.json')) return { ok: false, status: 404 };
+      if (String(url).includes('/csrf_token/')) {
+        return { ok: true, status: 200, json: async () => ({ result: 'snapshot-token' }) };
+      }
+      postedBodies.push(options.body);
+      const rows = [
+        makeSnapshotRow('A', (at - 300000) / 1000, 10),
+        makeSnapshotRow('A', (at - 120000) / 1000, 12),
+        makeSnapshotRow('B', (at - 60000) / 1000, 5),
+        makeSnapshotRow('A', (at + 60000) / 1000, 99),
+        makeSnapshotRow('C', (at - 50000) / 1000, 1)
+      ];
+      return { ok: true, status: 200, json: async () => ({ result: [{ data: rows }] }) };
+    }
+  });
+
+  const result = await context.handleScadaHistoricalSnapshotFetch({
+    at,
+    measurementIds: ['A', 'B'],
+    scopeKey: 'hat-1'
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(postedBodies.length, 1);
+  assert.equal(result.usedFallback, false);
+  assert.equal(result.meta.at, at);
+  assert.equal(result.meta.windowStartMs, at - 600000);
+  assert.equal(result.meta.windowEndMs, at);
+  assert.deepEqual([...result.meta.requestedIds], ['A', 'B']);
+  assert.deepEqual([...result.meta.matchedIds], ['A', 'B']);
+  assert.deepEqual([...result.meta.missingIds], []);
+  assert.equal(result.meta.receivedRows, 4);
+  assert.equal(result.data.result[0].data.length, 2);
+
+  const d = new Date(at - 600000);
+  const pad = (value) => String(value).padStart(2, '0');
+  const expectedStart = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  assert.match(postedBodies[0], new RegExp(expectedStart.replace('T', 'T')));
+});
+
+test('handleScadaHistoricalSnapshotFetch retries only missing ids with wide window and throttles fallback', async () => {
+  const at = 1800000000000;
+  let postCount = 0;
+  const postedBodies = [];
+  const context = loadBackground({
+    fetch: async (url, options = {}) => {
+      if (String(url).includes('scada_auth.json')) return { ok: false, status: 404 };
+      if (String(url).includes('/csrf_token/')) {
+        return { ok: true, status: 200, json: async () => ({ result: 'snapshot-token-2' }) };
+      }
+      postCount += 1;
+      postedBodies.push(options.body);
+      return { ok: true, status: 200, json: async () => ({ result: [{ data: [] }] }) };
+    }
+  });
+
+  const first = await context.handleScadaHistoricalSnapshotFetch({
+    at,
+    measurementIds: ['A', 'B'],
+    scopeKey: 'hat-1'
+  });
+  const second = await context.handleScadaHistoricalSnapshotFetch({
+    at,
+    measurementIds: ['A', 'B'],
+    scopeKey: 'hat-1'
+  });
+
+  assert.equal(first.ok, true);
+  assert.equal(first.usedFallback, false);
+  assert.deepEqual(first.meta.missingIds, ['A', 'B']);
+  assert.equal(second.ok, true);
+  assert.deepEqual(second.meta.missingIds, ['A', 'B']);
+  assert.equal(postCount, 3);
+
+  const ranges = postedBodies.map((body) => JSON.parse(body).queries[0].time_range);
+  assert.equal(ranges.length, 3);
+  assert.equal(ranges[0], ranges[2]);
+  assert.notEqual(ranges[1], ranges[0]);
+  assert.notEqual(ranges[1], ranges[2]);
 });

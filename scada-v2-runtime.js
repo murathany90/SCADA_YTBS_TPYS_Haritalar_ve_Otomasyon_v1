@@ -110,6 +110,10 @@
     metricMode: state.filters?.scadaMetric || 'hat-active'
   };
   state.scada.history = state.scada.history || new Map();
+  state.scada.history24hCache = state.scada.history24hCache || new Map();
+  state.scada.timeMode = state.scada.timeMode || 'live';
+  state.scada.historicalAt = state.scada.historicalAt || null;
+  state.scada.lastLiveSnapshot = state.scada.lastLiveSnapshot || null;
   state.scada.pollState = state.scada.pollState || {
     timerId: null,
     nextDueAt: null,
@@ -1731,7 +1735,7 @@
       const entityType = modeConfig.domain === 'bara' ? 'bara' : modeConfig.domain;
       const record = buildEntityMetricRecord(entityType, entity, modeConfig, measurementRowsById);
       metricMap.set(record.entityKey, record);
-      pushMetricHistory(record.entityKey, record);
+      if (state.scada.timeMode !== 'historical') pushMetricHistory(record.entityKey, record);
       if (record.primaryTimestamp && (!newestTimestamp || record.primaryTimestamp > newestTimestamp)) {
         newestTimestamp = record.primaryTimestamp;
       }
@@ -1893,6 +1897,9 @@
   async function restoreScadaDashboardSnapshotFromStorage() {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage?.local?.get) return { ok: false, skipped: true };
+      if (state.scada.timeMode === 'historical') {
+        return { ok: false, skipped: true, reason: 'historical-mode' };
+      }
       const stored = await chrome.storage.local.get(SCADA_DASHBOARD_SNAPSHOT_KEY);
       const snapshot = stored?.[SCADA_DASHBOARD_SNAPSHOT_KEY];
       const restored = restoreScadaDashboardSnapshot(snapshot);
@@ -1996,6 +2003,11 @@
       pollState.nextDueAt = null;
       return;
     }
+    if (state.scada.timeMode === 'historical') {
+      pollState.nextDueAt = null;
+      scadaLog('info', 'SCADA otomatik yenileme gecmis modda durduruldu.');
+      return;
+    }
     scheduleNextScadaAutoTick(SCADA_CONFIG.POLL_INTERVAL_MS);
     scadaLog('info', `SCADA otomatik yenileme zamanlayicisi baslatildi (${SCADA_CONFIG.POLL_INTERVAL_MS / 1000} sn).`);
   }
@@ -2003,6 +2015,10 @@
   function resumeScadaAutoSchedulerIfOverdue(reason = 'resume') {
     const pollState = state.scada.pollState;
     if (!state.scada.enabled || !state.scada.autoRefresh) return;
+    if (state.scada.timeMode === 'historical') {
+      pollState.nextDueAt = null;
+      return;
+    }
     if (isDocumentHidden()) return;
     pollState.lastVisibilityResumeAt = new Date();
     if (!pollState.nextDueAt) {
@@ -2057,6 +2073,10 @@
   scadaDoFetch = async function (options = {}) {
     const triggerType = options?.trigger || 'manual';
     const triggerLabel = getScadaTriggerLabel(triggerType);
+    if (state.scada.timeMode === 'historical' && !options.force) {
+      scadaLog('info', 'SCADA canli yenileme atlandi; gecmis modunda polling durduruldu.');
+      return;
+    }
     if (state.scada.fetchInProgress) {
       if (triggerType === 'auto' && state.scada.pollState) {
         state.scada.pollState.pendingAutoRefresh = true;
@@ -2895,7 +2915,83 @@
     if (backdrop) backdrop.remove();
   }
 
-  async function openScada24hHistory(entityKey) {
+  const HISTORY_PRESETS = [
+    { key: '1h', label: 'Son 1 Saat' },
+    { key: '6h', label: 'Son 6 Saat' },
+    { key: '24h', label: 'Son 24 Saat' },
+    { key: '7d', label: 'Son 7 Gun' },
+    { key: 'custom', label: 'Ozel' }
+  ];
+
+  function resolveHistoryRange(presetKey, customStartMs, customEndMs) {
+    const now = Date.now();
+    if (presetKey === 'custom') {
+      if (customStartMs != null && customEndMs != null
+        && Number.isFinite(Number(customStartMs)) && Number.isFinite(Number(customEndMs))) {
+        return { startMs: Number(customStartMs), endMs: Number(customEndMs) };
+      }
+      return { startMs: now - 24 * 3600 * 1000, endMs: now };
+    }
+    const spans = {
+      '1h': 3600 * 1000,
+      '6h': 6 * 3600 * 1000,
+      '24h': 24 * 3600 * 1000,
+      '7d': 7 * 24 * 3600 * 1000
+    };
+    const spanMs = spans[presetKey] || 24 * 3600 * 1000;
+    return { startMs: now - spanMs, endMs: now };
+  }
+
+  function setHistoryStatus(text, kind) {
+    const statusEl = document.getElementById('scadaHistoryStatus');
+    if (!statusEl) return;
+    statusEl.textContent = text || '';
+    statusEl.classList.toggle('is-error', kind === 'error');
+    statusEl.classList.toggle('is-ok', kind === 'ok');
+    statusEl.classList.toggle('is-loading', kind === 'loading');
+  }
+
+  function formatDateTimeLocalInput(valueMs) {
+    const date = new Date(Number(valueMs));
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function buildHistoryHeaderInfo(entityType, entity) {
+    const info = {
+      kicker: `SCADA GECMIS VERI - ${String(entityType || '').toUpperCase()}`,
+      lines: []
+    };
+    if (!entity) return info;
+    if (entityType === 'hat') {
+      info.kicker = 'SCADA GECMIS VERI - HAT';
+      if (entity.startTm || entity.endTm) info.lines.push(`${entity.startTm || '?'} -> ${entity.endTm || '?'}`);
+      if (Number.isFinite(Number(entity.lengthKm)) && Number(entity.lengthKm) > 0) {
+        info.lines.push(`Uzunluk: ${Number(entity.lengthKm).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} km`);
+      }
+      const capacity = getCapacityMva('hat', entity);
+      if (Number.isFinite(capacity) && capacity > 0) {
+        info.lines.push(`Kapasite: ${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA`);
+      }
+    } else if (entityType === 'trafo') {
+      info.kicker = 'SCADA GECMIS VERI - TRAFO';
+      const capacity = getCapacityMva('trafo', entity);
+      if (Number.isFinite(capacity) && capacity > 0) {
+        info.lines.push(`Kapasite: ${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA`);
+      }
+      if (entity.tmName) info.lines.push(`Bagli TM: ${entity.tmName}`);
+      if (entity.gerilimTuru) info.lines.push(entity.gerilimTuru);
+    } else if (entityType === 'bara') {
+      info.kicker = 'SCADA GECMIS VERI - BARA';
+      const nominal = Number(entity.gerilimKv || entity.kvBucket || 0);
+      if (nominal > 0) info.lines.push(`Nominal: ${nominal} kV`);
+      if (entity.tmName) info.lines.push(`Bagli TM: ${entity.tmName}`);
+    }
+    return info;
+  }
+
+async function openScada24hHistory(entityKey, presetKey = '24h', customStartMs = null, customEndMs = null) {
     closeScadaChartModal();
     const isHat = entityKey.startsWith('hat:');
     const isTrafo = entityKey.startsWith('trafo:');
@@ -2915,18 +3011,42 @@
     }
 
     const name = entity?.name || entityId;
+    const headerInfo = buildHistoryHeaderInfo(entityType, entity);
+
+    const lastUsed = state.scada.historyLastPresetByEntity?.get(entityKey);
+    if (lastUsed && presetKey === '24h' && customStartMs == null && lastUsed.presetKey !== '24h') {
+      openScada24hHistory(entityKey, lastUsed.presetKey, lastUsed.customStartMs, lastUsed.customEndMs);
+      return;
+    }
+
+    if (!state.scada.historyLastPresetByEntity) state.scada.historyLastPresetByEntity = new Map();
+    if (presetKey !== 'custom' || customStartMs != null) {
+      state.scada.historyLastPresetByEntity.set(entityKey, { presetKey, customStartMs, customEndMs });
+    }
 
     const backdrop = document.createElement('div');
     backdrop.id = 'scadaChartModalBackdrop';
     backdrop.className = 'scada-chart-backdrop';
     backdrop.innerHTML = `
-      <div class="scada-chart-modal" role="dialog" aria-modal="true" aria-label="SCADA 24 Saat Grafik">
+      <div class="scada-chart-modal" role="dialog" aria-modal="true" aria-label="SCADA Gecmis Grafik">
         <div class="scada-chart-header">
           <div>
-            <p class="info-kicker">Son 24 Saat</p>
+            <p class="info-kicker">${escapeHtml(headerInfo.kicker)}</p>
             <h3>${escapeHtml(name)}</h3>
+            ${headerInfo.lines.map((line) => `<p class="scada-chart-sub">${escapeHtml(line)}</p>`).join('')}
           </div>
           <button id="btnCloseScadaChart" class="info-close" title="Kapat">X</button>
+        </div>
+        <div class="scada-chart-controls">
+          <div class="scada-history-presets" id="scadaHistoryPresets">
+            ${HISTORY_PRESETS.map((preset) => `<button class="segmented-btn${preset.key === presetKey ? ' active' : ''}" data-history-preset="${preset.key}">${preset.label}</button>`).join('')}
+          </div>
+          <div class="scada-history-custom${presetKey === 'custom' ? '' : ' hidden'}" id="scadaHistoryCustom">
+            <label>Baslangic <input type="datetime-local" id="scadaHistoryStart"></label>
+            <label>Bitis <input type="datetime-local" id="scadaHistoryEnd"></label>
+            <button id="btnScadaHistoryQuery" class="tiny">Sorgula</button>
+          </div>
+          <div id="scadaHistoryStatus" class="scada-history-status"></div>
         </div>
         <div class="scada-chart-body" id="scadaChartModalBody">
           <div class="scada-chart-empty">Geçmiş veri yükleniyor...</div>
@@ -2941,159 +3061,184 @@
     const closeBtn = document.getElementById('btnCloseScadaChart');
     if (closeBtn) closeBtn.addEventListener('click', closeScadaChartModal);
 
-    const scope = getCurrentScadaScope();
-    const historyMetric = SCADA_COMMON.resolveHistoryMetricByEntity(scope.mode, entityType, entity);
-    const measurementIds = historyMetric.measurementIds;
+    const presetRow = document.getElementById('scadaHistoryPresets');
+    if (presetRow) {
+      presetRow.addEventListener('click', (event) => {
+        const target = event.target.closest('[data-history-preset]');
+        if (target) openScada24hHistory(entityKey, target.dataset.historyPreset);
+      });
+    }
+    const customRow = document.getElementById('scadaHistoryCustom');
+    if (customRow) {
+      const startInput = document.getElementById('scadaHistoryStart');
+      const endInput = document.getElementById('scadaHistoryEnd');
+      if (startInput && endInput) {
+        const prefill = resolveHistoryRange(presetKey === 'custom' && customStartMs != null ? 'custom' : '24h', customStartMs, customEndMs);
+        startInput.value = formatDateTimeLocalInput(prefill.startMs);
+        endInput.value = formatDateTimeLocalInput(prefill.endMs);
+      }
+      const queryBtn = document.getElementById('btnScadaHistoryQuery');
+      if (queryBtn) {
+        queryBtn.addEventListener('click', () => {
+          const startVal = document.getElementById('scadaHistoryStart')?.value;
+          const endVal = document.getElementById('scadaHistoryEnd')?.value;
+          const start = startVal ? new Date(startVal).getTime() : NaN;
+          const end = endVal ? new Date(endVal).getTime() : NaN;
+          if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+            _renderHistoryError(entityKey, 'Gecersiz ozel aralik: baslangic bitisten once olmali.');
+            return;
+          }
+          openScada24hHistory(entityKey, 'custom', start, end);
+        });
+      }
+    }
 
-    if (measurementIds.length === 0) {
-      _renderHistoryError(entityKey, `${historyMetric.elementName} (${historyMetric.unit}) için ölçüm ID bulunamadı.`);
+    if (presetKey === 'custom' && customStartMs == null) {
+      const body = document.getElementById('scadaChartModalBody');
+      if (body) body.innerHTML = '<div class="scada-chart-empty">Ozel tarih araligi secin ve Sorgula butonuna basin.</div>';
+      setHistoryStatus('Ozel aralik bekleniyor.');
       return;
     }
 
-    const cacheKey = measurementIds.slice().sort().join(',') + '|' + historyMetric.elementName + '|24h';
+const range = resolveHistoryRange(presetKey, customStartMs, customEndMs);
+    const strategy = (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.resolveHistoryAdaptiveStrategy)
+      ? SCADA_COMMON.resolveHistoryAdaptiveStrategy(range.startMs, range.endMs)
+      : { queryMode: 'raw', timeGrain: null, label: 'Ham' };
+
+    const metricList = (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.resolveHistoryMetricsByEntity)
+      ? resolveHistoryMetricList(entityType, entity)
+      : [];
+    if (!metricList.length) {
+      _renderHistoryError(entityKey, 'Bu donanimin olcum ID listesi bulunamadi.');
+      return;
+    }
+    const requestedElementNames = [...new Set(metricList.map((metric) => metric.elementName))];
+    const requestedMeasurementIds = [...new Set(metricList.flatMap((metric) => metric.measurementIds))];
+
+    const cacheKey = buildHistoryCacheKey(requestedElementNames, requestedMeasurementIds, range, strategy);
     if (!state.scada.history24hCache) state.scada.history24hCache = new Map();
     const cached = state.scada.history24hCache.get(cacheKey);
     const nowMs = Date.now();
-    
-    const isBypassCache = window._scadaBypassCacheFor === entityKey;
-    if (isBypassCache) {
-       window._scadaBypassCacheFor = null;
+    const metricSummaryLabel = `${requestedMeasurementIds.length} olcum (${requestedElementNames.join(', ')})`;
+
+    if (window._scadaBypassCacheFor === entityKey) {
+      window._scadaBypassCacheFor = null;
     } else if (cached && (nowMs - cached.fetchedAt < 5 * 60 * 1000)) {
-      _renderHistoryData(cached.data, measurementIds, entity, entityType, entityKey, cached.wasTruncated, cached.source, historyMetric);
-       return;
+      setHistoryStatus(`Onbellekten gosterildi (${cached.source}).`, 'ok');
+      _renderHistoryData(cached.data, entityType, entity, entityKey, cached.wasTruncated, cached.source, strategy, cached.metricList || metricList);
+      return;
     }
-    
-    async function fetchAndParse(useTimeseries) {
-       const result = await chrome.runtime.sendMessage({
-          type: 'SCADA_HISTORY_FETCH',
-          payload: {
-            baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
-            dashboardId: SCADA_CONFIG.DASHBOARD_ID,
-            chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
-            datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-            elementNames: [historyMetric.elementName],
-            measurementIds,
-            queryMode: useTimeseries ? 'timeseries' : 'raw'
-          }
-       });
-       if (!result.ok || !result.data) {
-          throw new Error('Superset boş veya geçersiz yanıt döndürdü.');
-       }
-       const rows = SCADA_COMMON.findDataArray(result.data) || [];
-       const firstRow = rows.length ? rows[0] : null;
-       const candidateTimeKeys = ['__timestamp', '__time', 'MAX(__time)', 'maxTime', 'timestamp', 'datetime', 'dt', 'time'];
-       const candidateValueKeys = ['maxValue', 'AVG(maxValue)', 'avgMaxValue', 'value', 'val'];
-       const seenTimeKeys = firstRow ? candidateTimeKeys.filter((key) => key in firstRow) : [];
-       const seenValueKey = firstRow ? candidateValueKeys.find((key) => key in firstRow) || null : null;
 
-       console.log('[SCADA_HISTORY] Fetch OK:', {
-          mode: useTimeseries ? 'timeseries' : 'raw',
-          elementName: historyMetric.elementName,
-          measurementIds,
-          rowCount: rows.length,
-          firstRowKeys: rows.length ? Object.keys(rows[0]) : [],
-          seenTimeKeys,
-          seenValueKey
-       });
+    async function fetchHistoryLevel(levelStrategy) {
+      const useTimeseries = levelStrategy.queryMode === 'timeseries';
+      const result = await chrome.runtime.sendMessage({
+        type: 'SCADA_HISTORY_FETCH',
+        payload: {
+          baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+          dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+          chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+          datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+          elementNames: requestedElementNames,
+          measurementIds: requestedMeasurementIds,
+          queryMode: useTimeseries ? 'timeseries' : 'raw',
+          timeGrain: levelStrategy.timeGrain,
+          startTime: range.startMs,
+          endTime: range.endMs
+        }
+      });
+      if (!result.ok || !result.data) {
+        throw new Error(result?.error || 'Superset bos veya gecersiz yanit dondurdu.');
+      }
+      const rows = SCADA_COMMON.findDataArray(result.data) || [];
+      const parsed = parseHistorySeriesByElement(rows, metricList);
+      return {
+        rows,
+        series: parsed.series,
+        maxPoints: parsed.maxPoints,
+        stats: parsed.stats,
+        minTime: parsed.minTime,
+        maxTime: parsed.maxTime,
+        seenTimeKeys: parsed.seenTimeKeys,
+        seenValueKey: parsed.seenValueKey
+      };
+    }
 
-       const parsed = SCADA_COMMON.collectHistoryRowsByMid(rows, measurementIds);
-       let minTime = Infinity;
-       let maxTime = -Infinity;
-       parsed.byMid.forEach((points) => {
-          for (const point of points) {
-             const t = point.ts.getTime();
-             if (t < minTime) minTime = t;
-             if (t > maxTime) maxTime = t;
-          }
-       });
-
-       return {
-          rows,
-          byMid: parsed.byMid,
-          perMidStats: parsed.perMidStats,
-          maxPoints: parsed.maxPoints,
-          stats: parsed.stats,
-          seenTimeKeys,
-          seenValueKey,
-          minTime: minTime === Infinity ? null : minTime,
-          maxTime: maxTime === -Infinity ? null : maxTime
-       };
+    const attemptLevels = [strategy];
+    if (strategy.queryMode !== 'timeseries') {
+      attemptLevels.push({ queryMode: 'timeseries', timeGrain: 'PT1M', label: '1 dk ozet' });
     }
 
     try {
-      let data = await fetchAndParse(false);
-      let source = 'Raw';
-      
+      let data = null;
+      let source = strategy.label;
+      for (const level of attemptLevels) {
+        if (data && data.maxPoints >= 2) break;
+        setHistoryStatus(`${level.label} cozunurluk sorgulaniyor (${metricSummaryLabel})...`, 'loading');
+        try {
+          const levelData = await fetchHistoryLevel(level);
+          if (data == null || levelData.maxPoints >= data.maxPoints) {
+            data = levelData;
+            source = level.label;
+          }
+        } catch (levelErr) {
+          console.warn('[SCADA_HISTORY] Sorgu seviyesi basarisiz:', level.label, levelErr);
+          if (data == null) throw levelErr;
+        }
+      }
+
+      if (!data) {
+        _renderHistoryError(entityKey, 'Veri alinamadi.', { mIds: requestedMeasurementIds, count: 0, source });
+        return;
+      }
+
       if (data.maxPoints < 2) {
-         try {
-            const fallbackData = await fetchAndParse(true);
-            if (fallbackData.maxPoints >= 2) {
-                data = fallbackData;
-                source = '1 dk özet';
-            }
-         } catch (fallbackErr) {
-            console.warn('[SCADA_HISTORY] Fallback failed:', fallbackErr);
-         }
+        _renderHistoryError(entityKey, buildHistoryEmptyReason(data, requestedElementNames, requestedMeasurementIds), { mIds: requestedMeasurementIds, count: data.rows.length, source });
+        return;
       }
-      
-if (data.maxPoints < 2) {
-         let reason = "Superset 0 satır döndürdü.";
-         if (data.rows.length > 0 && data.stats.missingMeasurementIdField > 0) {
-            reason = `Yanıtın ${data.stats.missingMeasurementIdField} satırında ölçüm ID alanı bulunamadı.`;
-         } else if (data.rows.length > 0 && data.stats.invalidTimestamp > 0 && data.stats.parsed === 0) {
-            reason = `${data.rows.length} satır geldi ancak zaman alanı çözülemedi (görülen zaman anahtarı: ${data.seenTimeKeys.join(', ') || '-'}, değer anahtarı: ${data.seenValueKey || '-'}).`;
-         } else if (data.rows.length > 0 && data.stats.missingValueField > 0 && data.stats.parsed === 0) {
-            reason = `${data.rows.length} satır geldi ancak beklenen değer alanı bulunamadı (görülen değer anahtarı: ${data.seenValueKey || '-'}).`;
-         } else if (data.rows.length > 0) {
-            const perMidText = [...data.perMidStats.entries()]
-              .map(([mid, entry]) => `${mid.slice(0, 8)}:${entry.uniqueTimes}nokta`)
-              .join(', ');
-            reason = `${data.rows.length} satır geldi ancak istenen ölçümler için en az 2 farklı zaman noktası bulunamadı (${perMidText || 'talep edilen ID bulunamadı'}).`;
-         }
-         _renderHistoryError(entityKey, reason, { mIds: measurementIds, count: data.rows.length, source });
-         return;
-      }
-      
+
       const rowLimit = (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.CONFIG?.HISTORY_ROW_LIMIT) || 50000;
       const wasTruncated = data.rows.length >= rowLimit;
-      
-      state.scada.history24hCache.set(cacheKey, { fetchedAt: nowMs, data, wasTruncated, source });
-      _renderHistoryData(data, measurementIds, entity, entityType, entityKey, wasTruncated, source, historyMetric);
-      
+      const rangeLabel = (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.formatSupersetTimeRange)
+        ? SCADA_COMMON.formatSupersetTimeRange(range.startMs, range.endMs)
+        : '';
+      setHistoryStatus(`${source} cozunurluk · ${data.series.length} seri · ${data.maxPoints} nokta${rangeLabel ? ` · ${rangeLabel}` : ''}`, 'ok');
+      state.scada.history24hCache.set(cacheKey, { fetchedAt: nowMs, data, wasTruncated, source, metricList });
+      _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, source, strategy, metricList);
     } catch (err) {
-      _renderHistoryError(entityKey, err.message || 'Hata oluştu', { mIds: measurementIds, count: 0, source: 'Hata' });
+      _renderHistoryError(entityKey, err?.message || 'Hata olustu', { mIds: requestedMeasurementIds, count: 0, source });
     }
   }
 
-function _renderHistoryData(data, measurementIds, entity, entityType, entityKey, wasTruncated, source, historyMetric) {
-      const series = [];
-      measurementIds.forEach((mid) => {
-         const points = (data.byMid.get(String(mid)) || []).slice().sort((a, b) => a.ts - b.ts);
-         if (!points.length) return;
-         const label = historyMetric?.metricType === 'voltage'
-           ? 'Gerilim'
-           : (entityType === 'trafo' ? `Ölçüm ${series.length + 1}` : `Terminal ${series.length + 1}`);
-         series.push({ measurementId: String(mid), label, points });
-      });
-
-      let html = buildSuperset24hChart(series, entity, entityType, historyMetric);
-
-      const startFmt = data.minTime ? new Date(data.minTime).toLocaleTimeString('tr-TR') : '-';
-      const endFmt = data.maxTime ? new Date(data.maxTime).toLocaleTimeString('tr-TR') : '-';
-
-      html += `
-        <div style="font-size: 11px; color: var(--muted); padding: 8px; border-top: 1px solid var(--border-color); margin-top: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-           <div><strong>Ölçüm ID:</strong> ${escapeHtml(measurementIds.join(', '))}</div>
-           <div><strong>Satır:</strong> ${data.rows.length}</div>
-           <div><strong>Zaman:</strong> ${startFmt} - ${endFmt}</div>
-           <div><strong>Kaynak:</strong> ${escapeHtml(source)}</div>
-        </div>
-      `;
-
-      if (wasTruncated) {
-         html += '<div class="scada-chart-warning" style="color: #f59e0b; text-align: center; font-size: 11px; margin-top: 4px;">Veri satır sınırına ulaştı; 24 saat grafiği eksik olabilir.</div>';
-      }
-      document.getElementById('scadaChartModalBody').innerHTML = html;
+function _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, source, strategy, metricList) {
+    const body = document.getElementById('scadaChartModalBody');
+    if (!body) return;
+    const displaySeries = (data.series || []).slice(0, 6);
+    const startFmt = data.minTime ? _formatHistoryAxisLabel(data.minTime) : '-';
+    const endFmt = data.maxTime ? _formatHistoryAxisLabel(data.maxTime) : '-';
+    const allIds = [...new Set(displaySeries.map((series) => series.measurementId))];
+    let html = `
+      <div class="scada-history-chart-frame" id="scadaHistoryChartFrame">
+        <div class="scada-history-chart-legend" id="scadaHistoryLegend"></div>
+        <div class="scada-history-chart-canvas" id="scadaHistoryChartCanvas"></div>
+        <div class="scada-chart-tooltip" id="scadaChartTooltip" hidden></div>
+      </div>
+      <div class="scada-history-meta">
+        <div><strong>Olcum ID:</strong> ${escapeHtml(allIds.join(', ') || '-')}</div>
+        <div><strong>Satir:</strong> ${data.rows.length}</div>
+        <div><strong>Zaman:</strong> ${escapeHtml(`${startFmt} - ${endFmt}`)}</div>
+        <div><strong>Kaynak:</strong> ${escapeHtml(source || '-')}</div>
+      </div>
+    `;
+    if (wasTruncated) {
+      html += '<div class="scada-chart-warning">Veri satir sinirina ulasti; grafik eksik olabilir.</div>';
+    }
+    body.innerHTML = html;
+    mountInteractiveHistoryChart(
+      document.getElementById('scadaHistoryChartCanvas'),
+      document.getElementById('scadaHistoryLegend'),
+      document.getElementById('scadaChartTooltip'),
+      { series: displaySeries, entityType, entity }
+    );
   }
 
   function _renderHistoryError(entityKey, reason = 'Veri alınamadı', debugInfo = null) {
@@ -3131,65 +3276,683 @@ function _formatHistoryAxisLabel(timestampMs) {
     return `${pad(date.getDate())}.${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
-  function buildSuperset24hChart(series, entity, entityType, historyMetric) {
-    const populated = series.filter((item) => item.points.length);
-    if (!populated.length) return '<div class="scada-chart-empty">Grafik için yeterli geçmiş veri yok.</div>';
-    const width = 960;
-    const height = 360;
-    const padL = 62;
-    const padR = 24;
-    const padT = 22;
-    const padB = 42;
-    const unit = historyMetric?.unit || 'MW';
-    const values = populated.flatMap((item) => item.points.map((point) => point.value)).filter(Number.isFinite);
-    const maxAbs = Math.max(...values.map((value) => Math.abs(value)), 1);
-    const isVoltage = historyMetric?.metricType === 'voltage';
-    const minY = isVoltage ? 0 : -maxAbs;
-    const maxY = isVoltage ? (maxAbs > 0 ? maxAbs * 1.1 : 1) : maxAbs;
-    const allTs = populated.flatMap((item) => item.points.map((point) => point.ts.getTime()));
-    const minTime = Math.min(...allTs);
-    const maxTime = Math.max(...allTs);
-    const timeSpan = maxTime - minTime || 1;
-    const toX = (timeMs) => padL + ((timeMs - minTime) / timeSpan) * (width - padL - padR);
-    const toY = (value) => padT + ((maxY - value) / (maxY - minY)) * (height - padT - padB);
-    const seriesColors = ['#22c55e', '#ef4444', '#38bdf8', '#f59e0b'];
+  const HISTORY_SERIES_COLORS = {
+    active: '#22c55e',
+    reactive: '#ef4444',
+    voltage: '#38bdf8',
+    fallback: '#f59e0b'
+  };
 
-    const polylines = populated.map((item, index) => {
-      const points = item.points
-        .filter((point) => Number.isFinite(point.value))
-        .map((point) => `${toX(point.ts.getTime()).toFixed(1)},${toY(point.value).toFixed(1)}`)
-        .join(' ');
-      if (!points) return '';
-      const color = seriesColors[index % seriesColors.length];
-      return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"${index > 0 ? ' opacity="0.8"' : ''} />`;
-    }).join('');
+  let activeChartMount = null;
 
-    const zeroY = toY(0).toFixed(1);
-    const capacity = getCapacityMva(entityType, entity);
-    const capY = isVoltage || !Number.isFinite(capacity) ? null : toY(Math.min(capacity, maxY)).toFixed(1);
-    const startLabel = _formatHistoryAxisLabel(minTime);
-    const endLabel = _formatHistoryAxisLabel(maxTime);
-    const legends = populated.map((item, index) => {
-      const color = seriesColors[index % seriesColors.length];
-      return `<span class="legend-active" style="color:${color};">${escapeHtml(item.label)} (${unit})</span>`;
-    }).join('');
+  function historyPlotValue(paneMode, value) {
+    return paneMode === 'abs' ? Math.abs(value) : value;
+  }
 
-    return `
-      <div class="scada-history-chart scada-history-chart-large">
-        <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" aria-label="scada-grafigi">
-          <line x1="${padL}" y1="${zeroY}" x2="${width - padR}" y2="${zeroY}" stroke="var(--chart-grid)" stroke-width="1.2" />
-          ${capY != null ? `<line x1="${padL}" y1="${capY}" x2="${width - padR}" y2="${capY}" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.75" />` : ''}
-          ${polylines}
-          <text x="${padL}" y="${height - 12}" fill="var(--muted)" font-size="11">${startLabel}</text>
-          <text x="${width - padR}" y="${height - 12}" fill="var(--muted)" font-size="11" text-anchor="end">${endLabel}</text>
-          <text x="${padL - 8}" y="${isVoltage ? padT + 6 : zeroY - 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(maxY)}</text>
-          <text x="${padL - 8}" y="${height - padB + 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(minY)}</text>
-        </svg>
-        <div class="scada-history-chart-legend">
-          ${legends}
-        </div>
-      </div>
-    `;
+  function buildHistoryCacheKey(elementNames, measurementIds, range, strategy) {
+    const sortedElements = (elementNames || []).slice().sort().join(',');
+    const sortedIds = (measurementIds || []).slice().sort().join(',');
+    const grain = strategy?.timeGrain || (strategy?.queryMode === 'raw' ? 'raw' : '');
+    return `history:${sortedElements}|${sortedIds}|${range?.startMs}|${range?.endMs}|${grain || 'raw'}`;
+  }
+
+  function resolveHistoryMetricList(entityType, entity) {
+    if (typeof SCADA_COMMON === 'undefined' || !SCADA_COMMON.resolveHistoryMetricsByEntity) return [];
+    const metrics = SCADA_COMMON.resolveHistoryMetricsByEntity(entityType, entity);
+    if (!metrics) return [];
+    const list = entityType === 'bara' ? [metrics.voltage] : [metrics.active, metrics.reactive];
+    return list.filter((metric) => metric && Array.isArray(metric.measurementIds) && metric.measurementIds.length);
+  }
+
+  function parseHistorySeriesByElement(rows, metricList) {
+    const requestedKeys = new Set();
+    const keyToMetric = new Map();
+    (metricList || []).forEach((metric) => {
+      (metric.measurementIds || []).forEach((measurementId) => {
+        const key = SCADA_COMMON.historySeriesId(measurementId, metric.elementName);
+        requestedKeys.add(key);
+        keyToMetric.set(key, metric);
+      });
+    });
+    const byKey = new Map();
+    const firstRows = new Map();
+    let missingMid = 0;
+    let missingElement = 0;
+    let nonRequested = 0;
+    let missingValue = 0;
+    let invalidTimestamp = 0;
+    const candidateTimeKeys = ['__timestamp', '__time', 'MAX(__time)', 'maxTime', 'timestamp', 'datetime', 'dt', 'time'];
+    const candidateValueKeys = ['maxValue', 'AVG(maxValue)', 'avgMaxValue', 'value', 'val'];
+    const schemaRow = rows.length ? rows[0] : null;
+    const seenTimeKeys = schemaRow ? candidateTimeKeys.filter((key) => key in schemaRow) : [];
+    const seenValueKey = schemaRow ? candidateValueKeys.find((key) => key in schemaRow) || null : null;
+    const knownElements = [...new Set((metricList || []).map((metric) => metric.elementName))];
+
+    let minTime = Infinity;
+    let maxTime = -Infinity;
+    for (const row of rows) {
+      const measurementId = SCADA_COMMON.resolveHistoryMeasurementId(row);
+      if (!measurementId) {
+        missingMid += 1;
+        continue;
+      }
+      const elementName = String(row?.elementName ?? row?.el_x ?? '').trim();
+      let key = SCADA_COMMON.historySeriesId(measurementId, elementName);
+      if (!requestedKeys.has(key)) {
+        if (elementName) {
+          nonRequested += 1;
+          continue;
+        }
+        const matchedElement = knownElements.find((name) => (
+          requestedKeys.has(SCADA_COMMON.historySeriesId(measurementId, name))
+        ));
+        if (!matchedElement) {
+          missingElement += 1;
+          continue;
+        }
+        key = SCADA_COMMON.historySeriesId(measurementId, matchedElement);
+      }
+      const value = SCADA_COMMON.resolveHistoryValue(row);
+      if (value === null) {
+        missingValue += 1;
+        continue;
+      }
+      const timestamp = SCADA_COMMON.resolveHistoryTimestamp(row);
+      if (!timestamp) {
+        invalidTimestamp += 1;
+        continue;
+      }
+      const timeMs = timestamp.getTime();
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push({ ts: timestamp, value, measurementId });
+      if (!firstRows.has(key)) firstRows.set(key, row);
+      if (timeMs < minTime) minTime = timeMs;
+      if (timeMs > maxTime) maxTime = timeMs;
+    }
+
+    let maxPoints = 0;
+    const series = [];
+    byKey.forEach((points, key) => {
+      points.sort((a, b) => a.ts - b.ts);
+      const metric = keyToMetric.get(key) || null;
+      const uniqueTimes = new Set(points.map((point) => point.ts.getTime())).size;
+      if (uniqueTimes > maxPoints) maxPoints = uniqueTimes;
+      const firstRow = firstRows.get(key) || null;
+      const elementName = metric?.elementName || String(key).split('|')[1] || '';
+      const measurementId = String(key).split('|')[0];
+      series.push({
+        seriesId: key,
+        measurementId,
+        elementName,
+        metricType: metric?.metricType || (elementName === 'Q' ? 'reactive' : elementName === 'U' ? 'voltage' : 'active'),
+        unit: metric?.unit || (elementName === 'Q' ? 'MVar' : elementName === 'U' ? 'kV' : 'MW'),
+        points,
+        terminals: [String(firstRow?.b1Name || ''), String(firstRow?.b2Name || '')]
+      });
+    });
+
+    return {
+      series,
+      maxPoints,
+      minTime: minTime === Infinity ? null : minTime,
+      maxTime: maxTime === -Infinity ? null : maxTime,
+      stats: { total: rows.length, missingMid, missingElement, nonRequested, missingValue, invalidTimestamp },
+      seenTimeKeys,
+      seenValueKey
+    };
+  }
+
+  function buildHistoryEmptyReason(data, elementNames, requestedIds) {
+    let reason = 'Superset 0 satir dondurdu.';
+    const stats = data?.stats || {};
+    const parsed = stats.total - (stats.missingMid || 0) - (stats.missingElement || 0) - (stats.nonRequested || 0) - (stats.missingValue || 0) - (stats.invalidTimestamp || 0);
+    if (data?.rows?.length > 0 && stats.missingMid > 0 && parsed === 0) {
+      reason = `Yanitin ${stats.missingMid} satirinda olcum ID alani bulunamadi.`;
+    } else if (data?.rows?.length > 0 && stats.invalidTimestamp > 0 && stats.missingValue === 0 && parsed === 0) {
+      reason = `${data.rows.length} satir geldi ancak zaman alani cozulemedi (zaman anahtari: ${data.seenTimeKeys.join(', ') || '-'}, deger anahtari: ${data.seenValueKey || '-'}).`;
+    } else if (data?.rows?.length > 0 && stats.missingValue > 0 && parsed === 0) {
+      reason = `${data.rows.length} satir geldi ancak beklenen deger alani bulunamadi (deger anahtari: ${data.seenValueKey || '-'}).`;
+    } else if (data?.rows?.length > 0) {
+      reason = `${data.rows.length} satir geldi ancak istenen olcumler icin en az 2 farkli zaman noktasi bulunamadi (eleman: ${elementNames.join(', ') || '-'}, olcum: ${requestedIds.length}).`;
+    }
+    return reason;
+  }
+
+  function _chartSeriesColor(series) {
+    return HISTORY_SERIES_COLORS[series?.metricType] || HISTORY_SERIES_COLORS.fallback;
+  }
+
+  function _niceChartStep(raw) {
+    if (!Number.isFinite(raw) || raw <= 0) return 1;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+    const normalized = raw / magnitude;
+    const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    return nice * magnitude;
+  }
+
+  function _nearestPointIndex(points, timeMs) {
+    let low = 0;
+    let high = points.length - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (points[mid].ts.getTime() < timeMs) low = mid + 1;
+      else high = mid - 1;
+    }
+    if (low === 0) return 0;
+    if (low >= points.length) return points.length - 1;
+    const before = points[low - 1].ts.getTime();
+    const after = points[low].ts.getTime();
+    return (timeMs - before) <= (after - timeMs) ? low - 1 : low;
+  }
+
+  function _sampleChartPoints(points, maxCount) {
+    const count = points.length;
+    if (count <= maxCount) return points;
+    const step = Math.ceil(count / maxCount);
+    const sampled = [];
+    for (let index = 0; index < count; index += step) sampled.push(points[index]);
+    return sampled;
+  }
+
+  function mountInteractiveHistoryChart(canvasEl, legendEl, tooltipEl, config) {
+    if (!canvasEl || !tooltipEl) return;
+    const mountToken = {};
+    activeChartMount = mountToken;
+    const entityType = config?.entityType || 'hat';
+    const entity = config?.entity || null;
+    const rawSeries = (config?.series || []).filter((series) => series && Array.isArray(series.points) && series.points.length);
+    if (!rawSeries.length) {
+      canvasEl.innerHTML = '<div class="scada-chart-empty">Grafik icin yeterli gecmis veri yok.</div>';
+      return;
+    }
+
+    const counts = new Map();
+    const chartSeries = rawSeries.map((series) => {
+      const groupKey = entityType === 'trafo'
+        ? `t:${series.elementName}`
+        : (entityType === 'hat' ? `h:${series.terminals?.[0] || ''}>>${series.terminals?.[1] || ''}` : 'b:u');
+      const index = (counts.get(groupKey) || 0) + 1;
+      counts.set(groupKey, index);
+      let label;
+      if (entityType === 'bara') {
+        label = 'Gerilim';
+      } else if (entityType === 'hat') {
+        const startT = series.terminals?.[0];
+        const endT = series.terminals?.[1];
+        label = startT && endT ? `${startT} >> ${endT}` : 'Hat olcumu';
+      } else {
+        label = `${series.elementName || 'Olcum'}${index > 1 ? `-${index}` : ''}`;
+      }
+      if (index > 1 && entityType !== 'trafo') label = `${label} #${index}`;
+      return { ...series, label };
+    });
+
+    const isDual = entityType === 'hat' || entityType === 'trafo';
+    const width = 920;
+    const padL = 66;
+    const padR = 22;
+    const padT = 16;
+    const padB = 34;
+    const paneGap = 16;
+    const paneHeight = 232;
+    const totalHeight = padT + paneHeight * (isDual ? 2 : 1) + paneGap * (isDual ? 1 : 0) + padB;
+
+    const allTimes = chartSeries.flatMap((series) => series.points.map((point) => point.ts.getTime()));
+    const fullStartMs = Math.min(...allTimes);
+    const fullEndMs = Math.max(...allTimes);
+    let viewStartMs = fullStartMs;
+    let viewEndMs = fullEndMs;
+    const hidden = new Set();
+    let hoverTimeMs = null;
+    let dragging = false;
+    let dragStartClientX = 0;
+    let dragStartViewMs = 0;
+    let redrawQueued = false;
+
+    const panes = [];
+    if (isDual) {
+      panes.push({
+        key: 'active',
+        title: 'Aktif guc (|MW|)',
+        unit: 'MW',
+        mode: 'abs',
+        seriesGroup: chartSeries.filter((series) => series.elementName === 'P' || series.metricType === 'active'),
+        refLines: []
+      });
+      panes.push({
+        key: 'reactive',
+        title: 'Reaktif guc (MVar, isaretli)',
+        unit: 'MVar',
+        mode: 'signed-zero',
+        seriesGroup: chartSeries.filter((series) => series.elementName === 'Q' || series.metricType === 'reactive'),
+        refLines: []
+      });
+      const capacity = getCapacityMva(entityType, entity);
+      if (Number.isFinite(capacity) && capacity > 0) {
+        panes[0].refLines.push({
+          value: capacity,
+          label: `${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA kapasite`
+        });
+      }
+    } else {
+      panes.push({
+        key: 'voltage',
+        title: 'Gerilim (kV)',
+        unit: 'kV',
+        mode: 'signed-zero',
+        seriesGroup: chartSeries,
+        refLines: []
+      });
+      const nominal = Number(entity?.gerilimKv || entity?.kvBucket || 0);
+      if (Number.isFinite(nominal) && nominal > 0) {
+        panes[0].refLines.push({
+          value: nominal,
+          label: `${nominal} kV nominal`
+        });
+      }
+    }
+
+    const svgNamespace = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNamespace, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${width} ${totalHeight}`);
+    svg.setAttribute('xmlns', svgNamespace);
+    svg.setAttribute('aria-label', 'scada-gecmis-grafigi');
+    svg.style.cursor = 'crosshair';
+    canvasEl.appendChild(svg);
+
+    const svgDocumentFragment = document.createDocumentFragment();
+
+    function viewSpanMs() {
+      return Math.max(1, viewEndMs - viewStartMs);
+    }
+
+    function timeToX(timeMs) {
+      return padL + ((timeMs - viewStartMs) / viewSpanMs()) * (width - padL - padR);
+    }
+
+    function buildPaneYScale(pane) {
+      const visibleSeries = pane.seriesGroup.filter((series) => !hidden.has(series.seriesId));
+      let maxAbs = 1;
+      visibleSeries.forEach((series) => {
+        for (const point of series.points) {
+          if (point.ts.getTime() < viewStartMs || point.ts.getTime() > viewEndMs) continue;
+          if (!Number.isFinite(point.value)) continue;
+          const magnitude = Math.abs(point.value);
+          if (magnitude > maxAbs) maxAbs = magnitude;
+        }
+      });
+      pane.refLines.forEach((ref) => {
+        if (Number.isFinite(ref.value) && Math.abs(ref.value) > maxAbs) maxAbs = Math.abs(ref.value);
+      });
+      maxAbs *= 1.12;
+      if (pane.mode === 'abs') return { minY: 0, maxY: maxAbs };
+      return { minY: -maxAbs, maxY: maxAbs };
+    }
+
+    function drawPane(pane, index) {
+      const group = document.createElementNS(svgNamespace, 'g');
+      const paneTop = padT + index * (paneHeight + paneGap);
+      const paneBottom = paneTop + paneHeight;
+      const plotTop = paneTop + 20;
+      const plotBottom = paneBottom - 18;
+      const plotLeft = padL;
+      const plotRight = width - padR;
+      const plotWidth = plotRight - plotLeft;
+      const plotHeight = plotBottom - plotTop;
+      const scale = buildPaneYScale(pane);
+      const ySpan = scale.maxY - scale.minY || 1;
+      const toY = (value) => plotTop + ((scale.maxY - value) / ySpan) * plotHeight;
+
+      const paneTitle = document.createElementNS(svgNamespace, 'text');
+      paneTitle.setAttribute('x', plotLeft);
+      paneTitle.setAttribute('y', paneTop + 8);
+      paneTitle.setAttribute('fill', 'var(--muted)');
+      paneTitle.setAttribute('font-size', '12');
+      paneTitle.setAttribute('font-weight', '600');
+      paneTitle.textContent = pane.title;
+      group.appendChild(paneTitle);
+
+      const gridColor = 'var(--chart-grid)';
+      const mutedColor = 'var(--muted)';
+
+      for (let tick = 0; tick <= 4; tick += 1) {
+        const value = scale.minY + (ySpan * tick) / 4;
+        const y = toY(value);
+        const lineEl = document.createElementNS(svgNamespace, 'line');
+        lineEl.setAttribute('x1', plotLeft);
+        lineEl.setAttribute('y1', y);
+        lineEl.setAttribute('x2', plotRight);
+        lineEl.setAttribute('y2', y);
+        lineEl.setAttribute('stroke', gridColor);
+        lineEl.setAttribute('stroke-width', value === 0 ? 1.4 : 0.6);
+        group.appendChild(lineEl);
+        const labelEl = document.createElementNS(svgNamespace, 'text');
+        labelEl.setAttribute('x', plotLeft - 8);
+        labelEl.setAttribute('y', y + 4);
+        labelEl.setAttribute('fill', mutedColor);
+        labelEl.setAttribute('font-size', '10');
+        labelEl.setAttribute('text-anchor', 'end');
+        labelEl.textContent = `${formatAxisNumber(value)} ${pane.unit}`;
+        group.appendChild(labelEl);
+      }
+
+      const xStep = _niceChartStep(viewSpanMs() / 5);
+      const firstTickTime = Math.floor(viewStartMs / xStep) * xStep;
+      for (let tickMs = firstTickTime; tickMs <= viewEndMs; tickMs += xStep) {
+        const x = timeToX(tickMs);
+        const lineEl = document.createElementNS(svgNamespace, 'line');
+        lineEl.setAttribute('x1', x);
+        lineEl.setAttribute('y1', plotTop);
+        lineEl.setAttribute('x2', x);
+        lineEl.setAttribute('y2', plotBottom);
+        lineEl.setAttribute('stroke', gridColor);
+        lineEl.setAttribute('stroke-width', 0.6);
+        lineEl.setAttribute('stroke-dasharray', '3 4');
+        group.appendChild(lineEl);
+        if (index === panes.length - 1) {
+          const labelEl = document.createElementNS(svgNamespace, 'text');
+          labelEl.setAttribute('x', x);
+          labelEl.setAttribute('y', totalHeight - 10);
+          labelEl.setAttribute('fill', mutedColor);
+          labelEl.setAttribute('font-size', '10');
+          labelEl.setAttribute('text-anchor', 'middle');
+          labelEl.textContent = _formatHistoryAxisLabel(tickMs);
+          group.appendChild(labelEl);
+        }
+      }
+
+      if (pane.mode === 'signed-zero' && scale.minY < 0 && scale.maxY > 0) {
+        const zeroY = toY(0);
+        const zeroEl = document.createElementNS(svgNamespace, 'line');
+        zeroEl.setAttribute('x1', plotLeft);
+        zeroEl.setAttribute('y1', zeroY);
+        zeroEl.setAttribute('x2', plotRight);
+        zeroEl.setAttribute('y2', zeroY);
+        zeroEl.setAttribute('stroke', 'var(--muted)');
+        zeroEl.setAttribute('stroke-width', '1.2');
+        zeroEl.setAttribute('stroke-dasharray', '2 3');
+        group.appendChild(zeroEl);
+      }
+
+      pane.refLines.forEach((ref) => {
+        if (!Number.isFinite(ref.value)) return;
+        const y = Math.max(plotTop, Math.min(plotBottom, toY(ref.value)));
+        const refEl = document.createElementNS(svgNamespace, 'line');
+        refEl.setAttribute('x1', plotLeft);
+        refEl.setAttribute('y1', y);
+        refEl.setAttribute('x2', plotRight);
+        refEl.setAttribute('y2', y);
+        refEl.setAttribute('stroke', '#38bdf8');
+        refEl.setAttribute('stroke-width', '1.4');
+        refEl.setAttribute('stroke-dasharray', '8 4');
+        group.appendChild(refEl);
+        const refLabel = document.createElementNS(svgNamespace, 'text');
+        refLabel.setAttribute('x', plotRight - 4);
+        refLabel.setAttribute('y', y - 5);
+        refLabel.setAttribute('fill', '#38bdf8');
+        refLabel.setAttribute('font-size', '10');
+        refLabel.setAttribute('text-anchor', 'end');
+        refLabel.textContent = ref.label;
+        group.appendChild(refLabel);
+      });
+
+      const visibleSeries = pane.seriesGroup.filter((series) => !hidden.has(series.seriesId));
+      if (!visibleSeries.length) {
+        const emptyText = document.createElementNS(svgNamespace, 'text');
+        emptyText.setAttribute('x', (plotLeft + plotRight) / 2);
+        emptyText.setAttribute('y', (plotTop + plotBottom) / 2);
+        emptyText.setAttribute('fill', mutedColor);
+        emptyText.setAttribute('font-size', '11');
+        emptyText.setAttribute('text-anchor', 'middle');
+        emptyText.textContent = `${pane.title} icin veri yok`;
+        group.appendChild(emptyText);
+        return group;
+      }
+
+      visibleSeries.forEach((series, seriesIndex) => {
+        const inView = series.points.filter((point) => point.ts.getTime() >= viewStartMs && point.ts.getTime() <= viewEndMs && Number.isFinite(point.value));
+        const sampled = _sampleChartPoints(inView, 900);
+        if (!sampled.length) return;
+        const plotted = sampled.map((point) => {
+          const value = historyPlotValue(pane.mode, point.value);
+          return `${timeToX(point.ts.getTime()).toFixed(1)},${toY(value).toFixed(1)}`;
+        }).join(' ');
+        const color = _chartSeriesColor(series);
+        const polyline = document.createElementNS(svgNamespace, 'polyline');
+        polyline.setAttribute('points', plotted);
+        polyline.setAttribute('fill', 'none');
+        polyline.setAttribute('stroke', color);
+        polyline.setAttribute('stroke-width', seriesIndex > 0 ? '2' : '2.6');
+        polyline.setAttribute('stroke-linejoin', 'round');
+        polyline.setAttribute('stroke-linecap', 'round');
+        polyline.setAttribute('opacity', '0.9');
+        polyline.setAttribute('data-series-key', series.seriesId);
+        group.appendChild(polyline);
+      });
+
+      if (hoverTimeMs != null && hoverTimeMs >= viewStartMs && hoverTimeMs <= viewEndMs) {
+        const crossX = timeToX(hoverTimeMs);
+        const crossEl = document.createElementNS(svgNamespace, 'line');
+        crossEl.setAttribute('x1', crossX);
+        crossEl.setAttribute('y1', plotTop);
+        crossEl.setAttribute('x2', crossX);
+        crossEl.setAttribute('y2', plotBottom);
+        crossEl.setAttribute('stroke', 'rgba(148,163,184,0.9)');
+        crossEl.setAttribute('stroke-width', '1');
+        crossEl.setAttribute('stroke-dasharray', '2 2');
+        group.appendChild(crossEl);
+        visibleSeries.forEach((series) => {
+          if (!series.points.length) return;
+          const nearestIndex = _nearestPointIndex(series.points, hoverTimeMs);
+          const point = series.points[nearestIndex];
+          if (!point || Math.abs(point.ts.getTime() - hoverTimeMs) > viewSpanMs() * 0.05) return;
+          const value = historyPlotValue(pane.mode, point.value);
+          const dot = document.createElementNS(svgNamespace, 'circle');
+          dot.setAttribute('cx', timeToX(point.ts.getTime()));
+          dot.setAttribute('cy', toY(value));
+          dot.setAttribute('r', '3.5');
+          dot.setAttribute('fill', _chartSeriesColor(series));
+          dot.setAttribute('stroke', '#0f172a');
+          dot.setAttribute('stroke-width', '1');
+          group.appendChild(dot);
+        });
+      }
+
+      return group;
+    }
+
+    function redraw() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      panes.forEach((pane, index) => {
+        const groupEl = drawPane(pane, index);
+        if (groupEl) svg.appendChild(groupEl);
+      });
+    }
+
+    function requestRedraw() {
+      if (redrawQueued) return;
+      redrawQueued = true;
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => {
+          redrawQueued = false;
+          redraw();
+        });
+      } else {
+        redrawQueued = false;
+        redraw();
+      }
+    }
+
+    function rebuildLegend() {
+      if (!legendEl) return;
+      legendEl.innerHTML = '';
+      chartSeries.forEach((series) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'scada-history-legend-chip' + (hidden.has(series.seriesId) ? ' is-hidden' : '');
+        chip.style.setProperty('--scada-series-color', _chartSeriesColor(series));
+        chip.dataset.seriesKey = series.seriesId;
+        chip.textContent = `${series.label} (${series.unit})`;
+        chip.title = `Seriyi goster/gizle: ${series.label}`;
+        chip.addEventListener('click', () => {
+          if (hidden.has(series.seriesId)) hidden.delete(series.seriesId);
+          else hidden.add(series.seriesId);
+          rebuildLegend();
+          redraw();
+        });
+        legendEl.appendChild(chip);
+      });
+    }
+
+    function updateCrosshairFromEvent(event) {
+      if (dragging) return;
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width) return;
+      const scaleX = width / rect.width;
+      const svgX = (event.clientX - rect.left) * scaleX;
+      hoverTimeMs = viewStartMs + ((svgX - padL) / (width - padL - padR)) * viewSpanMs();
+      hoverTimeMs = Math.max(fullStartMs, Math.min(fullEndMs, hoverTimeMs));
+      drawCrosshair();
+      updateTooltip(event);
+    }
+
+    let lastCrosshairX = null;
+
+    function drawCrosshair() {
+      if (hoverTimeMs == null) {
+        lastCrosshairX = null;
+        return;
+      }
+      const nextX = Math.round(timeToX(hoverTimeMs));
+      if (lastCrosshairX === nextX) return;
+      lastCrosshairX = nextX;
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(redraw);
+      } else {
+        redraw();
+      }
+    }
+
+    function formatTooltipValue(series, point) {
+      const prefix = point.value >= 0 ? '+' : '';
+      return `${prefix}${formatAxisNumber(point.value)} ${series.unit}`;
+    }
+
+    function updateTooltip(event) {
+      if (!tooltipEl) return;
+      const canvasRect = canvasEl.getBoundingClientRect();
+      if (!canvasRect.width) return;
+      const rows = [];
+      chartSeries.forEach((series) => {
+        if (hidden.has(series.seriesId) || !series.points.length) return;
+        const nearestIndex = _nearestPointIndex(series.points, hoverTimeMs);
+        const point = series.points[nearestIndex];
+        if (!point) return;
+        if (Math.abs(point.ts.getTime() - hoverTimeMs) > viewSpanMs() * 0.05) return;
+        rows.push(`<div class="scada-chart-tooltip-row" style="--scada-series-color:${_chartSeriesColor(series)};">
+          <span class="scada-chart-tooltip-dot"></span>
+          <span>${escapeHtml(series.label)}</span>
+          <strong>${escapeHtml(formatTooltipValue(series, point))}</strong>
+        </div>`);
+      });
+      if (!rows.length) {
+        tooltipEl.hidden = true;
+        return;
+      }
+      const timeHtml = `<div class="scada-chart-tooltip-title">${escapeHtml(_formatHistoryAxisLabel(hoverTimeMs))}</div>`;
+      tooltipEl.innerHTML = `${timeHtml}${rows.join('')}`;
+      tooltipEl.hidden = false;
+      let left = event.clientX - canvasRect.left + 14;
+      let top = event.clientY - canvasRect.top - 10;
+      const tooltipWidth = 220;
+      const clampLeft = Math.max(4, Math.min(canvasRect.width - tooltipWidth - 4, left));
+      const tooltipHeight = Math.min(tooltipEl.offsetHeight || 120, canvasRect.height);
+      const clampTop = Math.max(4, Math.min(canvasRect.height - tooltipHeight - 4, top));
+      tooltipEl.style.left = `${clampLeft}px`;
+      tooltipEl.style.top = `${clampTop}px`;
+    }
+
+    function clampView() {
+      const span = viewEndMs - viewStartMs;
+      const fullSpan = fullEndMs - fullStartMs || 1;
+      if (span >= fullSpan) {
+        viewStartMs = fullStartMs;
+        viewEndMs = fullEndMs;
+        return;
+      }
+      if (viewStartMs < fullStartMs) {
+        viewStartMs = fullStartMs;
+        viewEndMs = viewStartMs + span;
+      }
+      if (viewEndMs > fullEndMs) {
+        viewEndMs = fullEndMs;
+        viewStartMs = viewEndMs - span;
+      }
+    }
+
+    svg.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width) return;
+      const scaleX = width / rect.width;
+      const svgX = (event.clientX - rect.left) * scaleX;
+      const anchorTime = viewStartMs + ((svgX - padL) / (width - padL - padR)) * viewSpanMs();
+      const factor = event.deltaY < 0 ? 1 / 1.15 : 1.15;
+      const minSpan = Math.min(2 * 60 * 1000, fullEndMs - fullStartMs);
+      const newSpan = Math.min(fullEndMs - fullStartMs || 1, Math.max(minSpan, viewSpanMs() * factor));
+      const ratio = (anchorTime - viewStartMs) / viewSpanMs();
+      viewStartMs = anchorTime - ratio * newSpan;
+      viewEndMs = viewStartMs + newSpan;
+      clampView();
+      requestRedraw();
+    }, { passive: false });
+
+    svg.addEventListener('mousedown', (event) => {
+      if (event.button !== 0) return;
+      dragging = true;
+      dragStartClientX = event.clientX;
+      dragStartViewMs = viewStartMs;
+      svg.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (event) => {
+      if (activeChartMount !== mountToken || !canvasEl.isConnected) return;
+      if (dragging) {
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width) return;
+        const deltaPx = event.clientX - dragStartClientX;
+        const deltaMs = (deltaPx / rect.width) * viewSpanMs();
+        viewStartMs = dragStartViewMs - deltaMs;
+        viewEndMs = viewStartMs + viewSpanMs();
+        clampView();
+        requestRedraw();
+        return;
+      }
+      updateCrosshairFromEvent(event);
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (activeChartMount !== mountToken) return;
+      dragging = false;
+      svg.style.cursor = 'crosshair';
+    });
+
+    svg.addEventListener('mouseleave', () => {
+      hoverTimeMs = null;
+      if (tooltipEl) tooltipEl.hidden = true;
+      redraw();
+    });
+
+    svg.addEventListener('dblclick', () => {
+      viewStartMs = fullStartMs;
+      viewEndMs = fullEndMs;
+      hoverTimeMs = null;
+      if (tooltipEl) tooltipEl.hidden = true;
+      redraw();
+    });
+
+    rebuildLegend();
+    redraw();
   }
 
   function buildPanelRows() {
@@ -4462,6 +5225,180 @@ function _formatHistoryAxisLabel(timestampMs) {
     }
   }
 
+  function _formatTimeBadge(valueMs) {
+    const date = new Date(Number(valueMs));
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function syncScadaTimeControls() {
+    const historical = state.scada.timeMode === 'historical';
+    const modeButtons = Array.from(document.querySelectorAll('[data-scada-time]'));
+    modeButtons.forEach((button) => {
+      const isSelected = button.dataset.scadaTime === (historical ? 'historical' : 'live');
+      button.classList.toggle('active', isSelected);
+    });
+    const controls = document.getElementById('scadaHistoricalControls');
+    if (controls) controls.classList.toggle('hidden', !historical);
+    updateScadaTimeBadge();
+  }
+
+  function updateScadaTimeBadge() {
+    const badge = document.getElementById('scadaTimeBadge');
+    if (!badge) return;
+    if (state.scada.timeMode !== 'historical') {
+      badge.classList.add('hidden');
+      return;
+    }
+    const atMs = state.scada.historicalAt;
+    const matched = state.scada.visibleSummary?.matched ?? 0;
+    const total = state.scada.visibleSummary?.total ?? 0;
+    badge.classList.remove('hidden');
+    badge.textContent = `GECMIS VERI${atMs ? ` - ${_formatTimeBadge(atMs)}` : ''} | ${matched}/${total} eslesme`;
+  }
+
+  async function fetchScadaHistoricalSnapshot(atMs) {
+    const scope = getCurrentScadaScope();
+    if (!scope.measurementIds.length) {
+      return { ok: false, error: 'Secili mod icin olcum ID bulunamadi.' };
+    }
+    const result = await chrome.runtime.sendMessage({
+      type: 'SCADA_HISTORICAL_SNAPSHOT_FETCH',
+      payload: {
+        at: atMs,
+        baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+        dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+        chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+        datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+        scopeKey: String(scope.filterKey || scope.mode || 'default'),
+        elementNames: scope.elementNames,
+        measurementIds: scope.measurementIds
+      }
+    });
+    if (!result?.ok || !result.data) {
+      return { ok: false, error: result?.error || 'Gecmis an verisi alinamadi.' };
+    }
+    const rowsByMeasurementId = SCADA_COMMON.normalizeMetricRows(result.data, { elementNames: scope.elementNames });
+    return { ok: true, rowsByMeasurementId: rowsByMeasurementId || new Map(), meta: result.meta || {} };
+  }
+
+  async function setScadaTimeMode(mode, atMs) {
+    if (mode === state.scada.timeMode && (
+      mode === 'live' || (atMs != null && Number(atMs) === Number(state.scada.historicalAt))
+    )) {
+      syncScadaTimeControls();
+      return;
+    }
+    if (mode === 'historical') {
+      const targetMs = Number(atMs);
+      if (!Number.isFinite(targetMs) || (targetMs > Date.now())) {
+        setScadaStatusMessage('Gecmis goruntuleme icin gecmiste bir zaman secin.', 'warn');
+        syncScadaTimeControls();
+        return;
+      }
+      if (state.scada.lastLiveSnapshot == null) {
+        state.scada.lastLiveSnapshot = state.scada.measurementRowsById instanceof Map
+          ? new Map(state.scada.measurementRowsById)
+          : new Map();
+      }
+      state.scada.timeMode = 'historical';
+      state.scada.historicalAt = targetMs;
+      stopScadaAutoScheduler();
+      syncScadaTimeControls();
+      setScadaStatusMessage(`Gecmis mod: ${_formatTimeBadge(targetMs)} anindaki SCADA verisi yukleniyor.`, 'info');
+      const result = await fetchScadaHistoricalSnapshot(targetMs);
+      if (state.scada.timeMode !== 'historical' || Number(state.scada.historicalAt) !== targetMs) return;
+      if (!result.ok) {
+        setScadaStatusMessage(result.error || 'Gecmis veri alinamadi.', 'error');
+        updateScadaTimeBadge();
+        return;
+      }
+      const scope = getCurrentScadaScope();
+      if (!result.rowsByMeasurementId.size) {
+        setScadaStatusMessage('Secilen an icin veri bulunamadi; daha yakin bir zaman secin.', 'warn');
+        updateScadaTimeBadge();
+        return;
+      }
+      const visibleSummary = applyGenericScadaSnapshot(result.rowsByMeasurementId, scope);
+      state.scada.snapshotAt = state.scada.historicalAt;
+      state.scada.lastFetchAt = new Date();
+      state.scada.sourceKind = 'historical';
+      if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
+      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+      if (typeof refreshRankingTable === 'function') refreshRankingTable();
+      if (state.scada.pollState) state.scada.pollState.pendingAutoRefresh = false;
+      updateScadaTimeBadge();
+      const recoveredText = result.meta?.recoveredViaFallback ? ' (genis pencere tamamlamasi ile)' : '';
+      setScadaStatusMessage(`Gecmis gorunum: ${_formatTimeBadge(targetMs)} anindaki veri gosteriliyor${recoveredText}`, 'info');
+      return;
+    }
+    if (state.scada.timeMode === 'historical') {
+      state.scada.timeMode = 'live';
+      state.scada.historicalAt = null;
+      const lastLive = state.scada.lastLiveSnapshot;
+      state.scada.lastLiveSnapshot = null;
+      const scope = getCurrentScadaScope();
+      if (lastLive && lastLive.size) {
+        applyGenericScadaSnapshot(lastLive, scope);
+        state.scada.snapshotAt = null;
+        state.scada.sourceKind = 'live';
+        if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
+        if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+        if (typeof refreshRankingTable === 'function') refreshRankingTable();
+      }
+      if (state.scada.enabled && state.scada.autoRefresh) startScadaAutoScheduler();
+      syncScadaTimeControls();
+      setScadaStatusMessage('Canli moda donuldu; zamanlayici yeniden baslatildi.', 'info');
+    }
+  }
+
+  function bindScadaTimeModeControls() {
+    const timeButtons = Array.from(document.querySelectorAll('[data-scada-time]'));
+    timeButtons.forEach((button) => {
+      if (button.dataset.boundTime) return;
+      button.dataset.boundTime = '1';
+      button.addEventListener('click', () => {
+        const mode = button.dataset.scadaTime;
+        if (mode === 'historical') {
+          const input = document.getElementById('scadaHistoricalAtInput');
+          const atMs = input?.value ? new Date(input.value).getTime() : NaN;
+          if (!Number.isFinite(atMs)) {
+            setScadaStatusMessage('Gecmis mod icin once zaman secin.', 'warn');
+            return;
+          }
+          setScadaTimeMode('historical', atMs);
+        } else {
+          setScadaTimeMode('live');
+        }
+      });
+    });
+    const showBtn = document.getElementById('btnScadaHistoricalShow');
+    if (showBtn && !showBtn.dataset.boundTime) {
+      showBtn.dataset.boundTime = '1';
+      showBtn.addEventListener('click', () => {
+        const input = document.getElementById('scadaHistoricalAtInput');
+        const atMs = input?.value ? new Date(input.value).getTime() : NaN;
+        if (!Number.isFinite(atMs)) {
+          setScadaStatusMessage('Once gecmis zaman secin.', 'warn');
+          return;
+        }
+        setScadaTimeMode('historical', atMs);
+      });
+    }
+    const liveBtn = document.getElementById('btnScadaHistoricalLive');
+    if (liveBtn && !liveBtn.dataset.boundTime) {
+      liveBtn.dataset.boundTime = '1';
+      liveBtn.addEventListener('click', () => setScadaTimeMode('live'));
+    }
+    const atInput = document.getElementById('scadaHistoricalAtInput');
+    if (atInput && !atInput.dataset.boundTime) {
+      atInput.dataset.boundTime = '1';
+      atInput.value = formatDateTimeLocalInput(state.scada.historicalAt || Date.now());
+    }
+    syncScadaTimeControls();
+  }
+
   const baseInitScadaCard = initScadaCard;
   initScadaCard = function () {
     baseInitScadaCard();
@@ -4479,6 +5416,7 @@ function _formatHistoryAxisLabel(timestampMs) {
     });
     syncScadaMetricButtons();
     syncScadaMapDisplayButtons();
+    bindScadaTimeModeControls();
     if (state.scada.enabled && state.scada.autoRefresh) startScadaAutoScheduler();
     updateScadaCardUI();
   };
@@ -4487,6 +5425,7 @@ function _formatHistoryAxisLabel(timestampMs) {
   globalThis.syncScadaMapDisplayButtons = syncScadaMapDisplayButtons;
   globalThis.setScadaMetric = setScadaMetric;
   globalThis.setScadaMapDisplayMode = setScadaMapDisplayMode;
+  globalThis.setScadaTimeMode = setScadaTimeMode;
   globalThis.syncRankingKvFilterControl = syncRankingKvFilterControl;
   globalThis.applyRankingKvPreset = applyRankingKvPreset;
   globalThis.buildEntityMetricVisual = buildEntityMetricVisual;
@@ -4506,6 +5445,14 @@ function _formatHistoryAxisLabel(timestampMs) {
       handleDashboardMapSlotActive,
       serializeScadaDashboardSnapshot,
       restoreScadaDashboardSnapshot,
+      restoreScadaDashboardSnapshotFromStorage,
+      resolveHistoryRange,
+      resolveHistoryMetricList,
+      parseHistorySeriesByElement,
+      buildHistoryEmptyReason,
+      buildHistoryCacheKey,
+      historyPlotValue,
+      setScadaTimeMode,
       applyScreenDeclutter: typeof applyScreenDeclutter === 'function' ? applyScreenDeclutter : undefined,
       selectActiveVoltagePerTmLevel: typeof selectActiveVoltagePerTmLevel === 'function' ? selectActiveVoltagePerTmLevel : undefined
     });

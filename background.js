@@ -245,9 +245,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: false, error: error.message || String(error), errorType: 'BACKGROUND_ERROR', authMode: 'session', usedFallback: false });
     });
     return true;
-  }
+}
   if (message?.type === 'SCADA_HISTORY_FETCH') {
     handleScadaHistoryFetch(message.payload || {}).then(sendResponse).catch((error) => {
+      sendResponse({ ok: false, error: error.message || String(error), errorType: 'BACKGROUND_ERROR', authMode: 'session', usedFallback: false });
+    });
+    return true;
+  }
+  if (message?.type === 'SCADA_HISTORICAL_SNAPSHOT_FETCH') {
+    handleScadaHistoricalSnapshotFetch(message.payload || {}).then(sendResponse).catch((error) => {
       sendResponse({ ok: false, error: error.message || String(error), errorType: 'BACKGROUND_ERROR', authMode: 'session', usedFallback: false });
     });
     return true;
@@ -3783,6 +3789,179 @@ async function handleScadaHistoryFetch(payload) {
      historyPayload.chartPayload = globalThis.SCADA_COMMON.buildHistoryPayload(historyPayload);
   }
   return executeAuthWrapper(authConfig, historyPayload, timeoutMs);
+}
+
+const historicalSnapshotFallbackAt = new Map();
+
+// Pure helper: keeps only rows at or before `atMs` and the newest one per
+// requested measurement id. Never accepts data after the selected instant.
+function filterHistoricalSnapshots(rows, atMs, requestedIds) {
+  const inputRows = Array.isArray(rows) ? rows : [];
+  const requested = new Set((requestedIds || []).map(String));
+  const best = new Map();
+  let received = 0;
+  for (const row of inputRows) {
+    const id = String(row?.sinsid || row?.measurementId || '').trim();
+    if (!id) continue;
+    if (requested.size && !requested.has(id)) continue;
+    let parsed = null;
+    if (globalThis.SCADA_COMMON?.resolveHistoryTimestamp) {
+      parsed = globalThis.SCADA_COMMON.resolveHistoryTimestamp(row);
+    }
+    if (!parsed) {
+      const raw = row?.__timestamp ?? row?.__time ?? row?.['MAX(__time)'] ?? row?.maxTime ?? row?.timestamp;
+      if (raw == null || raw === '') continue;
+      parsed = new Date(String(raw).replace(/Z$/, ''));
+      if (Number.isNaN(parsed.getTime())) continue;
+    }
+    received += 1;
+    if (parsed.getTime() > Number(atMs)) continue;
+    const found = best.get(id);
+    if (!found || found.ts.getTime() < parsed.getTime()) {
+      best.set(id, { ts: parsed, row });
+    }
+  }
+  return { best, received };
+}
+
+async function handleScadaHistoricalSnapshotFetch(payload) {
+  const at = Number(payload?.at);
+  if (!Number.isFinite(at)) {
+    return { ok: false, error: 'Gecmis an (at) eksik veya gecersiz.', errorType: 'INVALID_PAYLOAD', authMode: 'session', usedFallback: false };
+  }
+  const authConfig = await loadScadaAuthConfig();
+  const mIds = Array.isArray(payload?.measurementIds)
+    ? payload.measurementIds.map((value) => String(value))
+    : [];
+  const elementNames = Array.isArray(payload?.elementNames) && payload.elementNames.length
+    ? payload.elementNames.map((value) => String(value))
+    : SCADA_DEFAULTS.elementNames.slice();
+  const batchSize = (globalThis.SCADA_COMMON?.CONFIG?.LIVE_BATCH_SIZE) || 200;
+  const maxConcurrency = (globalThis.SCADA_COMMON?.CONFIG?.LIVE_MAX_CONCURRENCY) || 3;
+  const timeoutMs = (globalThis.SCADA_COMMON?.CONFIG?.LIVE_FETCH_TIMEOUT_MS) || 15000;
+  const shortWindowMs = 10 * 60 * 1000;
+
+  const buildSnapshotRange = (startMs, endMs) => {
+    if (globalThis.SCADA_COMMON?.formatSupersetTimeRange) {
+      const formatted = globalThis.SCADA_COMMON.formatSupersetTimeRange(startMs, endMs);
+      if (formatted) return formatted;
+    }
+    const formatLocal = (valueMs) => {
+      const date = new Date(Number(valueMs));
+      const pad = (value) => String(value).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    };
+    return `${formatLocal(startMs)} : ${formatLocal(endMs)}`;
+  };
+
+  const shortRange = buildSnapshotRange(at - shortWindowMs, at);
+  const chunks = [];
+  for (let i = 0; i < mIds.length; i += batchSize) {
+    chunks.push(mIds.slice(i, i + batchSize));
+  }
+  if (!chunks.length) chunks.push([]);
+
+  const buildChunkPayload = (chunkIds, timeRange) => {
+    const chunkPayload = {
+      ...payload,
+      timeRange,
+      measurementIds: chunkIds,
+      chartPayload: null
+    };
+    if (globalThis.SCADA_COMMON?.buildHistoryPayload) {
+      chunkPayload.chartPayload = globalThis.SCADA_COMMON.buildHistoryPayload({
+        ...payload,
+        timeRange,
+        measurementIds: chunkIds,
+        elementNames,
+        queryMode: 'raw'
+      });
+    }
+    return chunkPayload;
+  };
+
+  let allRows = [];
+  let lastError = null;
+  let lastErrorType = null;
+  let lastAuthMode = 'session';
+  let httpStatus = null;
+  for (let i = 0; i < chunks.length; i += maxConcurrency) {
+    const activeTasks = chunks.slice(i, i + maxConcurrency).map((chunk) => (
+      executeAuthWrapper(authConfig, buildChunkPayload(chunk, shortRange), timeoutMs)
+    ));
+    const results = await Promise.all(activeTasks);
+    for (const result of results) {
+      if (result.ok) {
+        lastAuthMode = result.authMode || lastAuthMode;
+        httpStatus = result.httpStatus ?? httpStatus;
+        const rows = globalThis.SCADA_COMMON?.findDataArray
+          ? globalThis.SCADA_COMMON.findDataArray(result.data)
+          : [];
+        if (Array.isArray(rows)) allRows.push(...rows);
+      } else {
+        lastError = result.error;
+        lastErrorType = result.errorType;
+        httpStatus = result.httpStatus ?? httpStatus;
+        if (result.shouldRetryAuth) {
+          return { ok: false, error: result.error || 'SCADA auth hatasi.', errorType: result.errorType || 'AUTH_REQUIRED', httpStatus: result.httpStatus || null, authMode: result.authMode || 'session', usedFallback: false };
+        }
+      }
+    }
+  }
+
+  const requestedIds = new Set(mIds);
+  const primary = filterHistoricalSnapshots(allRows, at, mIds);
+
+  let recoveredViaFallback = false;
+  if (mIds.length) {
+    const missingIds = mIds.filter((id) => !primary.best.has(id));
+    const scopeKey = String(payload?.scopeKey || payload?.filterKey || 'default');
+    const lastFallbackAt = historicalSnapshotFallbackAt.get(scopeKey) || 0;
+    if (missingIds.length && Date.now() - lastFallbackAt >= 5 * 60 * 1000) {
+      try {
+        const wideRange = buildSnapshotRange(at - 24 * 3600 * 1000, at);
+        const fallbackResult = await executeAuthWrapper(authConfig, buildChunkPayload(missingIds, wideRange), timeoutMs);
+        if (fallbackResult.ok) {
+          const rows = globalThis.SCADA_COMMON?.findDataArray
+            ? globalThis.SCADA_COMMON.findDataArray(fallbackResult.data)
+            : [];
+          const recovered = filterHistoricalSnapshots(rows, at, missingIds);
+          let added = 0;
+          recovered.best.forEach((entry, id) => {
+            if (!primary.best.has(id)) {
+              primary.best.set(id, entry);
+              added += 1;
+            }
+          });
+          if (added === 0) historicalSnapshotFallbackAt.set(scopeKey, Date.now());
+          recoveredViaFallback = added > 0;
+        }
+      } catch (fallbackError) {
+        lastError = fallbackError?.message || String(fallbackError);
+        lastErrorType = 'NETWORK_ERROR';
+      }
+    }
+  }
+
+  const rows = [];
+  primary.best.forEach((entry) => rows.push(entry.row));
+  return {
+    ok: true,
+    data: { result: [{ data: rows }] },
+    authMode: lastAuthMode,
+    usedFallback: recoveredViaFallback,
+    httpStatus: httpStatus ?? 200,
+    meta: {
+      at,
+      requestedIds: [...requestedIds],
+      matchedIds: [...primary.best.keys()],
+      missingIds: mIds.filter((id) => !primary.best.has(id)),
+      windowStartMs: at - shortWindowMs,
+      windowEndMs: at,
+      receivedRows: primary.received,
+      recoveredViaFallback
+    }
+  };
 }
 
 function serializeScadaBackgroundRows(rowsByMeasurementId) {
