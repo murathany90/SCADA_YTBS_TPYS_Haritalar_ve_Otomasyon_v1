@@ -5042,79 +5042,337 @@ function _formatHistoryAxisLabel(timestampMs) {
     if (nextButton) nextButton.disabled = pageState.page >= pageState.totalPages;
   };
 
-  function formatPanelTimestampCsv(row) {
-    if (!row.timestamp) return '';
-    const base = `${row.timestamp.toLocaleDateString('tr-TR')} ${row.timestamp.toLocaleTimeString('tr-TR')}`;
-    if (row.staleState === 'live') return base;
-    return `${base} - ${row.statusLabel || 'Bayat'}${row.ageLabel ? ` (${row.ageLabel})` : ''}`;
+  function formatCsvDate(value) {
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (v) => String(v).padStart(2, '0');
+    return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  function formatCsvDecimal(value, digits = 2) {
+    if (!Number.isFinite(Number(value))) return '';
+    return Number(value).toFixed(digits).replace('.', ',');
+  }
+
+  // Selected metric drives every CSV: hat/trafo use the record's P or Q value,
+  // voltage uses U. Nothing here ever starts a new SCADA query.
+  function getCsvMetricContext(record) {
+    const metricType = record?.primaryMetric || getModeConfig().primaryMetric;
+    const elementName = metricType === 'active' ? 'P' : metricType === 'reactive' ? 'Q' : 'U';
+    const unit = metricType === 'active' ? 'MW' : metricType === 'reactive' ? 'MVar' : 'kV';
+    const typeLabel = metricType === 'active'
+      ? 'Aktif Güç (P)'
+      : metricType === 'reactive'
+        ? 'Reaktif Güç (Q)'
+        : 'Gerilim (U)';
+    return { metricType, elementName, unit, typeLabel, metric: record?.[metricType] || null };
+  }
+
+  function getCsvSourceRow(measurementId, elementName) {
+    const measurementIdText = String(measurementId || '').trim();
+    if (!measurementIdText) return null;
+    const rows = state.scada.measurementRowsById;
+    if (!(rows instanceof Map)) return null;
+    return rows.get(`${measurementIdText}|${elementName}`) || rows.get(measurementIdText) || null;
+  }
+
+  function getCsvSelectedSourceRow(metric, elementName) {
+    if (!metric) return null;
+    return getCsvSourceRow(String(metric.measurementId || metric.selectedCandidate || '').trim(), elementName);
+  }
+
+  function getCsvCandidateSourceName(entity, metricType, measurementId, sourceRow) {
+    const candidates = Array.isArray(entity?.scada?.[metricType]?.rows) ? entity.scada[metricType].rows : [];
+    const candidate = candidates.find((entry) => String(entry.measurementId || '') === String(measurementId || ''));
+    return candidate?.sourceTmName || sourceRow?.tmName || String(measurementId || '');
+  }
+
+  function buildCsvFallbackCandidateDetails(entity, metricType) {
+    const elementName = metricType === 'active' ? 'P' : metricType === 'reactive' ? 'Q' : 'U';
+    const candidates = Array.isArray(entity?.scada?.[metricType]?.rows) ? entity.scada[metricType].rows : [];
+    return candidates.map((candidate) => {
+      const measurementId = String(candidate.measurementId || '');
+      const sourceRow = getCsvSourceRow(measurementId, elementName);
+      return {
+        measurementId,
+        terminalSide: candidate.terminalSide || candidate.sourceSide || '',
+        rawValue: Number.isFinite(Number(sourceRow?.value)) ? Number(sourceRow.value) : null,
+        timestamp: sourceRow?.timestamp || null,
+        sourceName: getCsvCandidateSourceName(entity, metricType, measurementId, sourceRow),
+        selected: false
+      };
+    }).filter((entry) => entry.measurementId);
+  }
+
+  // Terminal values stay raw (source row), the final value stays normalized
+  // (record.active.value / record.reactive.value). Multiple candidates on the
+  // same side follow the existing resolution order: selected first, then the
+  // configured candidate order.
+  function getCsvHatTerminalData(entity, metric, metricType) {
+    const details = Array.isArray(metric?.candidateDetails) && metric.candidateDetails.length
+      ? metric.candidateDetails
+      : buildCsvFallbackCandidateDetails(entity, metricType);
+    const elementName = metricType === 'active' ? 'P' : metricType === 'reactive' ? 'Q' : 'U';
+    const buildSide = (side) => {
+      const sideEntries = details.filter((entry) => entry.terminalSide === side);
+      if (!sideEntries.length) return null;
+      const entry = sideEntries.find((candidate) => candidate.selected) || sideEntries[0];
+      const sourceRow = getCsvSourceRow(String(entry.measurementId || ''), elementName);
+      return {
+        value: Number.isFinite(Number(entry.rawValue))
+          ? Number(entry.rawValue)
+          : Number.isFinite(Number(sourceRow?.value)) ? Number(sourceRow.value) : null,
+        time: entry.timestamp || sourceRow?.timestamp || null,
+        sourceName: getCsvCandidateSourceName(entity, metricType, entry.measurementId, sourceRow)
+      };
+    };
+    return { start: buildSide('start'), end: buildSide('end') };
+  }
+
+  function getCsvTrafoCandidates(entity, metric, metricType) {
+    const details = Array.isArray(metric?.candidateDetails) && metric.candidateDetails.length
+      ? metric.candidateDetails
+      : buildCsvFallbackCandidateDetails(entity, metricType);
+    const elementName = metricType === 'active' ? 'P' : 'Q';
+    return details.slice(0, 2).map((entry) => {
+      const sourceRow = getCsvSourceRow(String(entry.measurementId || ''), elementName);
+      return {
+        measurementId: String(entry.measurementId || ''),
+        sourceName: getCsvCandidateSourceName(entity, metricType, entry.measurementId, sourceRow),
+        value: Number.isFinite(Number(entry.rawValue))
+          ? Number(entry.rawValue)
+          : Number.isFinite(Number(sourceRow?.value)) ? Number(sourceRow.value) : null,
+        time: entry.timestamp || sourceRow?.timestamp || null
+      };
+    });
+  }
+
+  function getCsvWarningText(record) {
+    const parts = [];
+    if (record?.candidateConflict) parts.push('Aday uyuşmazlığı; birincil terminal kullanıldı');
+    if (record?.backupUsed) parts.push('Yedek terminal kullanıldı; terminal değerleri uyuşmuyor');
+    if (record?.unresolvedReason) {
+      parts.push({
+        'orientation-unknown': 'Yön belirlenemedi',
+        'source-side-unknown': 'Başlangıç/bitiş tarafı doğrulanamadı',
+        'polarization-mismatch': 'Terminal polarizasyonu uyumsuz',
+        'ambiguous-live': 'Belirsiz canlı aday',
+        'missing-source-row': 'Kaynak satır bulunamadı',
+        'invalid-pct': 'Yüklenme oranı geçersiz'
+      }[record.unresolvedReason] || record.unresolvedReason);
+    }
+    if (record?.uncertaintyLabel) parts.push(record.uncertaintyLabel);
+    if (record?.valueInvalid) parts.push('Ölçüm değeri geçersiz (1,5x kapasite sınırı)');
+    if (record?.invalidPct) parts.push('Yüklenme oranı geçersiz');
+    if (state.scada.fetchMeta?.error) parts.push(String(state.scada.fetchMeta.error));
+    return [...new Set(parts)].join('; ');
+  }
+
+  function translateResolutionMethod(method) {
+    return ({
+      'single-candidate': 'Tek geçerli kaynak',
+      'latest-terminal': 'En yeni terminal',
+      'tolerance-primary': 'Tolerans içinde birincil terminal',
+      'primary-conflict': 'Aday uyuşmazlığı - birincil terminal',
+      'same-value': 'Terminaller aynı değerde',
+      'invalid-value': 'Geçersiz değer',
+      'orientation-unknown': 'Yön belirlenemedi',
+      'ambiguous-live': 'Belirsiz canlı aday'
+    })[method] || String(method || '');
+  }
+
+  function getCsvQueryDurationSeconds() {
+    const fetchDurationMs = Number(state.scada.fetchMeta?.durationMs);
+    if (Number.isFinite(fetchDurationMs) && fetchDurationMs > 0) {
+      return formatCsvDecimal(fetchDurationMs / 1000, 1);
+    }
+    const op = state.scada.operationMeta;
+    if (op?.startedAt && (op.stage === 'done' || op.stage === 'error')) {
+      const started = op.startedAt instanceof Date ? op.startedAt.getTime() : Number(op.startedAt);
+      const updated = op.updatedAt instanceof Date ? op.updatedAt.getTime() : Number(op.updatedAt);
+      if (Number.isFinite(started) && Number.isFinite(updated) && updated - started > 0) {
+        return formatCsvDecimal((updated - started) / 1000, 1);
+      }
+    }
+    return '';
+  }
+
+  function getCsvFlowDirectionText(entityId, record) {
+    const flow = state.scada.lineFlowByLineId?.get?.(entityId);
+    if (flow?.direction === 'forward') return 'Başlangıç → Bitiş';
+    if (flow?.direction === 'reverse') return 'Bitiş → Başlangıç';
+    if (Number.isFinite(record?.directionValue)) {
+      return record.directionValue >= 0 ? 'Başlangıç → Bitiş' : 'Bitiş → Başlangıç';
+    }
+    return 'Belirsiz';
+  }
+
+  function getCsvSelectedTerminalText(record) {
+    if (record?.terminalSide === 'start') return 'Başlangıç';
+    if (record?.terminalSide === 'end') return 'Bitiş';
+    return '';
   }
 
   function buildCsvRows(rows) {
     const filter = rankingState.entityFilter;
+    const queryDuration = getCsvQueryDurationSeconds();
     if (filter === 'hat') {
       return {
-        header: ['Sira', 'Hat Adi', 'km', 'Zaman', 'Durum', 'Veri Yasi', 'MW', 'MVAR', 'Gosterim Orani (%)', 'Resolution Method', 'Candidate Conflict', 'Backup Used', 'Belirsizlik', 'Oran Modu', 'Gecersiz Oran'],
-        rows: rows.map((row, index) => [
-          index + 1,
-          row.name,
-          Number.isFinite(row.km) ? row.km.toFixed(1).replace('.', ',') : '',
-          formatPanelTimestampCsv(row),
-          row.statusLabel || '',
-          row.ageLabel || '',
-          row.mwInvalid ? '!' : Number.isFinite(row.mw) ? row.mw.toFixed(2).replace('.', ',') : '',
-          row.mvarInvalid ? '!' : Number.isFinite(row.mvar) ? row.mvar.toFixed(2).replace('.', ',') : '-',
-          row.invalidPct ? '!' : Number.isFinite(row.pct) ? row.pct.toFixed(2).replace('.', ',') : '',
-          row.resolutionMethod || '',
-          row.candidateConflict ? 'yes' : '',
-          row.backupUsed ? 'yes' : '',
-          row.uncertaintyLabel || '',
-          row.displayPctMode || '',
-          row.invalidPct ? 'yes' : ''
-        ])
+        header: [
+          'Sıra', 'Hat Adı', 'Gerilim (kV)', 'Uzunluk (km)', 'Başlangıç Terminali', 'Bitiş Terminali',
+          'Başlangıç SCADA Adı', 'Bitiş SCADA Adı', 'Akış Yönü', 'Ölçüm Türü', 'Element Adı', 'Ölçüm ID',
+          'SCADA B1', 'SCADA B2', 'SCADA B3', 'Başlangıç Terminal Değeri', 'Başlangıç Terminal Zamanı',
+          'Bitiş Terminal Değeri', 'Bitiş Terminal Zamanı', 'Nihai Değer', 'Birim', 'Nihai Veri Zamanı',
+          'Seçilen Terminal', 'Yüklenme (%)', 'Veri Durumu', 'Çözüm Yöntemi', 'Sorgu Süresi (sn)', 'Uyarı / Hata'
+        ],
+        rows: rows.map((row, index) => {
+          const record = state.scada.entityMetricsByKey.get(row.entityKey) || null;
+          const entity = record?.entity || null;
+          const ctx = getCsvMetricContext(record);
+          const sourceRow = getCsvSelectedSourceRow(ctx.metric, ctx.elementName);
+          const terminals = entity ? getCsvHatTerminalData(entity, ctx.metric, ctx.metricType) : { start: null, end: null };
+          return [
+            index + 1,
+            row.name || '',
+            entity ? String(entity.kvBucket || entity.kv || entity.gerilimKv || '') : '',
+            formatCsvDecimal(row.km, 1),
+            entity?.startTm || '',
+            entity?.endTm || '',
+            terminals.start?.sourceName || '',
+            terminals.end?.sourceName || '',
+            getCsvFlowDirectionText(row.entityKey.split(':')[1], record),
+            ctx.typeLabel,
+            ctx.elementName,
+            ctx.metric?.measurementId || '',
+            sourceRow?.tmName || '',
+            sourceRow?.kvText || '',
+            sourceRow?.remoteName || '',
+            formatCsvDecimal(terminals.start?.value),
+            formatCsvDate(terminals.start?.time),
+            formatCsvDecimal(terminals.end?.value),
+            formatCsvDate(terminals.end?.time),
+            formatCsvDecimal(ctx.metric?.value),
+            ctx.unit,
+            formatCsvDate(ctx.metric?.timestamp),
+            getCsvSelectedTerminalText(record),
+            Number.isFinite(Number(row.pct)) ? formatCsvDecimal(row.pct) : '',
+            row.statusLabel || '',
+            translateResolutionMethod(record?.resolutionMethod || ''),
+            queryDuration,
+            getCsvWarningText(record)
+          ];
+        })
       };
     }
     if (filter === 'trafo-dist' || filter === 'trafo-trans') {
       return {
-        header: ['Sira', 'Trafo', 'TM', 'Tip', 'Zaman', 'Durum', 'Veri Yasi', 'MW', 'MVAR', 'Yuklenme (%)', 'Resolution Method'],
-        rows: rows.map((row, index) => [
-          index + 1,
-          row.name,
-          row.tmName,
-          row.typeLabel,
-          formatPanelTimestampCsv(row),
-          row.statusLabel || '',
-          row.ageLabel || '',
-          row.mwInvalid ? '!' : Number.isFinite(row.mw) ? row.mw.toFixed(2).replace('.', ',') : '',
-          row.mvarInvalid ? '!' : Number.isFinite(row.mvar) ? row.mvar.toFixed(2).replace('.', ',') : '-',
-          Number.isFinite(row.pct) ? row.pct.toFixed(2).replace('.', ',') : '',
-          row.resolutionMethod || ''
-        ])
+        header: [
+          'Sıra', 'TM', 'Trafo Adı', 'Gerilim (kV)', 'Kapasite (MVA)', 'Ölçüm Türü', 'Element Adı', 'Ölçüm ID',
+          'SCADA B1', 'SCADA B2', 'SCADA B3', 'Birincil SCADA Kaynağı', 'Birincil Kaynak Değeri',
+          'Birincil Kaynak Zamanı', 'İkincil SCADA Kaynağı', 'İkincil Kaynak Değeri', 'İkincil Kaynak Zamanı',
+          'Nihai Değer', 'Birim', 'Nihai Veri Zamanı', 'Yüklenme (%)', 'Veri Durumu', 'Çözüm Yöntemi',
+          'Sorgu Süresi (sn)', 'Uyarı / Hata'
+        ],
+        rows: rows.map((row, index) => {
+          const record = state.scada.entityMetricsByKey.get(row.entityKey) || null;
+          const entity = record?.entity || null;
+          const ctx = getCsvMetricContext(record);
+          const sourceRow = getCsvSelectedSourceRow(ctx.metric, ctx.elementName);
+          const candidates = entity ? getCsvTrafoCandidates(entity, ctx.metric, ctx.metricType) : [];
+          const primary = candidates[0] || null;
+          const secondary = candidates[1] || null;
+          const capacityMva = entity ? getCapacityMva('trafo', entity) : null;
+          const kvLabel = entity ? [entity.primaryKv, entity.secondaryKv].filter(Boolean).join(' / ') : '';
+          return [
+            index + 1,
+            entity?.tmName || row.tmName || '',
+            row.name || '',
+            kvLabel,
+            formatCsvDecimal(capacityMva, 1),
+            ctx.typeLabel,
+            ctx.elementName,
+            ctx.metric?.measurementId || '',
+            sourceRow?.tmName || '',
+            sourceRow?.kvText || '',
+            sourceRow?.remoteName || '',
+            primary?.sourceName || '',
+            formatCsvDecimal(primary?.value),
+            formatCsvDate(primary?.time),
+            secondary?.sourceName || '',
+            formatCsvDecimal(secondary?.value),
+            formatCsvDate(secondary?.time),
+            formatCsvDecimal(ctx.metric?.value),
+            ctx.unit,
+            formatCsvDate(ctx.metric?.timestamp),
+            Number.isFinite(Number(row.pct)) ? formatCsvDecimal(row.pct) : '',
+            row.statusLabel || '',
+            translateResolutionMethod(record?.resolutionMethod || ''),
+            queryDuration,
+            getCsvWarningText(record)
+          ];
+        })
       };
     }
     return {
-        header: ['Sira', 'TM', 'Gerilim', 'Zaman', 'Durum', 'Veri Yasi', 'Gerilim (kV)', 'p.u.'],
-        rows: rows.map((row, index) => [
+      header: [
+        'Sıra', 'TM', 'Bara / Gerilim Adı', 'Nominal Gerilim (kV)', 'Element Adı', 'Ölçüm ID',
+        'SCADA B1', 'SCADA B2', 'SCADA B3', 'Birincil SCADA Kaynağı', 'Ham Gerilim (kV)',
+        'Nihai Gerilim (kV)', 'p.u.', 'Veri Zamanı', 'Veri Durumu', 'Veri Yaşı', 'Sorgu Süresi (sn)',
+        'Uyarı / Hata'
+      ],
+      rows: rows.map((row, index) => {
+        const record = state.scada.entityMetricsByKey.get(row.entityKey) || null;
+        const entity = record?.entity || null;
+        const ctx = getCsvMetricContext(record);
+        const sourceRow = getCsvSelectedSourceRow(ctx.metric, ctx.elementName);
+        return [
           index + 1,
-          row.tmName,
-          row.name,
-          formatPanelTimestampCsv(row),
+          row.tmName || '',
+          row.name || '',
+          entity ? String(entity.gerilimKv || entity.kvBucket || '') : '',
+          ctx.elementName,
+          ctx.metric?.measurementId || '',
+          sourceRow?.tmName || '',
+          sourceRow?.kvText || '',
+          sourceRow?.remoteName || '',
+          entity ? getCsvCandidateSourceName(entity, 'voltage', ctx.metric?.measurementId, sourceRow) : '',
+          formatCsvDecimal(sourceRow?.value),
+          formatCsvDecimal(ctx.metric?.value),
+          formatCsvDecimal(row.puValue, 3),
+          formatCsvDate(ctx.metric?.timestamp),
           row.statusLabel || '',
           row.ageLabel || '',
-          Number.isFinite(row.kvValue) ? row.kvValue.toFixed(2).replace('.', ',') : '',
-          Number.isFinite(row.puValue) ? row.puValue.toFixed(3).replace('.', ',') : ''
-        ])
-      };
+          queryDuration,
+          getCsvWarningText(record)
+        ];
+      })
+    };
   }
 
   exportRankingCsv = function () {
     const rows = buildPanelRows();
     if (!rows.length) return;
     const csv = buildCsvRows(rows);
-    const filename = `scada_panel_${rankingState.entityFilter}_${new Date().toISOString().slice(0, 10)}.csv`;
+    const kind = rankingState.entityFilter === 'hat'
+      ? 'hat'
+      : rankingState.entityFilter === 'trafo-dist'
+        ? 'trafo_dagitim'
+        : rankingState.entityFilter === 'trafo-trans'
+          ? 'trafo_iletim'
+          : 'gerilim';
+    const pad = (v) => String(v).padStart(2, '0');
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    let filename = `scada_${kind}_${stamp}.csv`;
+    if (state.scada.timeMode === 'historical' && Number.isFinite(Number(state.scada.historicalAt))) {
+      const at = new Date(Number(state.scada.historicalAt));
+      filename = `scada_${kind}_${stamp}_gecmis_${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}_${pad(at.getHours())}${pad(at.getMinutes())}.csv`;
+    }
     if (typeof downloadScadaCsvFile === 'function') {
       downloadScadaCsvFile(filename, csv.header, csv.rows);
     }
-    scadaLog('info', `SCADA panel CSV indirildi: ${rows.length} satir.`);
+    scadaLog('info', `SCADA panel CSV indirildi: ${rows.length} satir, ${csv.header.length} kolon.`);
   };
 
   function buildScadaAuditReport() {
@@ -6156,6 +6414,13 @@ function _formatHistoryAxisLabel(timestampMs) {
       getDisplayColor,
       updateScadaTimeBadge,
       enrichMissingScadaIds,
+      buildCsvRows,
+      exportRankingCsv,
+      getCsvMetricContext,
+      getCsvWarningText,
+      translateResolutionMethod,
+      getCsvQueryDurationSeconds,
+      getCsvHatTerminalData,
       getLiveMetricTypes,
       getHistoryMetricTypes,
       getCurrentScadaScope,

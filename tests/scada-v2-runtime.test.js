@@ -1434,3 +1434,71 @@ test('freshKeys guard lets recovery replace an old row but never a fresh one', a
   });
   assert.equal(context.state.scada.measurementRowsById.get('m-1|P').value, 50, 'ana sorguda gelen taze satir genis-pencere sonucuyla ezilmez');
 });
+
+test('SCADA CSV exports use the Turkish header contract for all four entity types', () => {
+  const context = loadRuntime();
+  const hooks = context.__SCADA_V2_TEST_HOOKS__;
+  context.requestScadaOverlayRender = () => {};
+  const hatHeader = ['Sıra', 'Hat Adı', 'Gerilim (kV)', 'Uzunluk (km)', 'Başlangıç Terminali', 'Bitiş Terminali', 'Başlangıç SCADA Adı', 'Bitiş SCADA Adı', 'Akış Yönü', 'Ölçüm Türü', 'Element Adı', 'Ölçüm ID', 'SCADA B1', 'SCADA B2', 'SCADA B3', 'Başlangıç Terminal Değeri', 'Başlangıç Terminal Zamanı', 'Bitiş Terminal Değeri', 'Bitiş Terminal Zamanı', 'Nihai Değer', 'Birim', 'Nihai Veri Zamanı', 'Seçilen Terminal', 'Yüklenme (%)', 'Veri Durumu', 'Çözüm Yöntemi', 'Sorgu Süresi (sn)', 'Uyarı / Hata'];
+  const trafoHeader = ['Sıra', 'TM', 'Trafo Adı', 'Gerilim (kV)', 'Kapasite (MVA)', 'Ölçüm Türü', 'Element Adı', 'Ölçüm ID', 'SCADA B1', 'SCADA B2', 'SCADA B3', 'Birincil SCADA Kaynağı', 'Birincil Kaynak Değeri', 'Birincil Kaynak Zamanı', 'İkincil SCADA Kaynağı', 'İkincil Kaynak Değeri', 'İkincil Kaynak Zamanı', 'Nihai Değer', 'Birim', 'Nihai Veri Zamanı', 'Yüklenme (%)', 'Veri Durumu', 'Çözüm Yöntemi', 'Sorgu Süresi (sn)', 'Uyarı / Hata'];
+  const voltageHeader = ['Sıra', 'TM', 'Bara / Gerilim Adı', 'Nominal Gerilim (kV)', 'Element Adı', 'Ölçüm ID', 'SCADA B1', 'SCADA B2', 'SCADA B3', 'Birincil SCADA Kaynağı', 'Ham Gerilim (kV)', 'Nihai Gerilim (kV)', 'p.u.', 'Veri Zamanı', 'Veri Durumu', 'Veri Yaşı', 'Sorgu Süresi (sn)', 'Uyarı / Hata'];
+
+  const cases = [
+    ['hat', 'hat-active', hatHeader],
+    ['trafo-dist', 'trafo-active', trafoHeader],
+    ['trafo-trans', 'trafo-active', trafoHeader],
+    ['voltage', 'voltage', voltageHeader]
+  ];
+  for (const [filter, metric, expected] of cases) {
+    if (filter === 'trafo-trans') context.state.filters.scadaListEntity = 'trafo-trans';
+    context.setScadaMetric(metric);
+    const csv = hooks.buildCsvRows([]);
+    assert.equal(csv.header.length, expected.length, `${filter} kolon sayisi`);
+    assert.deepEqual([...csv.header], expected, `${filter} header sozlesmesi`);
+    assert.ok(expected.every((column) => /[a-zA-Z]/.test(column)), `${filter} header ASCII degil`);
+  }
+});
+
+test('exportRankingCsv sends no SCADA_FETCH or HISTORY messages', () => {
+  const context = loadRuntime();
+  const hooks = context.__SCADA_V2_TEST_HOOKS__;
+  let messages = 0;
+  let downloaded = null;
+  context.chrome.runtime.sendMessage = async () => {
+    messages += 1;
+    return { ok: false };
+  };
+  context.downloadScadaCsvFile = (filename, header, rows) => {
+    downloaded = { filename, header, rows };
+  };
+  context.getVisibleHats = () => [buildTerminalEntity({ id: 'hat-1' })];
+  context.state.scada.entityMetricsByKey = new Map([['hat:hat-1', {
+    entityType: 'hat',
+    entityId: 'hat-1',
+    entityKey: 'hat:hat-1',
+    entity: buildTerminalEntity({ id: 'hat-1' }),
+    primaryMetric: 'active',
+    primaryValue: 80,
+    primaryTimestamp: new Date('2026-08-16T07:04:00.000Z'),
+    primaryStaleState: 'live',
+    active: { value: 80, timestamp: new Date('2026-08-16T07:04:00.000Z'), measurementId: 'm-1' },
+    reactive: { value: 0 }
+  }]]);
+  context.state.scada.measurementRowsById = new Map([[
+    'm-1|P',
+    { measurementId: 'm-1', elementName: 'P', tmName: 'TMA', kvText: '380', remoteName: 'TMA1', value: 80, timestamp: new Date('2026-08-16T07:04:00.000Z') }
+  ]]);
+  context.state.scada.fetchMeta = { status: 'success', durationMs: 4700 };
+  context.state.scada.timeMode = 'historical';
+  context.state.scada.historicalAt = Date.parse('2026-08-16T07:05:00.000Z');
+
+  hooks.exportRankingCsv();
+
+  assert.equal(messages, 0, 'CSV export sirasinda hicbir SCADA_FETCH/HISTORY mesaji gonderilmez');
+  assert.ok(downloaded, 'CSV dosyasi indirilir');
+  assert.equal(downloaded.header.length, 28, 'hat CSV kolon sayisi');
+  assert.equal(downloaded.rows.length, 1, 'filtrelenmis satirlarin tamami yazilir');
+  assert.match(downloaded.filename, /^scada_hat_\d{8}_\d{6}_gecmis_\d{8}_\d{4}\.csv$/, 'gecmis modu dosya adi');
+  assert.equal(downloaded.rows[0][19], '80,00', 'nihai deger normalize kayit degeridir (virgul ondalik)');
+  assert.equal(downloaded.rows[0][12], 'TMA', 'SCADA B1 secilen kaynak satirindan gelir');
+});
