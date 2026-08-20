@@ -274,3 +274,17 @@ test('buildChartPayload with empty kvFilters and tearFilters retains empty array
   assert.equal(adhocFilters.some(f => f.subject === 'b2Name'), false);
   assert.equal(adhocFilters.some(f => f.subject === 'tear'), false);
 });
+
+test('buildHistoryPayload for timeseries contains time_grain_sqla and is_timeseries', () => {
+  const payload = scadaCommon.buildHistoryPayload({
+    elementNames: ['P'],
+    measurementIds: ['111', '222'],
+    queryMode: 'timeseries'
+  });
+
+  const query = payload.queries[0];
+  assert.equal(query.time_grain_sqla, 'PT1M');
+  assert.equal(query.is_timeseries, true);
+  assert.ok(query.columns.includes('sinsid'), 'columns includes sinsid');
+  assert.equal(query.time_grain, undefined, 'should NOT have time_grain');
+});

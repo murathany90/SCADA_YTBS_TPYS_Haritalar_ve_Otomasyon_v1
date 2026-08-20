@@ -158,10 +158,11 @@
       queries: [{
         time_range: timeRange,
         granularity: '__time',
-        time_grain: queryMode === 'aggregate' ? 'PT1M' : undefined,
+        time_grain_sqla: queryMode === 'aggregate' ? 'PT1M' : undefined,
+        is_timeseries: queryMode === 'aggregate' ? true : undefined,
         groupby: queryMode === 'aggregate' ? ['sinsid'] : undefined,
         metrics: queryMode === 'aggregate' ? [{ aggregate: 'AVG', column: { column_name: 'maxValue' }, expressionType: 'SIMPLE', label: 'AVG(maxValue)' }] : undefined,
-        columns: queryMode === 'raw' ? columns.slice() : undefined,
+        columns: queryMode === 'raw' ? columns.slice() : ['sinsid'],
         filters,
         orderby: queryMode === 'raw' ? [['__time', false]] : [],
         row_limit: contract.rowLimit || CONFIG.HISTORY_ROW_LIMIT || 50000,

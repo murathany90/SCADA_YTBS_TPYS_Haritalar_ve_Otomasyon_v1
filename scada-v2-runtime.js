@@ -2849,7 +2849,7 @@
     if (isHat) {
       entity = state.network?.hatById?.get(String(entityId)) || state.network?.hatLines?.find((entry) => String(entry.id) === String(entityId));
     } else if (isTrafo) {
-      entity = state.network?.trafoById?.get(String(entityId)) || state.network?.trafoLines?.find((entry) => String(entry.id) === String(entityId));
+      entity = state.network?.trafos?.find((trafo) => String(trafo.id) === String(entityId));
     }
     
     const name = entity?.name || entityId;
@@ -2933,11 +2933,17 @@
        
        const parsedRowsByMid = new Map();
        let missingValueField = false;
+       let missingMeasurementIdField = false;
 
        rows.forEach(row => {
           const mwRaw = row.maxValue ?? row['AVG(maxValue)'] ?? row.avgMaxValue;
           const timeRaw = row.__time ?? row['MAX(__time)'] ?? row.maxTime;
           const sinsidRaw = row.sinsid ?? row.measurementId;
+          
+          if (sinsidRaw == null) {
+              missingMeasurementIdField = true;
+              return;
+          }
           
           if (mwRaw === undefined || mwRaw === null) missingValueField = true;
           
@@ -2959,7 +2965,8 @@
        let maxTime = -Infinity;
        
        for (const pts of parsedRowsByMid.values()) {
-          if (pts.length > maxPoints) maxPoints = pts.length;
+          const uniqueTimes = new Set(pts.map(p => p.ts.getTime())).size;
+          if (uniqueTimes > maxPoints) maxPoints = uniqueTimes;
           for (const p of pts) {
              const t = p.ts.getTime();
              if (t < minTime) minTime = t;
@@ -2972,6 +2979,7 @@
           parsedRowsByMid,
           maxPoints,
           missingValueField,
+          missingMeasurementIdField,
           minTime: minTime === Infinity ? null : minTime,
           maxTime: maxTime === -Infinity ? null : maxTime
        };
@@ -2995,10 +3003,12 @@
       
       if (data.maxPoints < 2) {
          let reason = "Superset 0 satır döndürdü.";
-         if (data.rows.length > 0 && data.missingValueField) {
+         if (data.rows.length > 0 && data.missingMeasurementIdField) {
+            reason = "Timeseries yanıtında measurement ID alanı bulunamadı.";
+         } else if (data.rows.length > 0 && data.missingValueField) {
             reason = `${data.rows.length} satır geldi ancak beklenen maxValue alanı bulunamadı.`;
          } else if (data.rows.length > 0) {
-            reason = `${data.rows.length} satır geldi ancak her ölçüm için en az 2 zaman noktası bulunamadı.`;
+            reason = `${data.rows.length} satır geldi ancak her ölçüm için en az 2 farklı zaman noktası bulunamadı.`;
          }
          _renderHistoryError(entityKey, reason, { mIds: measurementIds, count: data.rows.length, source });
          return;

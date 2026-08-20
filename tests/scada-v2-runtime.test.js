@@ -892,3 +892,49 @@ test('SCADA dashboard snapshot serializes and restores measurement rows as maps'
   assert.equal(context.state.scada.measurementRowsById.get('m-1').timestamp.getTime(), timestamp.getTime());
   assert.match(context.state.scada.fetchMeta.phaseMessage, /onbellek|önbellek/i);
 });
+
+test('history parser ignores missing sinsid without creating undefined key', () => {
+  const rows = [
+    { maxValue: 10, __time: '2026-05-01T08:00:00Z', sinsid: '123' },
+    { maxValue: 15, __time: '2026-05-01T08:01:00Z' } // missing sinsid
+  ];
+  const parsedRowsByMid = new Map();
+  let missingMeasurementIdField = false;
+
+  rows.forEach(row => {
+    const mwRaw = row.maxValue ?? row['AVG(maxValue)'] ?? row.avgMaxValue;
+    const timeRaw = row.__time ?? row['MAX(__time)'] ?? row.maxTime;
+    const sinsidRaw = row.sinsid ?? row.measurementId;
+    
+    if (sinsidRaw == null) {
+        missingMeasurementIdField = true;
+        return;
+    }
+    
+    const mw = Number(mwRaw);
+    const mId = String(sinsidRaw);
+    if (!parsedRowsByMid.has(mId)) parsedRowsByMid.set(mId, []);
+    parsedRowsByMid.get(mId).push({ ts: timeRaw, mw });
+  });
+
+  assert.equal(missingMeasurementIdField, true);
+  assert.equal(parsedRowsByMid.has('undefined'), false);
+  assert.equal(parsedRowsByMid.get('123').length, 1);
+});
+
+test('history parser duplicate timestamp is not counted as 2 points', () => {
+  const parsedRowsByMid = new Map();
+  const time = new Date('2026-05-01T08:00:00Z');
+  parsedRowsByMid.set('123', [
+    { ts: time, mw: 10 },
+    { ts: time, mw: 12 } // duplicate time
+  ]);
+  
+  let maxPoints = 0;
+  for (const pts of parsedRowsByMid.values()) {
+    const uniqueTimes = new Set(pts.map(p => p.ts.getTime())).size;
+    if (uniqueTimes > maxPoints) maxPoints = uniqueTimes;
+  }
+  
+  assert.equal(maxPoints, 1);
+});
