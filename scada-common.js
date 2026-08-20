@@ -10,6 +10,7 @@
     LIVE_MAX_CONCURRENCY: 3,
     LIVE_FETCH_TIMEOUT_MS: 15000,
     HISTORY_FETCH_TIMEOUT_MS: 30000,
+    HISTORY_ROW_LIMIT: 50000,
     SNAPSHOT_INTERVAL_MS: 5 * 60 * 1000
   };
 
@@ -144,7 +145,7 @@
       groupby: [],
       metrics: [],
       adhoc_filters: adhocFilters,
-      row_limit: contract.rowLimit || 10000,
+      row_limit: contract.rowLimit || CONFIG.HISTORY_ROW_LIMIT || 50000,
       order_by_cols: ['__time DESC']
     };
 
@@ -159,7 +160,7 @@
         metrics: [],
         filters,
         orderby: [['__time', false]],
-        row_limit: contract.rowLimit || 10000
+        row_limit: contract.rowLimit || CONFIG.HISTORY_ROW_LIMIT || 50000
       }],
       result_format: 'json',
       result_type: 'full'

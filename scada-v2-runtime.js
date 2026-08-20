@@ -2720,14 +2720,14 @@
                   : '-';
               return `
                 <div class="technical-note-measurement-row${row.selected ? ' is-selected' : ''}">
-                  <div><span>├ûl├ğ├╝m Adresi</span><strong>${escapeHtml(row.measurementId || '-')}</strong></div>
-                  <div><span>Form├╝l</span><strong>${escapeHtml(row.formulaRaw || '-')}</strong></div>
-                  <div><span>Superset Kaynak De─şeri</span><strong>${escapeHtml(rawText)}</strong></div>
-                  <div><span>Harita Ak─▒┼ş De─şeri</span><strong>${escapeHtml(normalizedText)}</strong></div>
-                  <div><span>Superset Veri Zaman─▒</span><strong>${escapeHtml(timeText)}</strong></div>
-                  <div><span>Terminal Taraf─▒</span><strong>${escapeHtml(row.terminalSide || '-')}</strong></div>
-                  <div><span>Se├ğim Nedeni</span><strong>${escapeHtml(row.selectedCandidateReason || '-')}</strong></div>
-                  <div><span>Se├ğildi mi</span><strong>${row.selected ? 'Evet' : 'Hay─▒r'}</strong></div>
+                  <div><span>Ölçüm Adresi</span><strong>${escapeHtml(row.measurementId || '-')}</strong></div>
+                  <div><span>Formül</span><strong>${escapeHtml(row.formulaRaw || '-')}</strong></div>
+                  <div><span>Superset Kaynak Değeri</span><strong>${escapeHtml(rawText)}</strong></div>
+                  <div><span>Harita Akış Değeri</span><strong>${escapeHtml(normalizedText)}</strong></div>
+                  <div><span>Superset Veri Zamanı</span><strong>${escapeHtml(timeText)}</strong></div>
+                  <div><span>Terminal Tarafı</span><strong>${escapeHtml(row.terminalSide || '-')}</strong></div>
+                  <div><span>Seçim Nedeni</span><strong>${escapeHtml(row.selectedCandidateReason || '-')}</strong></div>
+                  <div><span>Seçildi mi</span><strong>${row.selected ? 'Evet' : 'Hayır'}</strong></div>
                 </div>
               `;
             }).join('')}
@@ -2735,8 +2735,8 @@
         </div>
       `;
     };
-    sections.push(renderRows('Aktif Guc Olcumleri', record.active, 'MW'));
-    sections.push(renderRows('Reaktif Guc Olcumleri', record.reactive, 'MVar'));
+    sections.push(renderRows('Aktif Güç Ölçümleri', record.active, 'MW'));
+    sections.push(renderRows('Reaktif Güç Ölçümleri', record.reactive, 'MVar'));
     return sections.filter(Boolean).join('');
   }
 
@@ -2802,7 +2802,7 @@
       compactFields: model.compactFields,
       detailFields: model.detailFields,
       detailExtraHtml: model.detailExtraHtml,
-      actions: [{ id: 'btnShowScadaChart', label: 'Grafik Goster' }],
+      actions: [{ id: 'btnShowScadaChart', label: 'Grafik Göster' }],
       anchor: { hatId: hat.id, coord: anchorCoord },
       expanded,
       classes: ['hat-popup']
@@ -2858,7 +2858,7 @@
           <button id="btnCloseScadaChart" class="info-close" title="Kapat">X</button>
         </div>
         <div class="scada-chart-body" id="scadaChartModalBody">
-          <div class="scada-chart-empty">Gecmis veri yukleniyor...</div>
+          <div class="scada-chart-empty">Geçmiş veri yükleniyor...</div>
         </div>
       </div>
     `;
@@ -2882,6 +2882,20 @@
       return;
     }
 
+    const cacheKey = measurementIds.slice().sort().join(',') + '|P|24h';
+    if (!state.scada.history24hCache) state.scada.history24hCache = new Map();
+    const cached = state.scada.history24hCache.get(cacheKey);
+    const nowMs = Date.now();
+    
+    // Check if we bypassed cache intentionally via retry button
+    const isBypassCache = window._scadaBypassCacheFor === entityKey;
+    if (isBypassCache) {
+       window._scadaBypassCacheFor = null;
+    } else if (cached && (nowMs - cached.fetchedAt < 5 * 60 * 1000)) {
+       _renderHistoryData(cached.rows, measurementIds, hat, entityKey, cached.wasTruncated);
+       return;
+    }
+
     try {
       const result = await chrome.runtime.sendMessage({
         type: 'SCADA_HISTORY_FETCH',
@@ -2896,10 +2910,21 @@
       });
 
       if (!result.ok || !result.data || !result.data.result || !result.data.result[0].data) {
-        throw new Error('Veri alinmadi');
+        throw new Error('Veri alınamadı');
       }
 
       const rows = result.data.result[0].data;
+      const rowLimit = (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.CONFIG?.HISTORY_ROW_LIMIT) || 50000;
+      const wasTruncated = rows.length >= rowLimit;
+
+      state.scada.history24hCache.set(cacheKey, { fetchedAt: nowMs, rows, wasTruncated });
+      _renderHistoryData(rows, measurementIds, hat, entityKey, wasTruncated);
+    } catch (err) {
+      _renderHistoryError(entityKey);
+    }
+  }
+
+  function _renderHistoryData(rows, measurementIds, hat, entityKey, wasTruncated) {
       const term1Rows = [];
       const term2Rows = [];
       const mId1 = measurementIds[0];
@@ -2923,33 +2948,28 @@
       term1Rows.sort((a, b) => a.ts - b.ts);
       term2Rows.sort((a, b) => a.ts - b.ts);
 
-      document.getElementById('scadaChartModalBody').innerHTML = buildSuperset24hChart(term1Rows, term2Rows, hat);
-    } catch (err) {
-      _renderHistoryError(entityKey);
-    }
+      let html = buildSuperset24hChart(term1Rows, term2Rows, hat);
+      if (wasTruncated) {
+         html += '<div class="scada-chart-warning" style="color: #f59e0b; text-align: center; font-size: 11px; margin-top: 8px;">Veri satır sınırına ulaştı; 24 saat grafiği eksik olabilir.</div>';
+      }
+      document.getElementById('scadaChartModalBody').innerHTML = html;
   }
 
   function _renderHistoryError(entityKey) {
     const body = document.getElementById('scadaChartModalBody');
     if (!body) return;
-    body.innerHTML = '<div class="scada-chart-empty">Veri alinamadi <button id="btnRetryScadaHistory">Yenile</button></div>';
+    body.innerHTML = '<div class="scada-chart-empty">Veri alınamadı <button id="btnRetryScadaHistory">Yenile</button></div>';
     const retryBtn = document.getElementById('btnRetryScadaHistory');
     if (retryBtn) {
-      retryBtn.addEventListener('click', () => openScada24hHistory(entityKey));
+      retryBtn.addEventListener('click', () => {
+         window._scadaBypassCacheFor = entityKey;
+         openScada24hHistory(entityKey);
+      });
     }
   }
 
-  function _formatHistoryAxisLabel(timeMs) {
-    const d = new Date(timeMs);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const hour = String(d.getHours()).padStart(2, '0');
-    const minute = String(d.getMinutes()).padStart(2, '0');
-    return day + '.' + month + ' ' + hour + ':' + minute;
-  }
-
   function buildSuperset24hChart(term1, term2, hat) {
-    if (!term1.length && !term2.length) return '<div class="scada-chart-empty">Grafik icin yeterli gecmis veri yok.</div>';
+    if (!term1.length && !term2.length) return '<div class="scada-chart-empty">Grafik için yeterli geçmiş veri yok.</div>';
     const width = 960;
     const height = 360;
     const padL = 62;
@@ -2998,6 +3018,17 @@
         </div>
       </div>
     `;
+  }
+
+  
+  if (typeof document !== 'undefined' && document.head && !document.getElementById('scada-history-compact-styles')) {
+    const style = document.createElement('style');
+    style.id = 'scada-history-compact-styles';
+    style.textContent = `
+      .col-hist { width: 34px; min-width: 34px; max-width: 34px; padding-left: 2px; padding-right: 2px; text-align: center; }
+      .btn-history { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+    `;
+    document.head.appendChild(style);
   }
 
   function buildPanelRows() {
@@ -3208,7 +3239,7 @@
           <th class="col-mw" data-sort="mw">MW</th>
           <th class="col-mvar" data-sort="mvar">MVAR</th>
           <th class="col-pct" data-sort="score">%</th>
-          <th class="col-hist" title="Son 24 Saat">24s</th>
+          <th class="col-hist" title="Son 24 saat grafiğini göster"></th>
         </tr></thead>
       `;
     }
@@ -3323,7 +3354,9 @@
             <td class="col-mw">${row.mwInvalid ? '!' : Number.isFinite(row.mw) ? `${row.mw >= 0 ? '+' : ''}${row.mw.toFixed(1)}` : '&mdash;'}</td>
             <td class="col-mvar">${row.mvarInvalid ? '!' : Number.isFinite(row.mvar) ? `${row.mvar >= 0 ? '+' : ''}${row.mvar.toFixed(1)}` : '-'}</td>
             <td class="col-pct"><span class="ranking-pct-cell${row.invalidPct ? ' is-invalid' : ''}" style="background:${pctColor};color:${pctTextColor}">${pctText}</span></td>
-            <td class="col-hist"><button type="button" class="btn-history" data-history-entity="${row.entityKey}" title="24 Saatlik Grafiği Göster" aria-label="24 Saatlik Grafiği Göster">&#128200;</button></td>
+            <td class="col-hist"><button type="button" class="btn-history" data-history-entity="${row.entityKey}" title="Son 24 saat grafiğini göster" aria-label="Son 24 saat grafiğini göster">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </button></td>
           </tr>
         `;
       }
