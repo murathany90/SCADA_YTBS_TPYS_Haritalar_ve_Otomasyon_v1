@@ -436,6 +436,18 @@
     if (typeof requestRender === 'function') requestRender();
   }
 
+  requestScadaOverlayRender = function () {
+    if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+    if (typeof renderFlowLayer === 'function') renderFlowLayer();
+    if (typeof renderHatLayer === 'function') renderHatLayer();
+    if (typeof renderTmLayer === 'function') renderTmLayer();
+    if (typeof renderBaraLayer === 'function') renderBaraLayer();
+    if (typeof renderBaraSetLayer === 'function') renderBaraSetLayer();
+    if (typeof renderMeasureLayer === 'function') renderMeasureLayer();
+    if (typeof updateSummary === 'function') updateSummary();
+    if (typeof syncInfoCardPosition === 'function') syncInfoCardPosition();
+  };
+
   function setScadaMetric(mode, options = {}) {
     if (!METRIC_MODES[mode]) return;
     state.filters.scadaMetric = mode;
@@ -448,11 +460,7 @@
     syncScadaMetricButtons();
     syncScadaMapDisplayButtons();
     if (state.scada.enabled && options.fetch !== false) scadaDoFetch({ trigger: 'mode-change' });
-    if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
-    else {
-      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
-      if (typeof requestRender === 'function') requestRender();
-    }
+    requestScadaOverlayRender();
     if (typeof refreshRankingTable === 'function') refreshRankingTable();
   }
 
@@ -1839,11 +1847,7 @@
     if (options.apply !== false && rows.size && state.scada.currentScope?.entities?.length) {
       applyGenericScadaSnapshot(rows, state.scada.currentScope);
     }
-    if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
-    else {
-      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
-      if (typeof requestRender === 'function') requestRender();
-    }
+    requestScadaOverlayRender();
     if (typeof refreshRankingTable === 'function') refreshRankingTable();
     return { ok: true, rows: rows.size };
   }
@@ -1870,7 +1874,7 @@
             dashboardId: SCADA_CONFIG.DASHBOARD_ID,
             chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
             datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-            timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
+            timeRange: SCADA_CONFIG.LIVE_WINDOW_TIME_RANGE,
             kvFilters: [],
             tearFilters: [],
             elementNames: scope.elementNames,
@@ -2219,25 +2223,6 @@
       });
 
       const rowsByMeasurementId = SCADA_COMMON.normalizeMetricRows(result.data, { elementNames: scope.elementNames });
-      if (!rowsByMeasurementId.size) {
-        const finishedAt = new Date();
-        const errorMessage = 'Superset yanitinda veri bulunamadi.';
-        updateScadaFetchMeta({
-          status: 'error',
-          stage: 'error',
-          progressPct: 100,
-          phaseLabel: 'Bos Veri',
-          phaseMessage: errorMessage,
-          finishedAt,
-          durationMs: finishedAt.getTime() - startedAt.getTime(),
-          rawRows,
-          normalizedRows: 0,
-          error: errorMessage
-        });
-        markScadaFlowsUnavailable(errorMessage, SCADA_ERROR.EMPTY_DATA);
-        scadaLog('warn', 'SCADA verisi bos dondu.');
-        return;
-      }
 
       const requestedIdSet = new Set(scope.measurementIds.map(String));
       const foundIdSet = new Set();
@@ -2245,11 +2230,13 @@
         const id = String(row.measurementId || row.sinsid || '').trim();
         if (id) foundIdSet.add(id);
       });
-      const missingMeasurementIds = [...requestedIdSet].filter((id) => !foundIdSet.has(id));
+      const missingMeasurementIds = requestedIdSet.size ? [...requestedIdSet].filter((id) => !foundIdSet.has(id)) : [];
       const nowMs = Date.now();
-      const lastFallbackAt = state.scada.missingIdFallback?.at || 0;
+      state.scada.missingIdFallbackByScope = state.scada.missingIdFallbackByScope || {};
+      const fallbackScopeKey = String(scope.filterKey || scope.mode || 'default');
+      const lastFallbackAt = state.scada.missingIdFallbackByScope[fallbackScopeKey] || 0;
       const fallbackInWindow = nowMs - lastFallbackAt < 5 * 60 * 1000;
-      if (missingMeasurementIds.length && missingMeasurementIds.length < requestedIdSet.size && !fallbackInWindow) {
+      if (requestedIdSet.size > 0 && missingMeasurementIds.length > 0 && !fallbackInWindow) {
         try {
           const fallbackResult = await chrome.runtime.sendMessage({
             type: 'SCADA_FETCH',
@@ -2277,14 +2264,36 @@
                 recovered += 1;
               }
             });
+            state.scada.missingIdFallbackByScope[fallbackScopeKey] = nowMs;
             if (recovered > 0) {
-              state.scada.missingIdFallback = { at: nowMs, missingCount: missingMeasurementIds.length, recovered };
               scadaLog('info', `SCADA eksik olcum fallback: ${missingMeasurementIds.length} ID icin genis pencere sorgusu yapildi, ${recovered} satir kurtarildi.`);
+            } else {
+              scadaLog('warn', `SCADA eksik olcum fallback: ${missingMeasurementIds.length} ID icin genis pencere sorgusu yapildi, kurtarilan satir yok.`);
             }
           }
         } catch (fallbackError) {
           scadaLog('warn', 'SCADA eksik olcum fallback basarisiz.', fallbackError?.message || String(fallbackError));
         }
+      }
+
+      if (!rowsByMeasurementId.size) {
+        const finishedAt = new Date();
+        const errorMessage = 'Superset yanitinda veri bulunamadi.';
+        updateScadaFetchMeta({
+          status: 'error',
+          stage: 'error',
+          progressPct: 100,
+          phaseLabel: 'Bos Veri',
+          phaseMessage: errorMessage,
+          finishedAt,
+          durationMs: finishedAt.getTime() - startedAt.getTime(),
+          rawRows,
+          normalizedRows: 0,
+          error: errorMessage
+        });
+        markScadaFlowsUnavailable(errorMessage, SCADA_ERROR.EMPTY_DATA);
+        scadaLog('warn', 'SCADA verisi bos dondu.');
+        return;
       }
 
       updateScadaFetchMeta({
@@ -2967,10 +2976,10 @@
             queryMode: useTimeseries ? 'timeseries' : 'raw'
           }
        });
-       if (!result.ok || !result.data || !result.data.result || !result.data.result[0].data) {
+       if (!result.ok || !result.data) {
           throw new Error('Superset boş veya geçersiz yanıt döndürdü.');
        }
-       const rows = result.data.result[0].data;
+       const rows = SCADA_COMMON.findDataArray(result.data) || [];
        const firstRow = rows.length ? rows[0] : null;
        const candidateTimeKeys = ['__timestamp', '__time', 'MAX(__time)', 'maxTime', 'timestamp', 'datetime', 'dt', 'time'];
        const candidateValueKeys = ['maxValue', 'AVG(maxValue)', 'avgMaxValue', 'value', 'val'];

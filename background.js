@@ -3639,28 +3639,71 @@ async function executeAuthWrapper(authConfig, batchPayload, timeoutMs) {
   const sessionAttempt = await fetchChartData(transport, 'session', false, timeoutMs);
   if (sessionAttempt.ok || !sessionAttempt.shouldRetryAuth) return sessionAttempt;
   
-  if (!authConfig.enabled || !authConfig.username || !authConfig.password) return sessionAttempt;
+  if (!authConfig.enabled || !authConfig.username || !authConfig.password) {
+    const recoveredAttempt = sessionAttempt.shouldRetryAuth
+      ? await tryRecoverWithExistingSession(authConfig, transport, 'session', timeoutMs, sessionAttempt)
+      : sessionAttempt;
+    return recoveredAttempt.ok || !recoveredAttempt.shouldRetryAuth
+      ? recoveredAttempt
+      : { ...sessionAttempt, ...recoveredAttempt };
+  }
   
+  const baseUrl = normalizeBaseUrl(authConfig.baseUrl || SCADA_DEFAULTS.baseUrl);
+
+  const sessionRecovered = await tryRecoverWithExistingSession(authConfig, transport, 'session', timeoutMs, sessionAttempt);
+  if (sessionRecovered.ok || !sessionRecovered.shouldRetryAuth) return sessionRecovered;
+
   const directLogin = await tryDirectLogin(authConfig);
   if (directLogin.ok) {
-    invalidateSupersetCsrfToken(authConfig.baseUrl);
+    invalidateSupersetCsrfToken(baseUrl);
     const directAttempt = await fetchChartData(transport, 'direct-login', false, timeoutMs);
     if (directAttempt.ok || !directAttempt.shouldRetryAuth) return directAttempt;
   }
   
   const hiddenTabLogin = await tryHiddenTabLogin(authConfig);
   if (hiddenTabLogin.ok) {
-    invalidateSupersetCsrfToken(authConfig.baseUrl);
-    return fetchChartData(transport, 'hidden-tab', true, timeoutMs);
+    invalidateSupersetCsrfToken(baseUrl);
+    const hiddenTabAttempt = await fetchChartData(transport, 'hidden-tab', true, timeoutMs);
+    if (hiddenTabAttempt.ok || !hiddenTabAttempt.shouldRetryAuth) return hiddenTabAttempt;
+    return hiddenTabAttempt;
   }
   
+  const lastAttempt = hiddenTabLogin.ok ? null : hiddenTabLogin;
   return {
     ok: false,
-    error: hiddenTabLogin.error || directLogin.error || sessionAttempt.error || 'SCADA auth yenilenemedi.',
-    errorType: hiddenTabLogin.errorType || directLogin.errorType || sessionAttempt.errorType || 'AUTH_REQUIRED',
+    error: lastAttempt?.error || directLogin.error || sessionRecovered?.error || sessionAttempt.error || 'SCADA auth yenilenemedi.',
+    errorType: lastAttempt?.errorType || directLogin.errorType || sessionRecovered?.errorType || sessionAttempt.errorType || 'AUTH_REQUIRED',
     httpStatus: sessionAttempt.httpStatus || null,
     authMode: 'hidden-tab',
     usedFallback: true
+  };
+}
+
+async function tryRecoverWithExistingSession(authConfig, transport, authMode, timeoutMs, fallbackAttempt) {
+  const baseUrl = normalizeBaseUrl(authConfig.baseUrl || SCADA_DEFAULTS.baseUrl);
+  const sessionStillValid = await validateSupersetSession(baseUrl);
+  if (!sessionStillValid) {
+    return {
+      ok: false,
+      error: fallbackAttempt?.error || 'Superset oturumu gecersiz.',
+      errorType: fallbackAttempt?.errorType || 'AUTH_REQUIRED',
+      httpStatus: fallbackAttempt?.httpStatus || null,
+      authMode,
+      usedFallback: false,
+      shouldRetryAuth: true
+    };
+  }
+  invalidateSupersetCsrfToken(baseUrl);
+  const retriedAttempt = await fetchChartData(transport, authMode, false, timeoutMs);
+  if (retriedAttempt.ok || !retriedAttempt.shouldRetryAuth) return retriedAttempt;
+  return {
+    ok: false,
+    error: retriedAttempt?.error || 'Superset oturumu gecersiz.',
+    errorType: retriedAttempt?.errorType || 'AUTH_REQUIRED',
+    httpStatus: retriedAttempt?.httpStatus || null,
+    authMode,
+    usedFallback: false,
+    shouldRetryAuth: true
   };
 }
 
@@ -4213,10 +4256,10 @@ function buildChartPayload(config) {
   const elementNames = Array.isArray(config.elementNames) && config.elementNames.length
     ? config.elementNames.map((value) => String(value))
     : [String(config.elementName || SCADA_DEFAULTS.elementName)];
-  const kvFilters = Array.isArray(config.kvFilters) && config.kvFilters.length
+  const kvFilters = Array.isArray(config.kvFilters)
     ? config.kvFilters.map((value) => String(value))
     : SCADA_DEFAULTS.kvFilters.slice();
-  const tearFilters = Array.isArray(config.tearFilters) && config.tearFilters.length
+  const tearFilters = Array.isArray(config.tearFilters)
     ? config.tearFilters.map((value) => String(value))
     : SCADA_DEFAULTS.tearFilters.slice();
   const measurementIds = Array.isArray(config.measurementIds) && config.measurementIds.length
