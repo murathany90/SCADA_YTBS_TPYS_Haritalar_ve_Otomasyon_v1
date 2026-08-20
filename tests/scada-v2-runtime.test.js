@@ -25,7 +25,14 @@ function loadRuntime() {
     __SCADA_V2_TEST_HOOKS__: {},
     SCADA_COMMON: scadaCommon,
     state: {
-      scada: { logs: [], history: new Map(), entityMetricsByKey: new Map(), measurementRowsById: new Map(), fetchInProgress: false },
+      scada: {
+        logs: [],
+        history: new Map(),
+        entityMetricsByKey: new Map(),
+        measurementRowsById: new Map(),
+        lineFlowByLineId: new Map(),
+        fetchInProgress: false
+      },
       filters: { scadaMetric: 'hat-active', scadaListEntity: 'hat', showHat: true },
       network: { hatLines: [], trafos: [], baraNodes: [] },
       ui: {}
@@ -53,6 +60,17 @@ function loadRuntime() {
       FLOW_MAX_WIDTH: 6,
       FLOW_PCT_SCALE: 100,
       MOCK_ENABLED: false
+    },
+    SCADA_ERROR: {
+      AUTH_REQUIRED: 'AUTH_REQUIRED',
+      NETWORK_ERROR: 'NETWORK_ERROR',
+      EMPTY_DATA: 'EMPTY_DATA',
+      PARSE_ERROR: 'PARSE_ERROR',
+      NO_MATCH_FOUND: 'NO_MATCH_FOUND',
+      STALE_DATA: 'STALE_DATA',
+      DUPLICATE_MAPPING: 'DUPLICATE_MAPPING',
+      TRANSPORT_ERROR: 'TRANSPORT_ERROR',
+      EXTENSION_UNAVAILABLE: 'EXTENSION_UNAVAILABLE'
     },
     normalizeText(value) {
       return String(value || '')
@@ -1127,4 +1145,125 @@ test('failed or empty historical fetch rolls back to live and re-triggers a live
     assert.ok(context.state.scada.pollState.nextDueAt instanceof Date, `(${scenario}) polling zamanlayicisi calisiyor`);
     assert.equal(context.state.scada.pendingHistoricalFetch, null);
   }
+});
+
+test('live 10-min empty response triggers wide-window fallback and recovers all ids', async () => {
+  const context = loadRuntime();
+  const statuses = [];
+  const metaUpdates = [];
+  const posts = [];
+  context.setScadaStatusMessage = (message, tone) => statuses.push({ message, tone });
+  context.updateScadaFetchMeta = (meta) => {
+    metaUpdates.push(meta);
+    context.state.scada.fetchMeta = { ...(context.state.scada.fetchMeta || {}), ...meta };
+  };
+  const entity = {
+    ...buildTerminalEntity({ id: 'hat-1' }),
+    scada: {
+      active: { ids: ['m-1'], rows: [buildTerminalCandidate('m-1', 'start', 1)] },
+      reactive: { ids: [], rows: [] }
+    }
+  };
+  context.getVisibleHats = () => [entity];
+  context.chrome.runtime.sendMessage = async (message) => {
+    posts.push(message);
+    if (message?.type === 'SCADA_FETCH') {
+      if (posts.filter((post) => post?.type === 'SCADA_FETCH').length === 1) {
+        return { ok: true, data: {} };
+      }
+      return {
+        ok: true,
+        data: {
+          result: [{
+            data: [{ sinsid: 'm-1', elementName: 'P', maxValue: 80, __timestamp: '2026-04-20T08:07:00.000Z' }]
+          }]
+        }
+      };
+    }
+    return { ok: false };
+  };
+
+  await context.scadaDoFetch({ trigger: 'manual' });
+
+  assert.equal(context.state.scada.error, 'Superset yanitinda veri bulunamadi.');
+  assert.equal(context.state.scada.errorType, 'EMPTY_DATA');
+  assert.equal(metaUpdates.at(-1)?.status, 'error');
+  assert.equal(posts.length, 2, 'bos 10-dk yanitindan sonra genis pencere fallback sorgusu atilir');
+  const fallback = posts[1];
+  assert.equal(fallback.type, 'SCADA_FETCH');
+  assert.deepEqual(Array.from(fallback.payload.measurementIds), ['m-1'], 'tum scope idleri fallbacke verilir');
+  assert.deepEqual(Array.from(fallback.payload.elementNames), ['P']);
+  assert.equal(fallback.payload.timeRange, context.SCADA_CONFIG.QUERY_TIME_RANGE, 'genis pencere sorgusu kullanilir');
+
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(context.state.scada.measurementRowsById.get('m-1')?.value, 80, 'kurtarilan satir uygulanir');
+  const record = context.state.scada.entityMetricsByKey.get('hat:hat-1');
+  assert.equal(record?.primaryValue, 80, 'kurtarma sonrasi canli snapshot/map uygulanir');
+  assert.equal(context.state.scada.error, null, 'bos-veri hatasi kaldirilir');
+  assert.equal(context.state.scada.errorType, null);
+  assert.equal(context.state.scada.sourceKind, 'live');
+  assert.equal(context.state.scada.snapshotAt, null);
+  assert.equal(metaUpdates.at(-1)?.status, 'success');
+  assert.match(statuses.at(-1)?.message || '', /Eksik olcum kurtarmasi/);
+});
+
+test('mode switch during in-flight fallback discards the stale response', async () => {
+  const context = loadRuntime();
+  const statuses = [];
+  const posts = [];
+  let resolveFallback = null;
+  context.setScadaStatusMessage = (message, tone) => statuses.push({ message, tone });
+  context.updateScadaFetchMeta = (meta) => {
+    context.state.scada.fetchMeta = { ...(context.state.scada.fetchMeta || {}), ...meta };
+  };
+  const entity = {
+    ...buildTerminalEntity({ id: 'hat-1' }),
+    scada: {
+      active: { ids: ['m-1'], rows: [buildTerminalCandidate('m-1', 'start', 1)] },
+      reactive: { ids: [], rows: [] }
+    }
+  };
+  context.getVisibleHats = () => [entity];
+  context.chrome.runtime.sendMessage = async (message) => {
+    posts.push(message);
+    if (message?.type === 'SCADA_FETCH') {
+      if (posts.filter((post) => post?.type === 'SCADA_FETCH').length === 1) {
+        return { ok: true, data: {} };
+      }
+      return new Promise((resolve) => {
+        resolveFallback = resolve;
+      });
+    }
+    return { ok: false };
+  };
+
+  await context.scadaDoFetch({ trigger: 'manual' });
+  assert.equal(posts.length, 2, 'fallback sorgusu beklemeye alindi');
+  assert.equal(context.state.scada.error, 'Superset yanitinda veri bulunamadi.');
+
+  context.state.filters.scadaMetric = 'voltage';
+  context.getVisibleBaras = () => [{ id: 'b-1', kvBucket: '400', scada: { voltage: { ids: ['m-u-1'] } } }];
+  context.getVisibleHats = () => [];
+
+  resolveFallback({
+    ok: true,
+    data: {
+      result: [{
+        data: [{ sinsid: 'm-1', elementName: 'P', maxValue: 80, __timestamp: '2026-04-20T08:07:00.000Z' }]
+      }]
+    }
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(context.state.scada.measurementRowsById.size, 0, 'eski fallback yaniti yeni scope karmasir');
+  assert.equal(context.state.scada.entityMetricsByKey.size, 0);
+  assert.equal(context.state.scada.error, 'Superset yanitinda veri bulunamadi.', 'bos-veri durumu korunur');
+  assert.equal(context.state.scada.errorType, 'EMPTY_DATA');
+  assert.equal(statuses.at(-1)?.message, 'Superset yanitinda veri bulunamadi.');
+  assert.doesNotMatch(statuses.at(-1)?.message || '', /Eksik olcum kurtarmasi/);
 });

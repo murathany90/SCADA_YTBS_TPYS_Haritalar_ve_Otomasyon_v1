@@ -92,6 +92,7 @@
   state.scada.entityMetricsByKey = state.scada.entityMetricsByKey || new Map();
   state.scada.measurementRowsById = state.scada.measurementRowsById || new Map();
   state.scada.currentScope = state.scada.currentScope || null;
+  state.scada.fetchSeq = state.scada.fetchSeq || 0;
   state.scada.v2RuntimeActive = true;
   globalThis.__TPYS_SCADA_V2_RUNTIME_ACTIVE__ = true;
   const SCADA_DASHBOARD_SNAPSHOT_KEY = 'scadaDashboardSnapshot';
@@ -2107,11 +2108,15 @@
   // Asynchronous wide-window enrichment for ids missing from the last live
   // 10-minute snapshot. Never blocks the main render; only merges missing ids
   // into the CURRENT live snapshot and never overwrites fresh rows. A network
-  // or timeout failure never sets the throttle timestamp.
+  // or timeout failure never sets the throttle timestamp. Responses that land
+  // after the user switched time mode, scope, or fetch generation are dropped.
   async function enrichMissingScadaIds(options = {}) {
     const missingIds = Array.isArray(options?.measurementIds) ? options.measurementIds : [];
     const elementNames = Array.isArray(options?.elementNames) ? options.elementNames : [];
     const throttleKey = options?.throttleKey || buildMissingIdsFallbackKey('default', missingIds);
+    const armedFilterKey = String(options?.filterKey || '');
+    const armedMode = String(options?.mode || '');
+    const armedFetchSeq = Number(options?.fetchSeq) || 0;
     if (!missingIds.length) return;
     state.scada.missingIdFallbackByScope = state.scada.missingIdFallbackByScope || {};
     const nowMs = Date.now();
@@ -2135,6 +2140,13 @@
       });
       if (!fallbackResult?.ok) return; // failure never throttles a retry
       if (state.scada.timeMode !== 'live' || state.scada.snapshotAt != null) return;
+      // A stale response from an older fetch generation is never merged.
+      if ((state.scada.fetchSeq || 0) !== armedFetchSeq) return;
+      const liveScope = typeof getCurrentScadaScope === 'function' ? getCurrentScadaScope() : null;
+      if (liveScope) {
+        if (armedFilterKey && String(liveScope.filterKey || '') !== armedFilterKey) return;
+        if (armedMode && String(liveScope.mode || '') !== armedMode) return;
+      }
       const fallbackRows = SCADA_COMMON.normalizeMetricRows(fallbackResult.data, { elementNames });
       const currentRows = state.scada.measurementRowsById instanceof Map
         ? state.scada.measurementRowsById
@@ -2156,6 +2168,27 @@
       state.scada.measurementRowsById = merged;
       if (typeof applyGenericScadaSnapshot === 'function') {
         applyGenericScadaSnapshot(merged, state.scada.currentScope || getCurrentScadaScope());
+      }
+      // The recovered rows fully satisfy the live view again: lift the
+      // empty/error state and mark the snapshot as live for the UI.
+      state.scada.error = null;
+      state.scada.errorType = null;
+      state.scada.snapshotAt = null;
+      state.scada.sourceKind = 'live';
+      state.scada.lastFetchAt = new Date();
+      if (state.scada.fetchMeta?.status === 'error' && typeof updateScadaFetchMeta === 'function') {
+        updateScadaFetchMeta({
+          status: 'success',
+          stage: 'done',
+          progressPct: 100,
+          phaseLabel: 'Tamamlandi',
+          phaseMessage: `Eksik olcum verisi genis pencereden kurtarildi: ${added} satir uygulandi.`,
+          finishedAt: new Date(),
+          durationMs: null,
+          rawRows: 0,
+          normalizedRows: added,
+          error: null
+        });
       }
       if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
       if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
@@ -2245,6 +2278,7 @@
     }
 
     const startedAt = new Date();
+    state.scada.fetchSeq = (state.scada.fetchSeq || 0) + 1;
     state.scada.fetchInProgress = true;
     state.scada.error = null;
     state.scada.errorType = null;
@@ -2378,6 +2412,17 @@
         });
         markScadaFlowsUnavailable(errorMessage, SCADA_ERROR.EMPTY_DATA);
         scadaLog('warn', 'SCADA verisi bos dondu.');
+        // Zero rows in the live 10-minute window means every requested id is
+        // missing; recover all of them from the wide window in the background.
+        // The UI keeps the empty state until the fallback actually returns data.
+        void enrichMissingScadaIds({
+          measurementIds: scope.measurementIds,
+          elementNames: scope.elementNames,
+          throttleKey: missingFallbackThrottleKey,
+          filterKey: fallbackScopeKey,
+          mode: scope.mode,
+          fetchSeq: state.scada.fetchSeq
+        });
         return;
       }
 
@@ -2434,7 +2479,10 @@
         void enrichMissingScadaIds({
           measurementIds: missingMeasurementIds,
           elementNames: scope.elementNames,
-          throttleKey: missingFallbackThrottleKey
+          throttleKey: missingFallbackThrottleKey,
+          filterKey: fallbackScopeKey,
+          mode: scope.mode,
+          fetchSeq: state.scada.fetchSeq
         });
       }
     } catch (error) {
