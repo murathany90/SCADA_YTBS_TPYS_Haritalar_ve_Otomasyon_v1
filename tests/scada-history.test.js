@@ -5,15 +5,22 @@ const path = require('node:path');
 
 const scadaCommon = require('../scada-common.js');
 
-test('parseSupersetScadaTimestamp handles epoch seconds and milliseconds', () => {
-  const secs = 1724134500;
+test('parseSupersetScadaTimestamp handles epoch seconds and milliseconds with naive-local wall clock', () => {
+  const secs = 1724134500; // UTC fields: 2024-08-20 06:15:00
   const ms = secs * 1000;
   const fromSecs = scadaCommon.normalizeTimestamp(secs);
   const fromMs = scadaCommon.normalizeTimestamp(ms);
   assert.ok(fromSecs instanceof Date);
   assert.ok(fromMs instanceof Date);
-  assert.equal(fromSecs.getTime(), ms);
-  assert.equal(fromMs.getTime(), ms);
+  // The numeric epoch reuses its UTC fields as the naive local wall clock, so
+  // both forms agree in any host timezone - and never shift +3h on a +03:00 host.
+  assert.equal(fromSecs.getHours(), fromMs.getHours());
+  assert.equal(fromSecs.getMinutes(), fromMs.getMinutes());
+  assert.equal(fromSecs.getFullYear(), fromMs.getFullYear());
+  assert.equal(fromMs.getHours(), 6, 'wall clock 06:15, asla 09:15 (yani +3h kayma) degil');
+  const fromIso = scadaCommon.normalizeTimestamp('2024-08-20T06:15:00Z');
+  assert.equal(fromIso.getHours(), fromMs.getHours(), 'ISO-Z ve numeric ayni duvar saatini verir');
+  assert.equal(fromIso.getMinutes(), fromMs.getMinutes());
 });
 
 test('parseSupersetScadaTimestamp handles ISO strings with and without Z, and space separator', () => {

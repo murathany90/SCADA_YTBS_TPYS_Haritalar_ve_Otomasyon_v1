@@ -1839,22 +1839,30 @@ function makeSnapshotRow(id, timeEpochSec, value) {
 
 test('filterHistoricalSnapshots keeps newest row per id+element at-or-before the instant', () => {
   const context = loadBackground({ fetch: async () => ({ ok: false, status: 404 }) });
-  const at = 1800000000000;
+  // Raw epoch encodes the wall clock (08:00 UTC fields); the filter compares
+  // naive-rebuilt rows against an absolute instant, so at must be the absolute
+  // instant of that wall clock in the host timezone (mirrors the string-parsed
+  // slider value the runtime sends).
+  const rawAt = 1800000000000;
+  const at = context.SCADA_COMMON.supersetEpochToLocalNaive(rawAt).getTime();
   const rows = [
-    { ...makeSnapshotRow('A', (at - 300000) / 1000, 10), elementName: 'P' },
-    { ...makeSnapshotRow('A', (at - 120000) / 1000, 12), elementName: 'P' },
-    { ...makeSnapshotRow('A', (at - 60000) / 1000, 5), elementName: 'Q' },
-    { ...makeSnapshotRow('B', (at - 60000) / 1000, 7), elementName: 'U' },
-    { ...makeSnapshotRow('A', (at + 60000) / 1000, 99), elementName: 'P' },
-    { ...makeSnapshotRow('C', (at - 50000) / 1000, 1), elementName: 'U' }
+    { ...makeSnapshotRow('A', (rawAt - 300000) / 1000, 10), elementName: 'P' },
+    { ...makeSnapshotRow('A', (rawAt - 120000) / 1000, 12), elementName: 'P' },
+    { ...makeSnapshotRow('A', (rawAt - 60000) / 1000, 5), elementName: 'Q' },
+    { ...makeSnapshotRow('B', (rawAt - 60000) / 1000, 7), elementName: 'U' },
+    { ...makeSnapshotRow('A', (rawAt + 60000) / 1000, 99), elementName: 'P' },
+    { ...makeSnapshotRow('C', (rawAt - 50000) / 1000, 1), elementName: 'U' }
   ];
   const result = context.filterHistoricalSnapshots(rows, at, ['A', 'B']);
 
   assert.equal(result.received, 5);
   assert.deepEqual([...result.best.keys()].sort(), ['A|P', 'A|Q', 'B|U']);
-  assert.equal(result.best.get('A|P').ts.getTime(), at - 120000);
-  assert.equal(result.best.get('A|Q').ts.getTime(), at - 60000, 'ayni id icin P ve Q elemanlari birbirini ezmez');
-  assert.equal(result.best.get('B|U').ts.getTime(), at - 60000);
+  // Superset epoch rows follow the naive wall-clock convention, so expected
+  // instants must be rebuilt the same way (never raw epoch getTime()).
+  const naive = (ms) => context.SCADA_COMMON.supersetEpochToLocalNaive(ms).getTime();
+  assert.equal(result.best.get('A|P').ts.getTime(), naive(rawAt - 120000));
+  assert.equal(result.best.get('A|Q').ts.getTime(), naive(rawAt - 60000), 'ayni id icin P ve Q elemanlari birbirini ezmez');
+  assert.equal(result.best.get('B|U').ts.getTime(), naive(rawAt - 60000));
   assert.equal(result.best.get('C|U'), undefined);
 });
 

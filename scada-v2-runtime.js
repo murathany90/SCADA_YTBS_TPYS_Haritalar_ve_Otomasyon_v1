@@ -365,8 +365,23 @@
     return null;
   }
 
-  function getFetchMetricTypes(modeConfig) {
+  const METRIC_ELEMENT_BY_TYPE = { voltage: 'U', active: 'P', reactive: 'Q' };
+
+  // Live map scope follows the selected mode: hat-active -> only P/active,
+  // hat-reactive -> only Q/reactive, trafo-* -> same, voltage -> only U.
+  function getLiveMetricTypes(modeConfig) {
+    if (modeConfig.domain === 'bara') return ['voltage'];
+    return [modeConfig.primaryMetric];
+  }
+
+  // History chart scope keeps pairing P+Q for hat/trafo and U for bara so the
+  // |MW|, MVar and |S| panes can all render from one request.
+  function getHistoryMetricTypes(modeConfig) {
     return modeConfig.domain === 'bara' ? ['voltage'] : ['active', 'reactive'];
+  }
+
+  function getFetchMetricTypes(modeConfig) {
+    return getLiveMetricTypes(modeConfig);
   }
 
   function getVisibleEntitiesForMode(modeConfig) {
@@ -376,22 +391,27 @@
     return visibleBaras.filter((bara) => ['154', '400'].includes(String(bara.kvBucket || bara.gerilimKv || '')));
   }
 
-  function getCurrentScadaScope() {
+  function getCurrentScadaScope(options = {}) {
     const modeConfig = getModeConfig();
+    const metricTypes = options?.history ? getHistoryMetricTypes(modeConfig) : getLiveMetricTypes(modeConfig);
     const entities = getVisibleEntitiesForMode(modeConfig);
     const measurementIds = new Set();
-    getFetchMetricTypes(modeConfig).forEach((metricType) => {
+    metricTypes.forEach((metricType) => {
       entities.forEach((entity) => {
         const ids = entity?.scada?.[metricType]?.ids || [];
         ids.forEach((id) => measurementIds.add(String(id)));
       });
     });
+    const elementNames = [...new Set(
+      metricTypes.map((metricType) => METRIC_ELEMENT_BY_TYPE[metricType]).filter(Boolean)
+    )];
     return {
       mode: modeConfig.key,
       modeLabel: modeConfig.label,
       domain: modeConfig.domain,
       primaryMetric: modeConfig.primaryMetric,
-      elementNames: modeConfig.elementNames.slice(),
+      metricTypes: metricTypes.slice(),
+      elementNames,
       entities,
       measurementIds: [...measurementIds],
       filterKey: typeof getScadaVisibilityFilterKey === 'function'
@@ -495,6 +515,7 @@
       case 'manual': return 'Manuel';
       case 'auto': return 'Otomatik';
       case 'live-return': return 'Canliya donus';
+      case 'historical-fallback-live': return 'Canliya donus (gecmis yok)';
       case 'layer-enable': return 'Katman';
       case 'mode-change': return 'Mod';
       case 'filter-change': return 'Filtre';
@@ -2071,6 +2092,84 @@
     setScadaStatusMessage(state.scada.error, errorType === SCADA_ERROR.AUTH_REQUIRED ? 'warn' : 'error');
   };
 
+  // Live missing-id fallback throttle key: scope + sorted missing-id hash.
+  // Different scopes or id sets never share throttle state.
+  function buildMissingIdsFallbackKey(scopeKey, missingIds) {
+    let hash = 2166136261;
+    const text = [...(missingIds || [])].map(String).sort().join('\u0001');
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `${String(scopeKey || 'default')}|${(hash >>> 0).toString(36)}`;
+  }
+
+  // Asynchronous wide-window enrichment for ids missing from the last live
+  // 10-minute snapshot. Never blocks the main render; only merges missing ids
+  // into the CURRENT live snapshot and never overwrites fresh rows. A network
+  // or timeout failure never sets the throttle timestamp.
+  async function enrichMissingScadaIds(options = {}) {
+    const missingIds = Array.isArray(options?.measurementIds) ? options.measurementIds : [];
+    const elementNames = Array.isArray(options?.elementNames) ? options.elementNames : [];
+    const throttleKey = options?.throttleKey || buildMissingIdsFallbackKey('default', missingIds);
+    if (!missingIds.length) return;
+    state.scada.missingIdFallbackByScope = state.scada.missingIdFallbackByScope || {};
+    const nowMs = Date.now();
+    const lastFallbackAt = state.scada.missingIdFallbackByScope[throttleKey] || 0;
+    if (nowMs - lastFallbackAt < 5 * 60 * 1000) return;
+    try {
+      const fallbackResult = await chrome.runtime.sendMessage({
+        type: 'SCADA_FETCH',
+        payload: {
+          baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+          dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+          chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+          datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+          timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
+          kvFilters: [],
+          tearFilters: [],
+          elementNames,
+          measurementIds: missingIds,
+          rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, missingIds.length * 3 || 5000)
+        }
+      });
+      if (!fallbackResult?.ok) return; // failure never throttles a retry
+      if (state.scada.timeMode !== 'live' || state.scada.snapshotAt != null) return;
+      const fallbackRows = SCADA_COMMON.normalizeMetricRows(fallbackResult.data, { elementNames });
+      const currentRows = state.scada.measurementRowsById instanceof Map
+        ? state.scada.measurementRowsById
+        : new Map();
+      const merged = new Map(currentRows);
+      let added = 0;
+      fallbackRows.forEach((row, key) => {
+        const id = String(row.measurementId || row.sinsid || '').trim();
+        if (!id || !missingIds.includes(id)) return;
+        if (merged.has(key)) return;
+        merged.set(key, row);
+        added += 1;
+      });
+      state.scada.missingIdFallbackByScope[throttleKey] = nowMs;
+      if (!added) {
+        scadaLog('warn', `SCADA eksik olcum fallback: ${missingIds.length} ID icin genis pencere sorgusu yapildi, kurtarilan satir yok.`);
+        return;
+      }
+      state.scada.measurementRowsById = merged;
+      if (typeof applyGenericScadaSnapshot === 'function') {
+        applyGenericScadaSnapshot(merged, state.scada.currentScope || getCurrentScadaScope());
+      }
+      if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
+      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+      if (typeof refreshRankingTable === 'function') refreshRankingTable();
+      if (typeof persistScadaDashboardSnapshot === 'function') {
+        void persistScadaDashboardSnapshot({ source: 'enrich' });
+      }
+      setScadaStatusMessage(`Eksik olcum kurtarmasi: ${added} satir genis pencereden eklendi.`, 'info');
+      scadaLog('info', `SCADA eksik olcum fallback: ${missingIds.length} ID icin genis pencere sorgusu yapildi, ${added} satir kurtarildi.`);
+    } catch (fallbackError) {
+      scadaLog('warn', 'SCADA eksik olcum fallback basarisiz.', fallbackError?.message || String(fallbackError));
+    }
+  }
+
   scadaDoFetch = async function (options = {}) {
     const triggerType = options?.trigger || 'manual';
     const triggerLabel = getScadaTriggerLabel(triggerType);
@@ -2245,6 +2344,13 @@
 
       const rowsByMeasurementId = SCADA_COMMON.normalizeMetricRows(result.data, { elementNames: scope.elementNames });
 
+      // A live response that lands after the user switched to historical mode
+      // must never overwrite the historical view.
+      if (state.scada.timeMode !== 'live') {
+        scadaLog('info', 'SCADA canli yaniti zaman modu degistigi icin uygulanmadi.');
+        return;
+      }
+
       const requestedIdSet = new Set(scope.measurementIds.map(String));
       const foundIdSet = new Set();
       rowsByMeasurementId.forEach((row, key) => {
@@ -2252,50 +2358,8 @@
         if (id) foundIdSet.add(id);
       });
       const missingMeasurementIds = requestedIdSet.size ? [...requestedIdSet].filter((id) => !foundIdSet.has(id)) : [];
-      const nowMs = Date.now();
-      state.scada.missingIdFallbackByScope = state.scada.missingIdFallbackByScope || {};
       const fallbackScopeKey = String(scope.filterKey || scope.mode || 'default');
-      const lastFallbackAt = state.scada.missingIdFallbackByScope[fallbackScopeKey] || 0;
-      const fallbackInWindow = nowMs - lastFallbackAt < 5 * 60 * 1000;
-      if (requestedIdSet.size > 0 && missingMeasurementIds.length > 0 && !fallbackInWindow) {
-        try {
-          const fallbackResult = await chrome.runtime.sendMessage({
-            type: 'SCADA_FETCH',
-            payload: {
-              baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
-              dashboardId: SCADA_CONFIG.DASHBOARD_ID,
-              chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
-              datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-              timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
-              kvFilters: [],
-              tearFilters: [],
-              elementNames: scope.elementNames,
-              measurementIds: missingMeasurementIds,
-              rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, missingMeasurementIds.length * 3 || 5000)
-            }
-          });
-          if (fallbackResult?.ok) {
-            const fallbackRows = SCADA_COMMON.normalizeMetricRows(fallbackResult.data, { elementNames: scope.elementNames });
-            let recovered = 0;
-            fallbackRows.forEach((row, key) => {
-              const id = String(row.measurementId || row.sinsid || '').trim();
-              if (!id || !missingMeasurementIds.includes(id)) return;
-              if (!rowsByMeasurementId.has(key)) {
-                rowsByMeasurementId.set(key, row);
-                recovered += 1;
-              }
-            });
-            state.scada.missingIdFallbackByScope[fallbackScopeKey] = nowMs;
-            if (recovered > 0) {
-              scadaLog('info', `SCADA eksik olcum fallback: ${missingMeasurementIds.length} ID icin genis pencere sorgusu yapildi, ${recovered} satir kurtarildi.`);
-            } else {
-              scadaLog('warn', `SCADA eksik olcum fallback: ${missingMeasurementIds.length} ID icin genis pencere sorgusu yapildi, kurtarilan satir yok.`);
-            }
-          }
-        } catch (fallbackError) {
-          scadaLog('warn', 'SCADA eksik olcum fallback basarisiz.', fallbackError?.message || String(fallbackError));
-        }
-      }
+      const missingFallbackThrottleKey = buildMissingIdsFallbackKey(fallbackScopeKey, missingMeasurementIds);
 
       if (!rowsByMeasurementId.size) {
         const finishedAt = new Date();
@@ -2364,6 +2428,15 @@
         `${result.authMode}${result.usedFallback ? ' fallback' : ''}`
       );
       await persistScadaDashboardSnapshot({ source: triggerType === 'background' ? 'background' : 'map' });
+      // Missing ids are enriched from the wide window in the background so the
+      // main 10-minute render is never blocked by the fallback request.
+      if (missingMeasurementIds.length) {
+        void enrichMissingScadaIds({
+          measurementIds: missingMeasurementIds,
+          elementNames: scope.elementNames,
+          throttleKey: missingFallbackThrottleKey
+        });
+      }
     } catch (error) {
       const finishedAt = new Date();
       const errorMessage = error.message || String(error);
@@ -3341,25 +3414,32 @@ function _formatHistoryAxisLabel(timestampMs) {
     return output;
   }
 
-  // Real operating band for positive-scale panes: measured min and max of the
-  // visible samples, so the voltage Y axis stays positive/automatic while the
-  // nominal and actual limits are visible.
-  function buildHistoryRealLimits(series) {
-    let minValue = Infinity;
-    let maxValue = -Infinity;
-    (series || []).forEach((item) => {
-      (item.points || []).forEach((point) => {
-        if (!Number.isFinite(point.value)) return;
-        if (point.value < minValue) minValue = point.value;
-        if (point.value > maxValue) maxValue = point.value;
-      });
-    });
-    const refs = [];
-    if (Number.isFinite(minValue) && Number.isFinite(maxValue) && minValue < maxValue) {
-      refs.push({ value: minValue, label: `${formatAxisNumber(minValue)} kV gercek min` });
-      refs.push({ value: maxValue, label: `${formatAxisNumber(maxValue)} kV gercek max` });
+  // Nominal operating band for the voltage Y axis, derived from the bus
+  // voltage level. 400 kV buses get 380/420 kV tolerance lines, 154 kV buses
+  // 140/170 kV. Other levels get no fixed limits (auto range only).
+  function buildVoltageReferenceLines(levelKv) {
+    const level = Math.round(Number(levelKv) || 0);
+    if (level === 400 || level === 380) {
+      return [
+        { refKey: 'u380', value: 380, label: '380 kV alt limit', enabled: true },
+        { refKey: 'u420', value: 420, label: '420 kV ust limit', enabled: true }
+      ];
     }
-    return refs;
+    if (level === 154 || level === 170) {
+      return [
+        { refKey: 'u140', value: 140, label: '140 kV alt limit', enabled: true },
+        { refKey: 'u170', value: 170, label: '170 kV ust limit', enabled: true }
+      ];
+    }
+    return [];
+  }
+
+  // Positive Y axis for voltage: never negative, never forced to 0. The 8%
+  // margin (minimum 1 unit) keeps the band readable for flat signals.
+  function buildPositiveAxisScale(minValue, maxValue) {
+    if (!Number.isFinite(minValue) || !Number.isFinite(maxValue) || minValue > maxValue) return { minY: 0, maxY: 1 };
+    const margin = Math.max((maxValue - minValue) * 0.08, 1);
+    return { minY: Math.max(0, minValue - margin), maxY: maxValue + margin };
   }
 
   function buildHistoryCacheKey(elementNames, measurementIds, range, strategy) {
@@ -3619,11 +3699,13 @@ function _formatHistoryAxisLabel(timestampMs) {
       const nominal = Number(entity?.gerilimKv || entity?.kvBucket || 0);
       if (Number.isFinite(nominal) && nominal > 0) {
         panes[0].refLines.push({
+          refKey: 'u-nominal',
           value: nominal,
-          label: `${nominal} kV nominal`
+          label: `${nominal} kV nominal`,
+          enabled: true
         });
       }
-      buildHistoryRealLimits(chartSeries).forEach((limit) => panes[0].refLines.push(limit));
+      buildVoltageReferenceLines(nominal).forEach((ref) => panes[0].refLines.push(ref));
     }
 
     const totalHeight = padT + paneHeight * panes.length + paneGap * (panes.length ? panes.length - 1 : 0) + padB;
@@ -3660,6 +3742,28 @@ function _formatHistoryAxisLabel(timestampMs) {
 
     function buildPaneYScale(pane) {
       const visibleSeries = pane.seriesGroup.filter((series) => !hidden.has(series.seriesId));
+      const enabledRefs = (pane.refLines || []).filter((ref) => ref.enabled !== false && Number.isFinite(ref.value));
+      if (pane.mode === 'positive') {
+        // Voltage: auto-range from the visible values plus enabled reference
+        // lines. Never clamped to 0, never negative; disabled refs are
+        // excluded from both drawing and scaling.
+        let minValue = Infinity;
+        let maxValue = -Infinity;
+        visibleSeries.forEach((series) => {
+          for (const point of series.points) {
+            if (point.ts.getTime() < viewStartMs || point.ts.getTime() > viewEndMs) continue;
+            if (!Number.isFinite(point.value)) continue;
+            if (point.value < minValue) minValue = point.value;
+            if (point.value > maxValue) maxValue = point.value;
+          }
+        });
+        enabledRefs.forEach((ref) => {
+          if (ref.value < minValue) minValue = ref.value;
+          if (ref.value > maxValue) maxValue = ref.value;
+        });
+        if (!Number.isFinite(minValue) || !Number.isFinite(maxValue) || minValue > maxValue) return { minY: 0, maxY: 1 };
+        return buildPositiveAxisScale(minValue, maxValue);
+      }
       let maxAbs = 1;
       visibleSeries.forEach((series) => {
         for (const point of series.points) {
@@ -3669,11 +3773,11 @@ function _formatHistoryAxisLabel(timestampMs) {
           if (magnitude > maxAbs) maxAbs = magnitude;
         }
       });
-      pane.refLines.forEach((ref) => {
-        if (Number.isFinite(ref.value) && Math.abs(ref.value) > maxAbs) maxAbs = Math.abs(ref.value);
+      enabledRefs.forEach((ref) => {
+        if (Math.abs(ref.value) > maxAbs) maxAbs = Math.abs(ref.value);
       });
       maxAbs *= 1.12;
-      if (pane.mode === 'abs' || pane.mode === 'positive') return { minY: 0, maxY: maxAbs };
+      if (pane.mode === 'abs') return { minY: 0, maxY: maxAbs };
       return { minY: -maxAbs, maxY: maxAbs };
     }
 
@@ -3763,6 +3867,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       }
 
       pane.refLines.forEach((ref) => {
+        if (ref.enabled === false) return;
         if (!Number.isFinite(ref.value)) return;
         const y = Math.max(plotTop, Math.min(plotBottom, toY(ref.value)));
         const refEl = document.createElementNS(svgNamespace, 'line');
@@ -3890,6 +3995,27 @@ function _formatHistoryAxisLabel(timestampMs) {
         });
         legendEl.appendChild(chip);
       });
+      const voltagePane = panes.length === 1 ? panes[0] : null;
+      if (voltagePane && voltagePane.key === 'voltage' && voltagePane.refLines.length) {
+        const separator = document.createElement('span');
+        separator.className = 'scada-history-legend-sep';
+        separator.textContent = 'Referans:';
+        legendEl.appendChild(separator);
+        voltagePane.refLines.forEach((ref) => {
+          const refChip = document.createElement('button');
+          refChip.type = 'button';
+          refChip.className = 'scada-history-ref-chip' + (ref.enabled === false ? ' is-off' : '');
+          refChip.dataset.refKey = ref.refKey;
+          refChip.textContent = ref.label;
+          refChip.title = `Referans cizgisini goster/gizle: ${ref.label}`;
+          refChip.addEventListener('click', () => {
+            ref.enabled = ref.enabled === false;
+            rebuildLegend();
+            redraw();
+          });
+          legendEl.appendChild(refChip);
+        });
+      }
     }
 
     function updateCrosshairFromEvent(event) {
@@ -5409,7 +5535,7 @@ function _formatHistoryAxisLabel(timestampMs) {
   }
 
   async function fetchScadaHistoricalSnapshot(atMs) {
-    const scope = getCurrentScadaScope();
+    const scope = getCurrentScadaScope({ history: true });
     if (!scope.measurementIds.length) {
       return { ok: false, error: 'Secili mod icin olcum ID bulunamadi.' };
     }
@@ -5434,10 +5560,41 @@ function _formatHistoryAxisLabel(timestampMs) {
   }
 
   async function setScadaTimeMode(mode, atMs) {
-    if (mode === state.scada.timeMode && (
-      mode === 'live' || (atMs != null && Number(atMs) === Number(state.scada.historicalAt))
-    )) {
-      syncScadaTimeControls();
+    state.scada.historicalFetchSeq = state.scada.historicalFetchSeq || 0;
+    if (mode === 'live') {
+      if (state.scada.timeMode === 'live' && !state.scada.pendingHistoricalFetch) {
+        syncScadaTimeControls();
+        return;
+      }
+      // Cancel any in-flight historical request; a late response must not land.
+      state.scada.historicalFetchSeq += 1;
+      state.scada.pendingHistoricalFetch = null;
+      if (state.scada.timeMode === 'historical') {
+        state.scada.timeMode = 'live';
+        state.scada.historicalAt = null;
+        const lastLive = state.scada.lastLiveSnapshot;
+        state.scada.lastLiveSnapshot = null;
+        const scope = getCurrentScadaScope();
+        if (lastLive && lastLive.size) {
+          applyGenericScadaSnapshot(lastLive, scope);
+          state.scada.snapshotAt = null;
+          state.scada.sourceKind = 'live';
+          if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
+          if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+          if (typeof refreshRankingTable === 'function') refreshRankingTable();
+          setScadaStatusMessage('Canli moda donuldu; en son canli veri aninda gosteriliyor.', 'info');
+        } else {
+          setScadaStatusMessage('Canli moda donuldu; canli veri yenileniyor.', 'info');
+        }
+        syncScadaTimeControls();
+        await scadaDoFetch({ trigger: 'live-return' });
+        if (state.scada.enabled && state.scada.autoRefresh) startScadaAutoScheduler();
+      } else {
+        // Entry fetch was cancelled before it ever committed a historical view.
+        state.scada.lastLiveSnapshot = null;
+        setScadaStatusMessage('Gecmis sorgusu iptal edildi; canli gorunum korundu.', 'info');
+        syncScadaTimeControls();
+      }
       return;
     }
     if (mode === 'historical') {
@@ -5452,57 +5609,56 @@ function _formatHistoryAxisLabel(timestampMs) {
           ? new Map(state.scada.measurementRowsById)
           : new Map();
       }
-      state.scada.timeMode = 'historical';
-      state.scada.historicalAt = targetMs;
-      stopScadaAutoScheduler();
-      syncScadaTimeControls();
+      const seq = state.scada.historicalFetchSeq + 1;
+      state.scada.historicalFetchSeq = seq;
+      state.scada.pendingHistoricalFetch = { seq, targetMs };
       setScadaStatusMessage(`Gecmis mod: ${_formatTimeBadge(targetMs)} anindaki SCADA verisi yukleniyor.`, 'info');
+      // Transactional: the snapshot is fetched while the map stays LIVE; the
+      // historical mode is committed only after a successful, non-empty reply.
       const result = await fetchScadaHistoricalSnapshot(targetMs);
-      if (state.scada.timeMode !== 'historical' || Number(state.scada.historicalAt) !== targetMs) return;
-      if (!result.ok) {
-        setScadaStatusMessage(result.error || 'Gecmis veri alinamadi.', 'error');
+      if (state.scada.historicalFetchSeq !== seq) return; // superseded or cancelled
+      state.scada.pendingHistoricalFetch = null;
+      const historyScope = getCurrentScadaScope({ history: true });
+      if (result.ok && result.rowsByMeasurementId.size) {
+        const wasHistorical = state.scada.timeMode === 'historical';
+        state.scada.timeMode = 'historical';
+        state.scada.historicalAt = targetMs;
+        if (!wasHistorical) stopScadaAutoScheduler();
+        syncScadaTimeControls();
+        applyGenericScadaSnapshot(result.rowsByMeasurementId, historyScope);
+        state.scada.snapshotAt = targetMs;
+        state.scada.lastFetchAt = new Date();
+        state.scada.sourceKind = 'historical';
+        if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
+        if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+        if (typeof refreshRankingTable === 'function') refreshRankingTable();
+        if (state.scada.pollState) state.scada.pollState.pendingAutoRefresh = false;
         updateScadaTimeBadge();
+        const recoveredText = result.meta?.recoveredViaFallback ? ' (genis pencere tamamlamasi ile)' : '';
+        setScadaStatusMessage(`Gecmis gorunum: ${_formatTimeBadge(targetMs)} anindaki veri gosteriliyor${recoveredText}`, 'info');
         return;
       }
-      const scope = getCurrentScadaScope();
-      if (!result.rowsByMeasurementId.size) {
-        setScadaStatusMessage('Secilen an icin veri bulunamadi; daha yakin bir zaman secin.', 'warn');
-        updateScadaTimeBadge();
-        return;
-      }
-      const visibleSummary = applyGenericScadaSnapshot(result.rowsByMeasurementId, scope);
-      state.scada.snapshotAt = state.scada.historicalAt;
-      state.scada.lastFetchAt = new Date();
-      state.scada.sourceKind = 'historical';
-      if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
-      if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
-      if (typeof refreshRankingTable === 'function') refreshRankingTable();
-      if (state.scada.pollState) state.scada.pollState.pendingAutoRefresh = false;
-      updateScadaTimeBadge();
-      const recoveredText = result.meta?.recoveredViaFallback ? ' (genis pencere tamamlamasi ile)' : '';
-      setScadaStatusMessage(`Gecmis gorunum: ${_formatTimeBadge(targetMs)} anindaki veri gosteriliyor${recoveredText}`, 'info');
-      return;
-    }
-    if (state.scada.timeMode === 'historical') {
+      // Failure or empty snapshot: never lock the app in historical mode.
+      const failMessage = !result.ok
+        ? (result.error || 'Gecmis veri alinamadi.')
+        : 'Secilen an icin veri bulunamadi; daha yakin bir zaman secin.';
       state.scada.timeMode = 'live';
       state.scada.historicalAt = null;
       const lastLive = state.scada.lastLiveSnapshot;
       state.scada.lastLiveSnapshot = null;
-      const scope = getCurrentScadaScope();
       if (lastLive && lastLive.size) {
-        applyGenericScadaSnapshot(lastLive, scope);
+        applyGenericScadaSnapshot(lastLive, getCurrentScadaScope());
         state.scada.snapshotAt = null;
         state.scada.sourceKind = 'live';
         if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
         if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
         if (typeof refreshRankingTable === 'function') refreshRankingTable();
-        setScadaStatusMessage('Canli moda donuldu; en son canli veri aninda gosteriliyor.', 'info');
-      } else {
-        setScadaStatusMessage('Canli moda donuldu; canli veri yenileniyor.', 'info');
       }
       syncScadaTimeControls();
-      await scadaDoFetch({ trigger: 'live-return' });
+      setScadaStatusMessage(`${failMessage} Canli mod korundu.`, 'warn');
       if (state.scada.enabled && state.scada.autoRefresh) startScadaAutoScheduler();
+      void scadaDoFetch({ trigger: 'historical-fallback-live' });
+      return;
     }
   }
 
@@ -5659,7 +5815,11 @@ function _formatHistoryAxisLabel(timestampMs) {
       buildHistoryCacheKey,
       historyPlotValue,
       buildHistoryCapacitySeries,
-      buildHistoryRealLimits,
+      buildVoltageReferenceLines,
+      buildPositiveAxisScale,
+      getLiveMetricTypes,
+      getHistoryMetricTypes,
+      getCurrentScadaScope,
       resolveHistoricalRangeBounds,
       scheduleHistoricalSnapshotQuery: typeof scheduleHistoricalSnapshotQuery === 'function' ? scheduleHistoricalSnapshotQuery : undefined,
       syncHistoricalTimeSlider: typeof syncHistoricalTimeSlider === 'function' ? syncHistoricalTimeSlider : undefined,

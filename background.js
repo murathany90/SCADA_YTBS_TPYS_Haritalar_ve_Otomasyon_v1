@@ -3728,14 +3728,17 @@ async function handleScadaFetch(payload) {
   }
   if (!chunks.length) chunks.push([]);
 
-  let successfulBatchCount = 0;
+let successfulBatchCount = 0;
   let failedBatchCount = 0;
   let allDataRows = [];
   let lastAuthMode = 'session';
   let lastError = null;
   let lastErrorType = null;
+  const startedAt = Date.now();
+  let totalBatchCount = 0;
 
   const firstChunk = chunks.shift();
+  totalBatchCount = chunks.length + 1;
   const firstPayload = { ...payload, measurementIds: firstChunk, chartPayload: null };
   const firstResult = await executeAuthWrapper(authConfig, firstPayload, timeoutMs);
   
@@ -3774,11 +3777,19 @@ async function handleScadaFetch(payload) {
     }
   }
   
-  const hasPartialSuccess = successfulBatchCount > 0 && failedBatchCount > 0;
+const hasPartialSuccess = successfulBatchCount > 0 && failedBatchCount > 0;
+  const batchMeta = {
+    totalBatches: totalBatchCount,
+    completedBatches: successfulBatchCount,
+    failedBatches: failedBatchCount,
+    receivedRows: allDataRows.length,
+    elapsedMs: Date.now() - startedAt,
+    partialSuccess: hasPartialSuccess
+  };
   if (successfulBatchCount > 0) {
-    return { ok: true, partialFailure: hasPartialSuccess, successfulBatchCount, failedBatchCount, data: { result: [{ data: allDataRows }] }, authMode: lastAuthMode, usedFallback: false, httpStatus: 200 };
+    return { ok: true, partialFailure: hasPartialSuccess, successfulBatchCount, failedBatchCount, data: { result: [{ data: allDataRows }] }, authMode: lastAuthMode, usedFallback: false, httpStatus: 200, ...batchMeta };
   }
-  return { ok: false, error: lastError || 'SCADA fetch failed', errorType: lastErrorType || 'FETCH_ERROR', authMode: lastAuthMode, successfulBatchCount, failedBatchCount };
+  return { ok: false, error: lastError || 'SCADA fetch failed', errorType: lastErrorType || 'FETCH_ERROR', authMode: lastAuthMode, successfulBatchCount, failedBatchCount, ...batchMeta };
 }
 
 async function handleScadaHistoryFetch(payload) {
@@ -3840,8 +3851,17 @@ function filterHistoricalSnapshots(rows, atMs, requestedIds) {
     if (!parsed) {
       const raw = row?.__timestamp ?? row?.__time ?? row?.['MAX(__time)'] ?? row?.maxTime ?? row?.timestamp;
       if (raw == null || raw === '') continue;
-      parsed = new Date(String(raw).replace(/Z$/, ''));
-      if (Number.isNaN(parsed.getTime())) continue;
+      if (globalThis.SCADA_COMMON?.supersetEpochToLocalNaive && (
+        typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw)))
+      )) {
+        const ms = Math.abs(Number(raw)) >= 1e12 ? Number(raw) : Number(raw) * 1000;
+        parsed = globalThis.SCADA_COMMON.supersetEpochToLocalNaive(ms);
+      }
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        const localString = String(raw).replace(/Z$/, '');
+        parsed = new Date(localString);
+        if (Number.isNaN(parsed.getTime())) continue;
+      }
     }
     received += 1;
     if (parsed.getTime() > Number(atMs)) continue;

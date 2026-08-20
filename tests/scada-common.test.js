@@ -282,9 +282,37 @@ test('buildHistoryPayload for timeseries contains time_grain_sqla and is_timeser
     queryMode: 'timeseries'
   });
 
-  const query = payload.queries[0];
+const query = payload.queries[0];
   assert.equal(query.time_grain_sqla, 'PT1M');
   assert.equal(query.is_timeseries, true);
   assert.ok(query.columns.includes('sinsid'), 'columns includes sinsid');
   assert.equal(query.time_grain, undefined, 'should NOT have time_grain');
+});
+
+test('Superset ISO-Z, numeric ms and numeric epoch-seconds parse to the same wall clock (no +3h shift)', () => {
+  const iso = '2026-08-20T11:15:00Z';
+  const epochSeconds = Math.floor(Date.UTC(2026, 7, 20, 11, 15, 0) / 1000);
+  const epochMs = epochSeconds * 1000;
+
+  const fromIso = scadaCommon.parseSupersetScadaTimestamp(iso);
+  const fromMs = scadaCommon.parseSupersetScadaTimestamp(epochMs);
+  const fromSeconds = scadaCommon.parseSupersetScadaTimestamp(epochSeconds);
+  const fromZoneLess = scadaCommon.parseSupersetScadaTimestamp('2026-08-20T11:15:00');
+
+  assert.ok(fromIso instanceof Date);
+  assert.equal(fromIso.getHours(), 11, 'ISO-Z row renders 11:15 on any host timezone');
+  assert.equal(fromIso.getMinutes(), 15);
+
+  for (const parsed of [fromMs, fromSeconds, fromZoneLess]) {
+    assert.equal(parsed.getHours(), fromIso.getHours());
+    assert.equal(parsed.getMinutes(), fromIso.getMinutes());
+    assert.equal(parsed.getSeconds(), fromIso.getSeconds());
+    assert.equal(parsed.getFullYear(), fromIso.getFullYear());
+    assert.equal(parsed.getMonth(), fromIso.getMonth());
+    assert.equal(parsed.getDate(), fromIso.getDate());
+  }
+
+  const naive = scadaCommon.supersetEpochToLocalNaive(epochMs);
+  assert.equal(naive.getHours(), 11, 'naive rebuild keeps the wall clock, never +3h');
+  assert.equal(naive.getFullYear(), 2026);
 });

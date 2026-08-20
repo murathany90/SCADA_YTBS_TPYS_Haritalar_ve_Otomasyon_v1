@@ -218,18 +218,37 @@
     return null;
   }
 
+  // Superset numeric epochs describe the same "Turkey wall-clock" convention as
+  // the string rows (which carry a nominal 'Z' for local time). Rebuilding a
+  // naive-local Date from the UTC fields preserves that wall-clock on screen:
+  // ISO-Z "2026-08-20T11:15:00Z", zone-less "2026-08-20T11:15:00" and a numeric
+  // epoch of the same 11:15 all render as 11:15 - never 14:15 on a +03:00 host.
+  function supersetEpochToLocalNaive(ms) {
+    const utc = new Date(Number(ms));
+    if (Number.isNaN(utc.getTime())) return utc;
+    return new Date(
+      utc.getUTCFullYear(),
+      utc.getUTCMonth(),
+      utc.getUTCDate(),
+      utc.getUTCHours(),
+      utc.getUTCMinutes(),
+      utc.getUTCSeconds(),
+      utc.getUTCMilliseconds()
+    );
+  }
+
   function parseSupersetScadaTimestamp(rawValue) {
     if (rawValue == null || rawValue === '') return null;
     // Epoch seconds (< 1e12) or milliseconds (>= 1e12) from legacy/raw transports.
     if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
       const ms = Math.abs(rawValue) >= 1e12 ? rawValue : rawValue * 1000;
-      const timestamp = new Date(ms);
+      const timestamp = supersetEpochToLocalNaive(ms);
       return Number.isNaN(timestamp.getTime()) ? null : timestamp;
     }
     const numeric = Number(rawValue);
     if (Number.isFinite(numeric) && String(rawValue).trim() !== '') {
       const ms = Math.abs(numeric) >= 1e12 ? numeric : numeric * 1000;
-      const timestamp = new Date(ms);
+      const timestamp = supersetEpochToLocalNaive(ms);
       if (!Number.isNaN(timestamp.getTime())) return timestamp;
     }
     // Superset returns '...T...Z' but the time is actually local time in Turkey.
@@ -686,6 +705,8 @@
     normalizeScadaEntries,
     normalizeScadaRows,
     parseScadaCsvSnapshot,
-    normalizeScadaCsvSnapshot
+    normalizeScadaCsvSnapshot,
+    parseSupersetScadaTimestamp,
+    supersetEpochToLocalNaive
   };
 });

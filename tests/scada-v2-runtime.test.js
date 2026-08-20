@@ -6,6 +6,7 @@ const vm = require('node:vm');
 
 const runtimePath = path.join(__dirname, '..', 'scada-v2-runtime.js');
 const runtimeCode = fs.readFileSync(runtimePath, 'utf8');
+const scadaCommon = require('../scada-common.js');
 
 function loadRuntime() {
   const context = {
@@ -22,6 +23,7 @@ function loadRuntime() {
     Set,
     Promise,
     __SCADA_V2_TEST_HOOKS__: {},
+    SCADA_COMMON: scadaCommon,
     state: {
       scada: { logs: [], history: new Map(), entityMetricsByKey: new Map(), measurementRowsById: new Map(), fetchInProgress: false },
       filters: { scadaMetric: 'hat-active', scadaListEntity: 'hat', showHat: true },
@@ -969,22 +971,35 @@ test('buildHistoryCapacitySeries pairs P and Q series into |S| apparent power', 
   assert.equal(s.points[2].value, 2, 'single nonzero leg yields |value|');
 });
 
-test('buildHistoryRealLimits reflects measured min/max only on positive scales', () => {
+test('voltage reference lines derive from level: 400 -> 380/420, 154 -> 140/170, others none', () => {
   const context = loadRuntime();
-  const { buildHistoryRealLimits } = context.__SCADA_V2_TEST_HOOKS__;
-  const t0 = Date.UTC(2026, 4, 1, 8, 0, 0);
-  const refs = buildHistoryRealLimits([
-    { points: [
-      { ts: new Date(t0), value: 0.98 },
-      { ts: new Date(t0 + 60000), value: 1.04 }
-    ] }
-  ]);
-  assert.equal(refs.length, 2);
-  assert.equal(refs[0].value, 0.98);
-  assert.equal(refs[1].value, 1.04);
-  assert.match(refs[0].label, /gercek min/);
-  assert.match(refs[1].label, /gercek max/);
-  assert.equal(buildHistoryRealLimits([]).length, 0);
+  const { buildVoltageReferenceLines } = context.__SCADA_V2_TEST_HOOKS__;
+  assert.deepEqual(Array.from(buildVoltageReferenceLines(400).map((ref) => ref.value)), [380, 420]);
+  assert.deepEqual(Array.from(buildVoltageReferenceLines(380).map((ref) => ref.value)), [380, 420]);
+  assert.deepEqual(Array.from(buildVoltageReferenceLines(154).map((ref) => ref.value)), [140, 170]);
+  assert.deepEqual(Array.from(buildVoltageReferenceLines(170).map((ref) => ref.value)), [140, 170]);
+  assert.equal(buildVoltageReferenceLines(66).length, 0);
+  assert.equal(buildVoltageReferenceLines(0).length, 0);
+  buildVoltageReferenceLines(400).forEach((ref) => {
+    assert.equal(ref.enabled, true, 'referanslar varsayilan olarak acik gelir');
+    assert.ok(ref.refKey);
+  });
+});
+
+test('positive voltage axis never negative and never forced to 0', () => {
+  const context = loadRuntime();
+  const { buildPositiveAxisScale } = context.__SCADA_V2_TEST_HOOKS__;
+  const scale = buildPositiveAxisScale(390, 415);
+  assert.equal(scale.minY, 388, 'max((415-390)*0.08, 1) = 2 birim alt marj');
+  assert.equal(scale.maxY, 417);
+  assert.ok(scale.minY >= 0, 'negatif alt sinir yok');
+  assert.ok(scale.maxY > scale.minY);
+  const flat = buildPositiveAxisScale(400, 400);
+  assert.equal(flat.minY, 399);
+  assert.equal(flat.maxY, 401);
+  const empty = buildPositiveAxisScale(NaN, NaN);
+  assert.equal(empty.minY, 0);
+  assert.equal(empty.maxY, 1);
 });
 
 test('resolveHistoricalRangeBounds clamps future end and falls back to a 7-day window', () => {
@@ -1035,4 +1050,81 @@ test('Canliya don restores last live snapshot instantly and triggers one live fe
   assert.equal(context.state.scada.pollState.nextDueAt instanceof Date, true, 'polling zamanlayicisi yeniden baslatilir');
   assert.equal(context.state.scada.pollState.pendingAutoRefresh, false);
   assert.equal(statuses.at(-1)?.tone, 'info');
+});
+
+test('live scope sends only the primary metric: hat-active P, trafo-reactive Q, history keeps P+Q', () => {
+  const context = loadRuntime();
+  const hooks = context.__SCADA_V2_TEST_HOOKS__;
+  const hatEntity = { id: 'hat-1', scada: { active: { ids: ['m-h-p-1'] }, reactive: { ids: ['m-h-q-1'] } } };
+  const trafoEntity = { id: 'tr-1', scada: { active: { ids: ['m-t-p-1'] }, reactive: { ids: ['m-t-q-1'] } } };
+
+  context.state.filters.scadaMetric = 'hat-active';
+  context.getVisibleHats = () => [hatEntity];
+  let liveScope = hooks.getCurrentScadaScope({ history: false });
+  assert.deepEqual(Array.from(liveScope.metricTypes), ['active']);
+  assert.deepEqual(Array.from(liveScope.elementNames), ['P'], 'canli hat-aktif yalniz P ister');
+  assert.deepEqual(Array.from(liveScope.measurementIds), ['m-h-p-1']);
+  let historyScope = hooks.getCurrentScadaScope({ history: true });
+  assert.deepEqual(Array.from(historyScope.metricTypes), ['active', 'reactive']);
+  assert.deepEqual(Array.from(historyScope.elementNames), ['P', 'Q'], 'gecmis hat P+Q ister');
+  assert.deepEqual(Array.from(historyScope.measurementIds).sort(), ['m-h-p-1', 'm-h-q-1'].sort());
+
+  context.state.filters.scadaMetric = 'trafo-reactive';
+  context.getVisibleTrafoEntities = () => [trafoEntity];
+  liveScope = hooks.getCurrentScadaScope({ history: false });
+  assert.deepEqual(Array.from(liveScope.metricTypes), ['reactive']);
+  assert.deepEqual(Array.from(liveScope.elementNames), ['Q'], 'canli trafo-reaktif yalniz Q ister');
+  assert.deepEqual(Array.from(liveScope.measurementIds), ['m-t-q-1']);
+  historyScope = hooks.getCurrentScadaScope({ history: true });
+  assert.deepEqual(Array.from(historyScope.metricTypes), ['active', 'reactive']);
+  assert.deepEqual(Array.from(historyScope.elementNames), ['P', 'Q']);
+
+  context.state.filters.scadaMetric = 'voltage';
+  context.getVisibleBaras = () => [{ id: 'b-1', kvBucket: '400', scada: { voltage: { ids: ['m-b-u-1'] } } }];
+  liveScope = hooks.getCurrentScadaScope({ history: false });
+  assert.deepEqual(Array.from(liveScope.metricTypes), ['voltage']);
+  assert.deepEqual(Array.from(liveScope.elementNames), ['U']);
+});
+
+test('failed or empty historical fetch rolls back to live and re-triggers a live fetch', async () => {
+  for (const scenario of ['fail-request', 'empty-data']) {
+    const context = loadRuntime();
+    const { setScadaTimeMode } = context.__SCADA_V2_TEST_HOOKS__;
+    const statuses = [];
+    let fallbackTrigger = null;
+
+    context.setScadaStatusMessage = (message, tone) => statuses.push({ message, tone });
+    context.scadaDoFetch = async (options = {}) => {
+      fallbackTrigger = options.trigger;
+      return { ok: true };
+    };
+    context.chrome.runtime.sendMessage = async (message) => {
+      if (message?.type === 'SCADA_HISTORICAL_SNAPSHOT_FETCH') {
+        return scenario === 'fail-request'
+          ? { ok: false, error: 'Test engeli' }
+          : { ok: true, data: {} };
+      }
+      return { ok: true, data: {} };
+    };
+
+    context.state.scada.enabled = true;
+    context.state.scada.autoRefresh = true;
+    context.state.scada.measurementRowsById = new Map([['m-1', { measurementId: 'm-1', value: 42 }]]);
+    context.state.scada.lastLiveSnapshot = new Map([['m-1', { measurementId: 'm-1', value: 42 }]]);
+    context.state.scada.timeMode = 'live';
+
+    const targetMs = Date.now() - 3600000;
+    await setScadaTimeMode('historical', targetMs);
+
+    assert.equal(context.state.scada.timeMode, 'live', `(${scenario}) gecmis moduna kilitlenmez`);
+    assert.equal(context.state.scada.historicalAt, null, `(${scenario}) historicalAt temizlenir`);
+    assert.equal(context.state.scada.lastLiveSnapshot, null, `(${scenario}) anlik goruntu serbest birakilir`);
+    assert.equal(context.state.scada.sourceKind, 'live');
+    assert.equal(context.state.scada.measurementRowsById.get('m-1').value, 42, `(${scenario}) son canli veri geri yuklenir`);
+    assert.equal(fallbackTrigger, 'historical-fallback-live', `(${scenario}) canli sorgu yeniden tetiklenir`);
+    assert.match(statuses.at(-1)?.message || '', /Canli mod korundu/);
+    assert.equal(statuses.at(-1)?.tone, 'warn');
+    assert.ok(context.state.scada.pollState.nextDueAt instanceof Date, `(${scenario}) polling zamanlayicisi calisiyor`);
+    assert.equal(context.state.scada.pendingHistoricalFetch, null);
+  }
 });
