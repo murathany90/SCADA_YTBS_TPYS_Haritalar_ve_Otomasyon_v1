@@ -5069,6 +5069,12 @@ function _formatHistoryAxisLabel(timestampMs) {
     return { metricType, elementName, unit, typeLabel, metric: record?.[metricType] || null };
   }
 
+  function getCsvSelectedMeasurementId(metric) {
+    const selected = String(metric?.selectedCandidate || '').trim();
+    if (selected) return selected.split(',')[0].trim();
+    return String(metric?.measurementId || '').split(',')[0].trim();
+  }
+
   function getCsvSourceRow(measurementId, elementName) {
     const measurementIdText = String(measurementId || '').trim();
     if (!measurementIdText) return null;
@@ -5079,7 +5085,7 @@ function _formatHistoryAxisLabel(timestampMs) {
 
   function getCsvSelectedSourceRow(metric, elementName) {
     if (!metric) return null;
-    return getCsvSourceRow(String(metric.measurementId || metric.selectedCandidate || '').trim(), elementName);
+    return getCsvSourceRow(getCsvSelectedMeasurementId(metric), elementName);
   }
 
   function getCsvCandidateSourceName(entity, metricType, measurementId, sourceRow) {
@@ -5244,7 +5250,7 @@ function _formatHistoryAxisLabel(timestampMs) {
             getCsvFlowDirectionText(row.entityKey.split(':')[1], record),
             ctx.typeLabel,
             ctx.elementName,
-            ctx.metric?.measurementId || '',
+            getCsvSelectedMeasurementId(ctx.metric),
             sourceRow?.tmName || '',
             sourceRow?.kvText || '',
             sourceRow?.remoteName || '',
@@ -5292,7 +5298,7 @@ function _formatHistoryAxisLabel(timestampMs) {
             formatCsvDecimal(capacityMva, 1),
             ctx.typeLabel,
             ctx.elementName,
-            ctx.metric?.measurementId || '',
+            getCsvSelectedMeasurementId(ctx.metric),
             sourceRow?.tmName || '',
             sourceRow?.kvText || '',
             sourceRow?.remoteName || '',
@@ -5332,11 +5338,11 @@ function _formatHistoryAxisLabel(timestampMs) {
           row.name || '',
           entity ? String(entity.gerilimKv || entity.kvBucket || '') : '',
           ctx.elementName,
-          ctx.metric?.measurementId || '',
+          getCsvSelectedMeasurementId(ctx.metric),
           sourceRow?.tmName || '',
           sourceRow?.kvText || '',
           sourceRow?.remoteName || '',
-          entity ? getCsvCandidateSourceName(entity, 'voltage', ctx.metric?.measurementId, sourceRow) : '',
+          entity ? getCsvCandidateSourceName(entity, 'voltage', getCsvSelectedMeasurementId(ctx.metric), sourceRow) : '',
           formatCsvDecimal(sourceRow?.value),
           formatCsvDecimal(ctx.metric?.value),
           formatCsvDecimal(row.puValue, 3),
@@ -6417,6 +6423,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       buildCsvRows,
       exportRankingCsv,
       getCsvMetricContext,
+      getCsvSelectedMeasurementId,
       getCsvWarningText,
       translateResolutionMethod,
       getCsvQueryDurationSeconds,

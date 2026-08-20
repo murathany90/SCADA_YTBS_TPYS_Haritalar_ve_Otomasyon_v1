@@ -1502,3 +1502,44 @@ test('exportRankingCsv sends no SCADA_FETCH or HISTORY messages', () => {
   assert.equal(downloaded.rows[0][19], '80,00', 'nihai deger normalize kayit degeridir (virgul ondalik)');
   assert.equal(downloaded.rows[0][12], 'TMA', 'SCADA B1 secilen kaynak satirindan gelir');
 });
+
+test('CSV OLCUM ID and SCADA B1/B2/B3 use the selected candidate when measurementId is composite', () => {
+  const context = loadRuntime();
+  const hooks = context.__SCADA_V2_TEST_HOOKS__;
+  let downloaded = null;
+  context.downloadScadaCsvFile = (filename, header, rows) => {
+    downloaded = { filename, header, rows };
+  };
+  context.getVisibleHats = () => [buildTerminalEntity({ id: 'hat-1' })];
+  context.state.scada.entityMetricsByKey = new Map([['hat:hat-1', {
+    entityType: 'hat',
+    entityId: 'hat-1',
+    entityKey: 'hat:hat-1',
+    entity: buildTerminalEntity({ id: 'hat-1' }),
+    primaryMetric: 'active',
+    primaryValue: 84,
+    primaryTimestamp: new Date('2026-08-16T07:04:00.000Z'),
+    primaryStaleState: 'live',
+    active: {
+      value: 84,
+      timestamp: new Date('2026-08-16T07:04:00.000Z'),
+      measurementId: 'm1,m2',
+      selectedCandidate: 'm2'
+    },
+    reactive: { value: 0 }
+  }]]);
+  context.state.scada.measurementRowsById = new Map([
+    ['m1|P', { measurementId: 'm1', elementName: 'P', tmName: 'TMA', kvText: '380', remoteName: 'TMA1', value: 80, timestamp: new Date('2026-08-16T07:03:00.000Z') }],
+    ['m2|P', { measurementId: 'm2', elementName: 'P', tmName: 'TMB', kvText: '154', remoteName: 'TMB2', value: 84, timestamp: new Date('2026-08-16T07:04:00.000Z') }]
+  ]);
+  context.state.scada.fetchMeta = { status: 'success', durationMs: 4700 };
+
+  hooks.exportRankingCsv();
+
+  assert.ok(downloaded, 'CSV dosyasi indirilir');
+  assert.equal(downloaded.rows[0][11], 'm2', 'OLCUM ID nihai secilen sinsiddir, composite degil');
+  assert.equal(downloaded.rows[0][12], 'TMB', 'SCADA B1 secilen adayin satirindan gelir');
+  assert.equal(downloaded.rows[0][13], '154', 'SCADA B2 secilen adayin satirindan gelir');
+  assert.equal(downloaded.rows[0][14], 'TMB2', 'SCADA B3 secilen adayin satirindan gelir');
+  assert.equal(downloaded.rows[0][19], '84,00', 'nihai deger normalize kayit degeridir');
+});
