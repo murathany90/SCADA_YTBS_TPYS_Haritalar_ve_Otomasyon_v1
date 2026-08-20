@@ -118,6 +118,7 @@
     const datasourceId = Number(config?.datasourceId || 3);
     const contract = resolveQueryContract(config);
     const timeRange = config?.timeRange || 'DATEADD(DATETIME("now"), -24, hour) : now';
+    const queryMode = config?.queryMode === 'timeseries' ? 'aggregate' : 'raw';
     const columns = ['__time', 'sinsid', 'elementName', 'maxValue', 'b1Name', 'b2Name', 'b3Name'];
     const filters = [];
     const adhocFilters = [];
@@ -136,17 +137,18 @@
 
     const formData = {
       slice_id: chartSliceId,
-      viz_type: 'table',
+      viz_type: queryMode === 'aggregate' ? 'echarts_timeseries_line' : 'table',
       datasource: `${datasourceId}__table`,
       granularity_sqla: '__time',
       time_range: timeRange,
-      query_mode: 'raw',
-      columns: columns.slice(),
-      groupby: [],
-      metrics: [],
+      query_mode: queryMode,
+      columns: queryMode === 'raw' ? columns.slice() : undefined,
+      groupby: queryMode === 'aggregate' ? ['sinsid'] : [],
+      metrics: queryMode === 'aggregate' ? [{ aggregate: 'AVG', column: { column_name: 'maxValue' }, expressionType: 'SIMPLE', label: 'AVG(maxValue)' }] : [],
       adhoc_filters: adhocFilters,
       row_limit: contract.rowLimit || CONFIG.HISTORY_ROW_LIMIT || 50000,
-      order_by_cols: ['__time DESC']
+      order_by_cols: queryMode === 'raw' ? ['__time DESC'] : undefined,
+      time_grain_sqla: queryMode === 'aggregate' ? 'PT1M' : undefined
     };
 
     return {
@@ -156,11 +158,15 @@
       queries: [{
         time_range: timeRange,
         granularity: '__time',
-        columns: columns.slice(),
-        metrics: [],
+        time_grain: queryMode === 'aggregate' ? 'PT1M' : undefined,
+        groupby: queryMode === 'aggregate' ? ['sinsid'] : undefined,
+        metrics: queryMode === 'aggregate' ? [{ aggregate: 'AVG', column: { column_name: 'maxValue' }, expressionType: 'SIMPLE', label: 'AVG(maxValue)' }] : undefined,
+        columns: queryMode === 'raw' ? columns.slice() : undefined,
         filters,
-        orderby: [['__time', false]],
-        row_limit: contract.rowLimit || CONFIG.HISTORY_ROW_LIMIT || 50000
+        orderby: queryMode === 'raw' ? [['__time', false]] : [],
+        row_limit: contract.rowLimit || CONFIG.HISTORY_ROW_LIMIT || 50000,
+        series_limit: queryMode === 'aggregate' ? 0 : undefined,
+        order_desc: queryMode === 'aggregate' ? true : undefined
       }],
       result_format: 'json',
       result_type: 'full'
