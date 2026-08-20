@@ -559,7 +559,7 @@
     const variants = new Set();
     const compact = compactAlias(value);
     if (compact) variants.add(compact);
-    const rawParts = String(value || '').split(/[^0-9A-Za-zÃ§ÄŸÄ±Ã¶ÅŸÃ¼Ã‡ÄÄ°Ã–ÅÃœ]+/);
+    const rawParts = String(value || '').split(/[^0-9A-Za-zçğıöşüÇĞİÖŞÜ]+/);
     const normalizedParts = String(normalizeText(value || '') || '').split(/[^0-9a-zA-Z]+/);
     [...rawParts, ...normalizedParts].forEach((part) => {
       const token = compactAlias(part);
@@ -2176,7 +2176,7 @@
             dashboardId: SCADA_CONFIG.DASHBOARD_ID,
             chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
             datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-            timeRange: 'DATEADD(DATETIME("now"), -10, minute) : now',
+            timeRange: SCADA_CONFIG.LIVE_WINDOW_TIME_RANGE,
             kvFilters: [],
             tearFilters: [],
             elementNames: scope.elementNames,
@@ -2237,6 +2237,54 @@
         markScadaFlowsUnavailable(errorMessage, SCADA_ERROR.EMPTY_DATA);
         scadaLog('warn', 'SCADA verisi bos dondu.');
         return;
+      }
+
+      const requestedIdSet = new Set(scope.measurementIds.map(String));
+      const foundIdSet = new Set();
+      rowsByMeasurementId.forEach((row, key) => {
+        const id = String(row.measurementId || row.sinsid || '').trim();
+        if (id) foundIdSet.add(id);
+      });
+      const missingMeasurementIds = [...requestedIdSet].filter((id) => !foundIdSet.has(id));
+      const nowMs = Date.now();
+      const lastFallbackAt = state.scada.missingIdFallback?.at || 0;
+      const fallbackInWindow = nowMs - lastFallbackAt < 5 * 60 * 1000;
+      if (missingMeasurementIds.length && missingMeasurementIds.length < requestedIdSet.size && !fallbackInWindow) {
+        try {
+          const fallbackResult = await chrome.runtime.sendMessage({
+            type: 'SCADA_FETCH',
+            payload: {
+              baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+              dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+              chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+              datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+              timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
+              kvFilters: [],
+              tearFilters: [],
+              elementNames: scope.elementNames,
+              measurementIds: missingMeasurementIds,
+              rowLimit: Math.max(SCADA_CONFIG.QUERY_ROW_LIMIT, missingMeasurementIds.length * 3 || 5000)
+            }
+          });
+          if (fallbackResult?.ok) {
+            const fallbackRows = SCADA_COMMON.normalizeMetricRows(fallbackResult.data, { elementNames: scope.elementNames });
+            let recovered = 0;
+            fallbackRows.forEach((row, key) => {
+              const id = String(row.measurementId || row.sinsid || '').trim();
+              if (!id || !missingMeasurementIds.includes(id)) return;
+              if (!rowsByMeasurementId.has(key)) {
+                rowsByMeasurementId.set(key, row);
+                recovered += 1;
+              }
+            });
+            if (recovered > 0) {
+              state.scada.missingIdFallback = { at: nowMs, missingCount: missingMeasurementIds.length, recovered };
+              scadaLog('info', `SCADA eksik olcum fallback: ${missingMeasurementIds.length} ID icin genis pencere sorgusu yapildi, ${recovered} satir kurtarildi.`);
+            }
+          }
+        } catch (fallbackError) {
+          scadaLog('warn', 'SCADA eksik olcum fallback basarisiz.', fallbackError?.message || String(fallbackError));
+        }
       }
 
       updateScadaFetchMeta({
@@ -2842,16 +2890,21 @@
     closeScadaChartModal();
     const isHat = entityKey.startsWith('hat:');
     const isTrafo = entityKey.startsWith('trafo:');
-    const entityType = isHat ? 'hat' : 'trafo';
+    const isBara = entityKey.startsWith('bara:');
+    const entityType = isHat ? 'hat' : (isTrafo ? 'trafo' : 'bara');
     const entityId = entityKey.split(':')[1];
-    
+
     let entity = null;
     if (isHat) {
       entity = state.network?.hatById?.get(String(entityId)) || state.network?.hatLines?.find((entry) => String(entry.id) === String(entityId));
     } else if (isTrafo) {
       entity = state.network?.trafos?.find((trafo) => String(trafo.id) === String(entityId));
+    } else if (isBara) {
+      const baraList = (typeof getVisibleBaras === 'function' ? getVisibleBaras() : []);
+      entity = baraList.find((bara) => String(bara.id) === String(entityId))
+        || (Array.isArray(state.network?.baraNodes) ? state.network.baraNodes.find((bara) => String(bara.id) === String(entityId)) : null);
     }
-    
+
     const name = entity?.name || entityId;
 
     const backdrop = document.createElement('div');
@@ -2879,19 +2932,16 @@
     const closeBtn = document.getElementById('btnCloseScadaChart');
     if (closeBtn) closeBtn.addEventListener('click', closeScadaChartModal);
 
-    const activeRows = Array.isArray(entity?.scada?.active?.rows) ? entity.scada.active.rows : [];
-    const measurementIds = [...new Set(
-      activeRows
-        .map(row => String(row.measurementId || '').trim())
-        .filter(Boolean)
-    )];
+    const scope = getCurrentScadaScope();
+    const historyMetric = SCADA_COMMON.resolveHistoryMetricByEntity(scope.mode, entityType, entity);
+    const measurementIds = historyMetric.measurementIds;
 
     if (measurementIds.length === 0) {
-      _renderHistoryError(entityKey, 'Ölçüm ID bulunamadı.');
+      _renderHistoryError(entityKey, `${historyMetric.elementName} (${historyMetric.unit}) için ölçüm ID bulunamadı.`);
       return;
     }
 
-    const cacheKey = measurementIds.slice().sort().join(',') + '|P|24h';
+    const cacheKey = measurementIds.slice().sort().join(',') + '|' + historyMetric.elementName + '|24h';
     if (!state.scada.history24hCache) state.scada.history24hCache = new Map();
     const cached = state.scada.history24hCache.get(cacheKey);
     const nowMs = Date.now();
@@ -2900,7 +2950,7 @@
     if (isBypassCache) {
        window._scadaBypassCacheFor = null;
     } else if (cached && (nowMs - cached.fetchedAt < 5 * 60 * 1000)) {
-       _renderHistoryData(cached.data, measurementIds, entity, entityType, entityKey, cached.wasTruncated, cached.source);
+      _renderHistoryData(cached.data, measurementIds, entity, entityType, entityKey, cached.wasTruncated, cached.source, historyMetric);
        return;
     }
     
@@ -2912,7 +2962,7 @@
             dashboardId: SCADA_CONFIG.DASHBOARD_ID,
             chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
             datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-            elementNames: ['P'],
+            elementNames: [historyMetric.elementName],
             measurementIds,
             queryMode: useTimeseries ? 'timeseries' : 'raw'
           }
@@ -2921,65 +2971,41 @@
           throw new Error('Superset boş veya geçersiz yanıt döndürdü.');
        }
        const rows = result.data.result[0].data;
-       
+       const firstRow = rows.length ? rows[0] : null;
+       const candidateTimeKeys = ['__timestamp', '__time', 'MAX(__time)', 'maxTime', 'timestamp', 'datetime', 'dt', 'time'];
+       const candidateValueKeys = ['maxValue', 'AVG(maxValue)', 'avgMaxValue', 'value', 'val'];
+       const seenTimeKeys = firstRow ? candidateTimeKeys.filter((key) => key in firstRow) : [];
+       const seenValueKey = firstRow ? candidateValueKeys.find((key) => key in firstRow) || null : null;
+
        console.log('[SCADA_HISTORY] Fetch OK:', {
           mode: useTimeseries ? 'timeseries' : 'raw',
+          elementName: historyMetric.elementName,
           measurementIds,
           rowCount: rows.length,
           firstRowKeys: rows.length ? Object.keys(rows[0]) : [],
-          firstRowTime: rows.length ? (rows[0].__time || rows[0]['MAX(__time)'] || rows[0].maxTime) : null,
-          firstRowValue: rows.length ? (rows[0].maxValue || rows[0]['AVG(maxValue)'] || rows[0].avgMaxValue) : null
+          seenTimeKeys,
+          seenValueKey
        });
-       
-       const parsedRowsByMid = new Map();
-       let missingValueField = false;
-       let missingMeasurementIdField = false;
 
-       rows.forEach(row => {
-          const mwRaw = row.maxValue ?? row['AVG(maxValue)'] ?? row.avgMaxValue;
-          const timeRaw = row.__time ?? row['MAX(__time)'] ?? row.maxTime;
-          const sinsidRaw = row.sinsid ?? row.measurementId;
-          
-          if (sinsidRaw == null) {
-              missingMeasurementIdField = true;
-              return;
-          }
-          
-          if (mwRaw === undefined || mwRaw === null) missingValueField = true;
-          
-          const mw = Number(mwRaw);
-          if (!Number.isFinite(mw)) return;
-          
-          const t = (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.normalizeTimestamp)
-             ? SCADA_COMMON.normalizeTimestamp(timeRaw)
-             : new Date(String(timeRaw).replace(/Z$/, ''));
-          if (!t || Number.isNaN(t.getTime())) return;
-          
-          const mId = String(sinsidRaw);
-          if (!parsedRowsByMid.has(mId)) parsedRowsByMid.set(mId, []);
-          parsedRowsByMid.get(mId).push({ ts: t, mw });
-       });
-       
-       let maxPoints = 0;
+       const parsed = SCADA_COMMON.collectHistoryRowsByMid(rows, measurementIds);
        let minTime = Infinity;
        let maxTime = -Infinity;
-       
-       for (const pts of parsedRowsByMid.values()) {
-          const uniqueTimes = new Set(pts.map(p => p.ts.getTime())).size;
-          if (uniqueTimes > maxPoints) maxPoints = uniqueTimes;
-          for (const p of pts) {
-             const t = p.ts.getTime();
+       parsed.byMid.forEach((points) => {
+          for (const point of points) {
+             const t = point.ts.getTime();
              if (t < minTime) minTime = t;
              if (t > maxTime) maxTime = t;
           }
-       }
-       
+       });
+
        return {
           rows,
-          parsedRowsByMid,
-          maxPoints,
-          missingValueField,
-          missingMeasurementIdField,
+          byMid: parsed.byMid,
+          perMidStats: parsed.perMidStats,
+          maxPoints: parsed.maxPoints,
+          stats: parsed.stats,
+          seenTimeKeys,
+          seenValueKey,
           minTime: minTime === Infinity ? null : minTime,
           maxTime: maxTime === -Infinity ? null : maxTime
        };
@@ -3001,14 +3027,19 @@
          }
       }
       
-      if (data.maxPoints < 2) {
+if (data.maxPoints < 2) {
          let reason = "Superset 0 satır döndürdü.";
-         if (data.rows.length > 0 && data.missingMeasurementIdField) {
-            reason = "Timeseries yanıtında measurement ID alanı bulunamadı.";
-         } else if (data.rows.length > 0 && data.missingValueField) {
-            reason = `${data.rows.length} satır geldi ancak beklenen maxValue alanı bulunamadı.`;
+         if (data.rows.length > 0 && data.stats.missingMeasurementIdField > 0) {
+            reason = `Yanıtın ${data.stats.missingMeasurementIdField} satırında ölçüm ID alanı bulunamadı.`;
+         } else if (data.rows.length > 0 && data.stats.invalidTimestamp > 0 && data.stats.parsed === 0) {
+            reason = `${data.rows.length} satır geldi ancak zaman alanı çözülemedi (görülen zaman anahtarı: ${data.seenTimeKeys.join(', ') || '-'}, değer anahtarı: ${data.seenValueKey || '-'}).`;
+         } else if (data.rows.length > 0 && data.stats.missingValueField > 0 && data.stats.parsed === 0) {
+            reason = `${data.rows.length} satır geldi ancak beklenen değer alanı bulunamadı (görülen değer anahtarı: ${data.seenValueKey || '-'}).`;
          } else if (data.rows.length > 0) {
-            reason = `${data.rows.length} satır geldi ancak her ölçüm için en az 2 farklı zaman noktası bulunamadı.`;
+            const perMidText = [...data.perMidStats.entries()]
+              .map(([mid, entry]) => `${mid.slice(0, 8)}:${entry.uniqueTimes}nokta`)
+              .join(', ');
+            reason = `${data.rows.length} satır geldi ancak istenen ölçümler için en az 2 farklı zaman noktası bulunamadı (${perMidText || 'talep edilen ID bulunamadı'}).`;
          }
          _renderHistoryError(entityKey, reason, { mIds: measurementIds, count: data.rows.length, source });
          return;
@@ -3018,25 +3049,29 @@
       const wasTruncated = data.rows.length >= rowLimit;
       
       state.scada.history24hCache.set(cacheKey, { fetchedAt: nowMs, data, wasTruncated, source });
-      _renderHistoryData(data, measurementIds, entity, entityType, entityKey, wasTruncated, source);
+      _renderHistoryData(data, measurementIds, entity, entityType, entityKey, wasTruncated, source, historyMetric);
       
     } catch (err) {
       _renderHistoryError(entityKey, err.message || 'Hata oluştu', { mIds: measurementIds, count: 0, source: 'Hata' });
     }
   }
 
-  function _renderHistoryData(data, measurementIds, entity, entityType, entityKey, wasTruncated, source) {
-      const term1Rows = data.parsedRowsByMid.get(String(measurementIds[0])) || [];
-      const term2Rows = data.parsedRowsByMid.get(String(measurementIds[1])) || [];
+function _renderHistoryData(data, measurementIds, entity, entityType, entityKey, wasTruncated, source, historyMetric) {
+      const series = [];
+      measurementIds.forEach((mid) => {
+         const points = (data.byMid.get(String(mid)) || []).slice().sort((a, b) => a.ts - b.ts);
+         if (!points.length) return;
+         const label = historyMetric?.metricType === 'voltage'
+           ? 'Gerilim'
+           : (entityType === 'trafo' ? `Ölçüm ${series.length + 1}` : `Terminal ${series.length + 1}`);
+         series.push({ measurementId: String(mid), label, points });
+      });
 
-      term1Rows.sort((a, b) => a.ts - b.ts);
-      term2Rows.sort((a, b) => a.ts - b.ts);
+      let html = buildSuperset24hChart(series, entity, entityType, historyMetric);
 
-      let html = buildSuperset24hChart(term1Rows, term2Rows, entity, entityType);
-      
       const startFmt = data.minTime ? new Date(data.minTime).toLocaleTimeString('tr-TR') : '-';
       const endFmt = data.maxTime ? new Date(data.maxTime).toLocaleTimeString('tr-TR') : '-';
-      
+
       html += `
         <div style="font-size: 11px; color: var(--muted); padding: 8px; border-top: 1px solid var(--border-color); margin-top: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
            <div><strong>Ölçüm ID:</strong> ${escapeHtml(measurementIds.join(', '))}</div>
@@ -3045,7 +3080,7 @@
            <div><strong>Kaynak:</strong> ${escapeHtml(source)}</div>
         </div>
       `;
-      
+
       if (wasTruncated) {
          html += '<div class="scada-chart-warning" style="color: #f59e0b; text-align: center; font-size: 11px; margin-top: 4px;">Veri satır sınırına ulaştı; 24 saat grafiği eksik olabilir.</div>';
       }
@@ -3077,56 +3112,72 @@
     }
   }
 
-  function buildSuperset24hChart(term1, term2, entity, entityType) {
-    if (!term1.length && !term2.length) return '<div class="scada-chart-empty">Grafik için yeterli geçmiş veri yok.</div>';
+function _formatHistoryAxisLabel(timestampMs) {
+    if (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.formatHistoryAxisLabel) {
+      return SCADA_COMMON.formatHistoryAxisLabel(timestampMs);
+    }
+    const date = new Date(Number(timestampMs));
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${pad(date.getDate())}.${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function buildSuperset24hChart(series, entity, entityType, historyMetric) {
+    const populated = series.filter((item) => item.points.length);
+    if (!populated.length) return '<div class="scada-chart-empty">Grafik için yeterli geçmiş veri yok.</div>';
     const width = 960;
     const height = 360;
     const padL = 62;
     const padR = 24;
     const padT = 22;
     const padB = 42;
-    const values = [...term1.map(p => p.mw), ...term2.map(p => p.mw)].filter((value) => Number.isFinite(value));
+    const unit = historyMetric?.unit || 'MW';
+    const values = populated.flatMap((item) => item.points.map((point) => point.value)).filter(Number.isFinite);
     const maxAbs = Math.max(...values.map((value) => Math.abs(value)), 1);
-    const minY = -maxAbs;
-    const maxY = maxAbs;
-    const allTs = [...term1.map(p => p.ts.getTime()), ...term2.map(p => p.ts.getTime())];
+    const isVoltage = historyMetric?.metricType === 'voltage';
+    const minY = isVoltage ? 0 : -maxAbs;
+    const maxY = isVoltage ? (maxAbs > 0 ? maxAbs * 1.1 : 1) : maxAbs;
+    const allTs = populated.flatMap((item) => item.points.map((point) => point.ts.getTime()));
     const minTime = Math.min(...allTs);
     const maxTime = Math.max(...allTs);
     const timeSpan = maxTime - minTime || 1;
     const toX = (timeMs) => padL + ((timeMs - minTime) / timeSpan) * (width - padL - padR);
     const toY = (value) => padT + ((maxY - value) / (maxY - minY)) * (height - padT - padB);
-    const makePoints = (arr) => arr
-      .filter((point) => Number.isFinite(point.mw))
-      .map((point) => `${toX(point.ts.getTime()).toFixed(1)},${toY(point.mw).toFixed(1)}`)
-      .join(' ');
+    const seriesColors = ['#22c55e', '#ef4444', '#38bdf8', '#f59e0b'];
 
-    const t1Pts = makePoints(term1);
-    const t2Pts = makePoints(term2);
+    const polylines = populated.map((item, index) => {
+      const points = item.points
+        .filter((point) => Number.isFinite(point.value))
+        .map((point) => `${toX(point.ts.getTime()).toFixed(1)},${toY(point.value).toFixed(1)}`)
+        .join(' ');
+      if (!points) return '';
+      const color = seriesColors[index % seriesColors.length];
+      return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"${index > 0 ? ' opacity="0.8"' : ''} />`;
+    }).join('');
+
     const zeroY = toY(0).toFixed(1);
     const capacity = getCapacityMva(entityType, entity);
-    const capY = Number.isFinite(capacity) ? toY(Math.min(capacity, maxY)).toFixed(1) : null;
+    const capY = isVoltage || !Number.isFinite(capacity) ? null : toY(Math.min(capacity, maxY)).toFixed(1);
     const startLabel = _formatHistoryAxisLabel(minTime);
     const endLabel = _formatHistoryAxisLabel(maxTime);
-    
-    const label1 = entityType === 'trafo' ? 'Ölçüm 1' : 'Terminal 1';
-    const label2 = entityType === 'trafo' ? 'Ölçüm 2' : 'Terminal 2';
+    const legends = populated.map((item, index) => {
+      const color = seriesColors[index % seriesColors.length];
+      return `<span class="legend-active" style="color:${color};">${escapeHtml(item.label)} (${unit})</span>`;
+    }).join('');
 
     return `
       <div class="scada-history-chart scada-history-chart-large">
         <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" aria-label="scada-grafigi">
           <line x1="${padL}" y1="${zeroY}" x2="${width - padR}" y2="${zeroY}" stroke="var(--chart-grid)" stroke-width="1.2" />
           ${capY != null ? `<line x1="${padL}" y1="${capY}" x2="${width - padR}" y2="${capY}" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.75" />` : ''}
-          ${t1Pts ? `<polyline points="${t1Pts}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
-          ${t2Pts ? `<polyline points="${t2Pts}" fill="none" stroke="#ef4444" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.8" />` : ''}
+          ${polylines}
           <text x="${padL}" y="${height - 12}" fill="var(--muted)" font-size="11">${startLabel}</text>
           <text x="${width - padR}" y="${height - 12}" fill="var(--muted)" font-size="11" text-anchor="end">${endLabel}</text>
-          <text x="${padL - 8}" y="${zeroY - 6}" fill="var(--muted)" font-size="11" text-anchor="end">0</text>
-          <text x="${padL - 8}" y="${padT + 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(maxAbs)}</text>
-          <text x="${padL - 8}" y="${height - padB + 6}" fill="var(--muted)" font-size="11" text-anchor="end">-${formatAxisNumber(maxAbs)}</text>
+          <text x="${padL - 8}" y="${isVoltage ? padT + 6 : zeroY - 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(maxY)}</text>
+          <text x="${padL - 8}" y="${height - padB + 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(minY)}</text>
         </svg>
         <div class="scada-history-chart-legend">
-          ${term1.length ? `<span class="legend-active">${label1} (MW)</span>` : ''}
-          ${term2.length ? `<span class="legend-reactive" style="color: #ef4444;">${label2} (MW)</span>` : ''}
+          ${legends}
         </div>
       </div>
     `;
@@ -3354,6 +3405,7 @@
           <th class="col-mw" data-sort="mw">MW</th>
           <th class="col-mvar" data-sort="mvar">MVAR</th>
           <th class="col-pct" data-sort="score">%</th>
+          <th class="col-hist" title="Son 24 saat grafiği göster"></th>
         </tr></thead>
       `;
     }
@@ -3366,6 +3418,7 @@
         <th class="col-kv-value" data-sort="kv">kV</th>
         <th class="col-pu" data-sort="pu">p.u.</th>
         <th class="col-status">Durum</th>
+        <th class="col-hist" title="Son 24 saat grafiği göster"></th>
       </tr></thead>
     `;
   }
@@ -3475,6 +3528,9 @@
             <td class="col-mw">${row.mwInvalid ? '!' : Number.isFinite(row.mw) ? `${row.mw >= 0 ? '+' : ''}${row.mw.toFixed(1)}` : '&mdash;'}</td>
             <td class="col-mvar">${row.mvarInvalid ? '!' : Number.isFinite(row.mvar) ? `${row.mvar >= 0 ? '+' : ''}${row.mvar.toFixed(1)}` : '-'}</td>
             <td class="col-pct"><span class="ranking-pct-cell" style="background:${pctColor};color:${pctTextColor}">${Number.isFinite(row.pct) ? row.pct.toFixed(1) : '&mdash;'}</span></td>
+            <td class="col-hist"><button type="button" class="btn-history" data-history-entity="${row.entityKey}" title="Son 24 saat grafiğini göster" aria-label="Son 24 saat grafiğini göster">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </button></td>
           </tr>
         `;
       }
@@ -3487,6 +3543,9 @@
           <td class="col-kv-value">${Number.isFinite(row.kvValue) ? row.kvValue.toFixed(1) : '&mdash;'}</td>
           <td class="col-pu">${Number.isFinite(row.puValue) ? row.puValue.toFixed(3) : '&mdash;'}</td>
           <td class="col-status"><span class="ranking-status-pill ${row.status}">${escapeHtml(row.statusLabel || '-')}</span></td>
+          <td class="col-hist"><button type="button" class="btn-history" data-history-entity="${row.entityKey}" title="Son 24 saat grafiğini göster" aria-label="Son 24 saat grafiğini göster">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          </button></td>
         </tr>
       `;
     }).join('');
@@ -3510,7 +3569,7 @@
         <div class="ranking-header-left">
           <span>SCADA Paneli</span>
         </div>
-        <button id="btnRankingClose">Ã—</button>
+        <button id="btnRankingClose">&times;</button>
       </div>
       <div class="ranking-entity-tabs">
         <button type="button" data-entity-filter="hat">Hatlar</button>
@@ -4140,7 +4199,7 @@
           </div>
           <div class="info-actions">
             <button id="btnExportAuditFromModal" class="secondary">Denetim CSV</button>
-            <button id="btnCloseScadaAudit" class="info-close" title="Kapat">Ã—</button>
+            <button id="btnCloseScadaAudit" class="info-close" title="Kapat">&times;</button>
           </div>
         </div>
         <div class="scada-audit-summary">

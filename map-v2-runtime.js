@@ -632,6 +632,7 @@
       anchor: anchorCoord ? { hatId: tm.id, coord: anchorCoord } : null
     });
     if (anchorCoord) rememberEntityPopup('tm', tm.id, anchorCoord, false);
+    if (typeof requestRender === 'function') requestRender();
   }
 
   function buildTrafoFields(trafo) {
@@ -1218,7 +1219,10 @@
     const hat = state.network.hatLines.find((row) => normalizeText([row.name, row.kmlDescriptionId, row.startTm, row.endTm, (row.ytmNames || []).join(' ')].join(' ')).includes(query));
     if (hat) {
       const changes = ensureSearchVisibility({ kv: hat.kvBucket || hat.kv, ytmNames: hat.ytmNames });
-      focusOn((hat.bbox[0] + hat.bbox[2]) / 2, (hat.bbox[1] + hat.bbox[3]) / 2, hat.kvBucket === '400' ? 7 : 8);
+      const bbox = Array.isArray(hat.bbox) && hat.bbox.length === 4 ? hat.bbox : null;
+      const centerLon = bbox ? (bbox[0] + bbox[2]) / 2 : Number(hat.lon || 0);
+      const centerLat = bbox ? (bbox[1] + bbox[3]) / 2 : Number(hat.lat || 0);
+      focusOn(centerLon || Number(hat.lon || 0), centerLat || Number(hat.lat || 0), hat.kvBucket === '400' ? 7 : 8);
       if (typeof openScadaHatDetails === 'function') {
         openScadaHatDetails(hat, { anchorCoord: getHatAnchorCoord(hat), forceTiles: true });
       }

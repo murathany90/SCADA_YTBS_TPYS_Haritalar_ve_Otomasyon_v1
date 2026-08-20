@@ -28,6 +28,7 @@ const SCADA_CONFIG = {
   CHART_SLICE_ID: 454,
   DATASOURCE_ID: 3,
   QUERY_TIME_RANGE: 'DATEADD(DATETIME("now"), -24, hour) : now',
+  LIVE_WINDOW_TIME_RANGE: 'DATEADD(DATETIME("now"), -10, minute) : now',
   QUERY_KV_FILTERS: ['400', '380', '420', '154'],
   QUERY_TEAR_FILTERS: ['Golbasi_YTM'],
   QUERY_ELEMENT_NAME: 'P',
@@ -424,7 +425,15 @@ async function scadaDoFetch(options = {}) {
       phaseMessage: `${triggerLabel} sorgu icin oturum kontrol ediliyor.`
     });
 
-    const scope = getCurrentScadaScope();
+    const legacyScope = (typeof getCurrentScadaScope === 'function')
+      ? (getCurrentScadaScope() || {})
+      : {};
+    const scope = {
+      elementNames: (Array.isArray(legacyScope.elementNames) && legacyScope.elementNames.length)
+        ? legacyScope.elementNames
+        : [SCADA_CONFIG.QUERY_ELEMENT_NAME],
+      measurementIds: Array.isArray(legacyScope.measurementIds) ? legacyScope.measurementIds : []
+    };
     const result = SCADA_CONFIG.MOCK_ENABLED
       ? await scadaFetchMock()
       : await chrome.runtime.sendMessage({
@@ -437,7 +446,7 @@ async function scadaDoFetch(options = {}) {
           timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
           kvFilters: SCADA_CONFIG.QUERY_KV_FILTERS,
           tearFilters: SCADA_CONFIG.QUERY_TEAR_FILTERS,
-          elementNames: scope.elementNames || SCADA_CONFIG.QUERY_ELEMENT_NAMES,
+          elementNames: scope.elementNames,
           measurementIds: scope.measurementIds
         }
       });

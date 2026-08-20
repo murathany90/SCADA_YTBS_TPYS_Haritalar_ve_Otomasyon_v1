@@ -526,7 +526,6 @@ function applyTheme(theme, persist = true) {
   applyToolbarIcons();
   const rankingPanel = document.getElementById('rankingPanel');
   if (rankingPanel) rankingPanel.classList.toggle('light-mode', state.map.theme === 'light');
-  el.btnThemeToggle.textContent = state.map.theme === 'dark' ? '☀️' : '🌙';
   if (persist) void chrome.storage.local.set({ [MAP_PREFS_KEY]: { theme: state.map.theme, savedAt: new Date().toISOString() } });
   applyToolbarIcons();
   if (persist) persistMapPrefs();
@@ -1782,22 +1781,6 @@ function renderUnitTable(unitDetails) {
   const rows = (unitDetails || []).filter((row) => row && row.unitName);
   if (!rows.length) return '';
   return `<div class="info-section"><strong>Unite bazli reaktif guc kontrol verileri</strong><table class="unit-table"><thead><tr><th>Unite</th><th>Nominal</th><th>MKUD</th><th>PMKUD</th><th>Dusuk</th><th>Asiri</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.unitName || '-')}</td><td>${escapeHtml(formatNumber(row.unitNominalGucMw, ''))}</td><td>${escapeHtml(formatNumber(row.tpysUniteMkudMw ?? row.tpysSantralMkudMw, ''))}</td><td>${escapeHtml(formatNumber(row.unitPmkudMw, ''))}</td><td>${escapeHtml(formatNumber(row.nominalIkazDusuk, ''))}</td><td>${escapeHtml(formatNumber(row.nominalIkazAsiri, ''))}</td></tr>`).join('')}</tbody></table></div>`;
-}
-
-function showInfo({ title, subtitle = '', tags = [], fields = [], actions = [], extraHtml = '' }) {
-  el.infoCard.innerHTML = `<div class="info-head"><div><p class="info-kicker">${escapeHtml(subtitle || 'TPYS detay')}</p><h3>${escapeHtml(title || '-')}</h3></div><button id="btnInfoClose" class="info-close" title="Kapat">×</button></div><div class="info-tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div><div class="info-grid">${fields.map(([label, value]) => `<div class="info-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value ?? '-'))}</strong></div>`).join('')}</div><div class="info-actions">${actions.map((action) => `<button id="${escapeHtml(action.id)}">${escapeHtml(action.label)}</button>`).join('')}</div>${extraHtml}`;
-  el.infoCard.classList.remove('hidden');
-  const closeButton = document.getElementById('btnInfoClose');
-  if (closeButton) closeButton.addEventListener('click', () => hideInfo(false));
-}
-
-function hideInfo(clearSelection = true) {
-  el.infoCard.classList.add('hidden');
-  el.infoCard.innerHTML = '';
-  if (clearSelection) state.selection = { kind: '', id: '', measureSourceId: '', measureTargetIds: [] };
-  else state.selection.measureSourceId = '';
-  state.selection.measureTargetIds = [];
-  requestRender();
 }
 
 function renderInfoFields(fields) {

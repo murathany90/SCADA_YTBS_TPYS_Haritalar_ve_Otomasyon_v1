@@ -213,7 +213,19 @@
   }
 
   function parseSupersetScadaTimestamp(rawValue) {
-    if (!rawValue) return null;
+    if (rawValue == null || rawValue === '') return null;
+    // Epoch seconds (< 1e12) or milliseconds (>= 1e12) from legacy/raw transports.
+    if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
+      const ms = Math.abs(rawValue) >= 1e12 ? rawValue : rawValue * 1000;
+      const timestamp = new Date(ms);
+      return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+    }
+    const numeric = Number(rawValue);
+    if (Number.isFinite(numeric) && String(rawValue).trim() !== '') {
+      const ms = Math.abs(numeric) >= 1e12 ? numeric : numeric * 1000;
+      const timestamp = new Date(ms);
+      if (!Number.isNaN(timestamp.getTime())) return timestamp;
+    }
     // Superset returns '...T...Z' but the time is actually local time in Turkey.
     // By stripping 'Z', new Date() parses it as local time, preventing the +3h shift.
     const localString = String(rawValue).replace(/Z$/, '');
@@ -223,6 +235,114 @@
 
   function normalizeTimestamp(rawValue, nowMs) {
     return parseSupersetScadaTimestamp(rawValue);
+  }
+
+  const HISTORY_TIME_KEYS = ['__timestamp', '__time', 'MAX(__time)', 'maxTime', 'timestamp', 'datetime', 'dt', 'time'];
+  const HISTORY_VALUE_KEYS = ['maxValue', 'AVG(maxValue)', 'avgMaxValue', 'value', 'val', 'AVG'];
+  const HISTORY_MEASUREMENT_KEYS = ['sinsid', 'measurementId', 'measurement_id', 'mId', 'id'];
+
+  function resolveFieldByKeyList(row, keys) {
+    if (!row || typeof row !== 'object') return undefined;
+    for (const key of keys) {
+      if (key in row && row[key] !== undefined && row[key] !== null) return row[key];
+    }
+    return undefined;
+  }
+
+  // Response-shape independent extraction helpers for SCADA history rows.
+  function resolveHistoryTimestamp(row) {
+    return parseSupersetScadaTimestamp(resolveFieldByKeyList(row, HISTORY_TIME_KEYS));
+  }
+
+  function resolveHistoryValue(row) {
+    const raw = resolveFieldByKeyList(row, HISTORY_VALUE_KEYS);
+    if (raw === undefined) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function resolveHistoryMeasurementId(row) {
+    const raw = resolveFieldByKeyList(row, HISTORY_MEASUREMENT_KEYS);
+    const id = String(raw || '').trim();
+    return id || null;
+  }
+
+  // Groups raw history rows per measurement id; only requested ids count
+  // toward the '>= 2 distinct timestamps' success criterion.
+  function collectHistoryRowsByMid(rawRows, requestedIds) {
+    const rows = Array.isArray(rawRows) ? rawRows : [];
+    const requested = new Set((requestedIds || []).map(String));
+    const byMid = new Map();
+    const stats = {
+      total: rows.length,
+      missingMeasurementIdField: 0,
+      missingValueField: 0,
+      invalidTimestamp: 0,
+      nonRequested: 0,
+      parsed: 0
+    };
+    for (const row of rows) {
+      const mId = resolveHistoryMeasurementId(row);
+      if (!mId) {
+        stats.missingMeasurementIdField += 1;
+        continue;
+      }
+      if (requested.size && !requested.has(mId)) {
+        stats.nonRequested += 1;
+        continue;
+      }
+      const value = resolveHistoryValue(row);
+      if (value === null) {
+        stats.missingValueField += 1;
+        continue;
+      }
+      const timestamp = resolveHistoryTimestamp(row);
+      if (!timestamp) {
+        stats.invalidTimestamp += 1;
+        continue;
+      }
+      if (!byMid.has(mId)) byMid.set(mId, []);
+      byMid.get(mId).push({ ts: timestamp, value, measurementId: mId });
+      stats.parsed += 1;
+    }
+    let maxPoints = 0;
+    let maxPointsMid = null;
+    const perMidStats = new Map();
+    byMid.forEach((points, mId) => {
+      const uniqueTimes = new Set(points.map((point) => point.ts.getTime())).size;
+      perMidStats.set(mId, { points: points.length, uniqueTimes });
+      if (uniqueTimes > maxPoints) {
+        maxPoints = uniqueTimes;
+        maxPointsMid = mId;
+      }
+    });
+    return { byMid, perMidStats, maxPoints, maxPointsMid, stats };
+  }
+
+  // Metric selection for the 24h history chart, never hard-coded to 'P'.
+  // hat/trafo-active -> P/MW, hat/trafo-reactive -> Q/MVar, voltage -> U/kV.
+  function resolveHistoryMetricByEntity(mode, entityType, entity) {
+    const metricType = entityType === 'bara' ? 'voltage' : (mode === 'hat-reactive' || mode === 'trafo-reactive' ? 'reactive' : 'active');
+    const elementName = metricType === 'voltage' ? 'U' : (metricType === 'reactive' ? 'Q' : 'P');
+    const unit = metricType === 'voltage' ? 'kV' : (metricType === 'reactive' ? 'MVar' : 'MW');
+    const config = Array.isArray(entity?.scada?.[metricType]?.rows)
+      ? entity.scada[metricType].rows
+      : [];
+    const ids = [...new Set(
+      config.map((row) => String(row?.measurementId || '').trim()).filter(Boolean)
+    )];
+    if (!ids.length) {
+      const configuredIds = Array.isArray(entity?.scada?.[metricType]?.ids) ? entity.scada[metricType].ids : [];
+      configuredIds.forEach((id) => ids.push(String(id)));
+    }
+    return { metricType, elementName, unit, measurementIds: ids };
+  }
+
+  function formatHistoryAxisLabel(timestampMs) {
+    const date = timestampMs instanceof Date ? timestampMs : new Date(Number(timestampMs));
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${pad(date.getDate())}.${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
   function normalizeScadaEntries(rawRows, options) {
@@ -235,7 +355,7 @@
       if (!sinsid) continue;
       const mw = parseFloat(row['AVG(maxValue)'] ?? row.avgMaxValue);
       if (!Number.isFinite(mw)) continue;
-      const timestamp = normalizeTimestamp(row['MAX(__time)'] ?? row.maxTime, nowMs);
+      const timestamp = normalizeTimestamp(row['__timestamp'] ?? row['MAX(__time)'] ?? row.maxTime, nowMs);
       const existing = result.get(sinsid);
       if (existing && existing.timestamp && timestamp && existing.timestamp >= timestamp) continue;
       result.set(sinsid, {
@@ -261,11 +381,11 @@
     for (const row of rows) {
       const elementName = String(row.elementName || '').trim();
       if (allowElements && !allowElements.has(elementName)) continue;
-      const measurementId = String(row.sinsid || '').trim();
+      const measurementId = String(row.sinsid || row.measurementId || '').trim();
       if (!measurementId) continue;
       const value = parseFloat(row.maxValue ?? row['AVG(maxValue)'] ?? row.avgMaxValue);
       if (!Number.isFinite(value)) continue;
-      const timestamp = normalizeTimestamp(row.__time ?? row['MAX(__time)'] ?? row.maxTime, nowMs);
+      const timestamp = normalizeTimestamp(row['__timestamp'] ?? row.__time ?? row['MAX(__time)'] ?? row.maxTime, nowMs);
       const compositeKey = `${measurementId}|${elementName}`;
       const existing = result.get(compositeKey);
       if (existing && existing.timestamp && timestamp && existing.timestamp >= timestamp) continue;
@@ -485,11 +605,17 @@
     buildHistoryPayload,
     buildChartPayload,
     buildChartUrl,
+    collectHistoryRowsByMid,
     computeAuditReport,
     computeVisibleSummary,
     findDataArray,
+    formatHistoryAxisLabel,
     normalizeMetricEntries,
     normalizeMetricRows,
+    resolveHistoryMeasurementId,
+    resolveHistoryMetricByEntity,
+    resolveHistoryTimestamp,
+    resolveHistoryValue,
     resolveQueryContract,
     normalizeTimestamp,
     normalizeScadaEntries,
