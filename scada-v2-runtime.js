@@ -2684,12 +2684,161 @@
       </div>
     `;
   }
-  closeScadaChartModal = function () {
-    const backdrop = document.getElementById('scadaChartModalBackdrop');
-    if (backdrop) backdrop.remove();
+  function renderHatMeasurementCard(record) {
+    if (!record) return '';
+    const sections = [];
+    const renderRows = (title, metricRecord, unit) => {
+      const rows = Array.isArray(metricRecord?.candidateDetails) ? metricRecord.candidateDetails : [];
+      if (!rows.length) return '';
+      const selectedValue = metricRecord?.valueInvalid
+        ? '!'
+        : Number.isFinite(metricRecord?.value)
+          ? `${metricRecord.value >= 0 ? '+' : ''}${metricRecord.value.toFixed(2)} ${unit}`
+          : '-';
+      return `
+        <div class="technical-note-card">
+          <div class="technical-note-title">${escapeHtml(title)}</div>
+          <div class="technical-note-grid">
+            <div class="technical-note-item"><span>Secilen Olcum</span><strong>${escapeHtml(metricRecord?.measurementId || '-')}</strong></div>
+            <div class="technical-note-item"><span>Secilen Deger</span><strong>${escapeHtml(selectedValue)}</strong></div>
+            <div class="technical-note-item technical-note-item-wide"><span>Secim Nedeni</span><strong>${escapeHtml(metricRecord?.selectedCandidateReason || record.selectedCandidateReason || '-')}</strong></div>
+          </div>
+          <div class="technical-note-measurements">
+            ${rows.map((row) => {
+              const timeText = row.timestamp
+                ? `${row.timestamp.toLocaleDateString('tr-TR')} ${row.timestamp.toLocaleTimeString('tr-TR')}`
+                : '-';
+              const rawText = row.valueInvalid
+                ? '!'
+                : Number.isFinite(row.rawValue)
+                  ? `${row.rawValue >= 0 ? '+' : ''}${row.rawValue.toFixed(2)}`
+                  : '-';
+              const normalizedText = row.valueInvalid
+                ? '!'
+                : Number.isFinite(row.normalizedValue)
+                  ? `${row.normalizedValue >= 0 ? '+' : ''}${row.normalizedValue.toFixed(2)} ${unit}`
+                  : '-';
+              return `
+                <div class="technical-note-measurement-row${row.selected ? ' is-selected' : ''}">
+                  <div><span>├ûl├ğ├╝m Adresi</span><strong>${escapeHtml(row.measurementId || '-')}</strong></div>
+                  <div><span>Form├╝l</span><strong>${escapeHtml(row.formulaRaw || '-')}</strong></div>
+                  <div><span>Superset Kaynak De─şeri</span><strong>${escapeHtml(rawText)}</strong></div>
+                  <div><span>Harita Ak─▒┼ş De─şeri</span><strong>${escapeHtml(normalizedText)}</strong></div>
+                  <div><span>Superset Veri Zaman─▒</span><strong>${escapeHtml(timeText)}</strong></div>
+                  <div><span>Terminal Taraf─▒</span><strong>${escapeHtml(row.terminalSide || '-')}</strong></div>
+                  <div><span>Se├ğim Nedeni</span><strong>${escapeHtml(row.selectedCandidateReason || '-')}</strong></div>
+                  <div><span>Se├ğildi mi</span><strong>${row.selected ? 'Evet' : 'Hay─▒r'}</strong></div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    };
+    sections.push(renderRows('Aktif Guc Olcumleri', record.active, 'MW'));
+    sections.push(renderRows('Reaktif Guc Olcumleri', record.reactive, 'MVar'));
+    return sections.filter(Boolean).join('');
+  }
+
+  function buildHatPopupModel(hat) {
+    const record = state.scada.entityMetricsByKey.get(`hat:${hat.id}`);
+    const directionText = buildHatDirectionText(hat, record);
+    const pctLabel = record?.displayPctMode === 'reactive-ratio' ? 'MVar/MW Orani' : 'Yuklenme';
+    const pctValue = record?.invalidPct
+      ? '!'
+      : Number.isFinite(record?.displayPct)
+        ? `${record.displayPct.toFixed(1)}%`
+        : '-';
+    const compactFields = [
+      ['Uzunluk', formatNumber(hat.lengthKm, ' km')],
+      ['Kapasite', formatNumber(getCapacityMva('hat', hat), ' MVA')],
+      ['Aktif Guc (MW)', record?.active?.valueInvalid ? '!' : Number.isFinite(record?.active?.value) ? `${record.active.value >= 0 ? '+' : ''}${record.active.value.toFixed(1)}` : '-'],
+      ['Reaktif Guc (MVar)', record?.reactive?.valueInvalid ? '!' : Number.isFinite(record?.reactive?.value) ? `${record.reactive.value >= 0 ? '+' : ''}${record.reactive.value.toFixed(1)}` : '-'],
+      [pctLabel, pctValue],
+      ['Akis Yonu', directionText],
+      ['Olcum Zamani', record?.primaryTimestamp ? record.primaryTimestamp.toLocaleTimeString('tr-TR') : '-']
+    ];
+    const detailFields = [
+      ['Hat ID', hat.kmlDescriptionId || '-'],
+      ['YTM', (hat.ytmNames || []).join(' / ') || '-'],
+      ['Hat Kesit', formatKesit(hat.characteristic || '-')],
+      ['Aktif Olcum ID', record?.active?.measurementId || '-'],
+      ['Reaktif Olcum ID', record?.reactive?.measurementId || '-'],
+      ['Veri Durumu', record?.primaryStatusText || '-'],
+      ['Yon Cozumleme', record?.directionResolvedBy || '-'],
+      ['Alias Eslesme', record?.aliasMatchBasis || '-'],
+      ['Formula Sign', Number.isFinite(Number(record?.formulaSign)) ? String(record.formulaSign) : '-'],
+      ['Cozum Yontemi', record?.resolutionMethod || '-'],
+      ['Secim Nedeni', record?.selectedCandidateReason || '-'],
+      ['Terminal Tarafi', record?.terminalSide || '-'],
+      ['Polarizasyon', Number.isFinite(record?.polarizationSign) ? `${record.polarizationSign > 0 ? '+' : ''}${record.polarizationSign}` : '-'],
+      ['Polarizasyon Tutarliligi', record?.polarizationConsistent == null ? '-' : (record.polarizationConsistent ? 'Uyumlu' : 'Uyumsuz')],
+      ['Veri Durumu', record?.timeStateLabel || record?.primaryStatusText || '-'],
+      ['Veri Yasi', record?.ageLabel || '-']
+    ];
+    return {
+      title: hat.name,
+      subtitle: hat.kv ? `${hat.kv} kV Hat` : 'Hat',
+      tags: [(hat.ytmNames || []).join(' / ') || '-'],
+      compactFields,
+      detailFields,
+      detailExtraHtml: `${renderHatMeasurementCard(record)}${renderHatUncertaintyCard(record)}`
+    };
+  }
+
+  openScadaHatDetails = function (hat, options = {}) {
+    if (!hat) return;
+    state.selection = { kind: 'hat', id: hat.id, measureSourceId: '', measureTargetIds: [] };
+    const model = buildHatPopupModel(hat);
+    const anchorCoord = options.anchorCoord || getHatAnchorCoord(hat);
+    const expanded = typeof options.expanded === 'boolean'
+      ? options.expanded
+      : Boolean(state.ui.activeEntityPopup?.expanded && state.ui.activeEntityPopup?.entityId === hat.id);
+
+    showInfo({
+      title: model.title,
+      subtitle: model.subtitle,
+      tags: model.tags,
+      compactFields: model.compactFields,
+      detailFields: model.detailFields,
+      detailExtraHtml: model.detailExtraHtml,
+      actions: [{ id: 'btnShowScadaChart', label: 'Grafik Goster' }],
+      anchor: { hatId: hat.id, coord: anchorCoord },
+      expanded,
+      classes: ['hat-popup']
+    });
+
+    state.ui.activeEntityPopup = {
+      entityType: 'hat',
+      entityId: hat.id,
+      anchorCoord,
+      expanded,
+      screenPosition: null
+    };
+
+    const chartBtn = document.getElementById('btnShowScadaChart');
+    if (chartBtn) chartBtn.addEventListener('click', () => openScada24hHistory(`hat:${hat.id}`));
+    const toggleBtn = document.getElementById('btnToggleInfoDetails');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        openScadaHatDetails(hat, {
+          anchorCoord,
+          expanded: !expanded,
+          forceTiles: false
+        });
+      });
+    }
+
+    requestRender({ forceTiles: Boolean(options.forceTiles) });
   };
 
-  openScada24hHistory = async function (entityKey) {
+
+  function closeScadaChartModal() {
+    const backdrop = document.getElementById('scadaChartModalBackdrop');
+    if (backdrop) backdrop.remove();
+  }
+
+  async function openScada24hHistory(entityKey) {
     closeScadaChartModal();
     const isHat = entityKey.startsWith('hat:');
     const entityId = entityKey.split(':')[1];
@@ -2721,18 +2870,15 @@
     const closeBtn = document.getElementById('btnCloseScadaChart');
     if (closeBtn) closeBtn.addEventListener('click', closeScadaChartModal);
 
-    const mIds = new Set();
-    const entry = state.scada.entityMetricsByKey.get(entityKey);
-    if (entry) {
-      if (entry.supportingMeasurementIds?.length) {
-        entry.supportingMeasurementIds.forEach(id => mIds.add(id));
-      } else if (entry.measurementId) {
-        entry.measurementId.split(',').forEach(id => mIds.add(id));
-      }
-    }
-    
-    if (mIds.size === 0) {
-      document.getElementById('scadaChartModalBody').innerHTML = '<div class="scada-chart-empty">Veri alinamadi <button onclick="openScada24hHistory(\'' + entityKey + '\')">Yenile</button></div>';
+    const activeRows = Array.isArray(hat?.scada?.active?.rows) ? hat.scada.active.rows : [];
+    const measurementIds = [...new Set(
+      activeRows
+        .map(row => String(row.measurementId || '').trim())
+        .filter(Boolean)
+    )];
+
+    if (measurementIds.length === 0) {
+      _renderHistoryError(entityKey);
       return;
     }
 
@@ -2744,7 +2890,8 @@
           dashboardId: SCADA_CONFIG.DASHBOARD_ID,
           chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
           datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-          measurementIds: Array.from(mIds)
+          elementNames: ['P'],
+          measurementIds
         }
       });
 
@@ -2755,21 +2902,22 @@
       const rows = result.data.result[0].data;
       const term1Rows = [];
       const term2Rows = [];
-      
-      const uniqueMIds = Array.from(mIds);
-      const mId1 = uniqueMIds[0];
-      const mId2 = uniqueMIds.length > 1 ? uniqueMIds[1] : null;
+      const mId1 = measurementIds[0];
+      const mId2 = measurementIds.length > 1 ? measurementIds[1] : null;
 
       rows.forEach(row => {
-         const t = new Date(row.__time);
-         t.setHours(t.getHours() + 3);
-         const mw = typeof row.maxValue === 'number' ? row.maxValue : typeof row['MAX(value)'] === 'number' ? row['MAX(value)'] : row.AVG_maxValue;
-         const point = { ts: t, mw: Number(mw) };
-         if (String(row.sinsid) === String(mId1)) {
-            term1Rows.push(point);
-         } else if (mId2 && String(row.sinsid) === String(mId2)) {
-            term2Rows.push(point);
-         }
+        const mw = Number(row.maxValue);
+        if (!Number.isFinite(mw)) return;
+        const t = (typeof SCADA_COMMON !== 'undefined' && SCADA_COMMON.normalizeTimestamp)
+          ? SCADA_COMMON.normalizeTimestamp(row.__time)
+          : new Date(String(row.__time).replace(/Z$/, ''));
+        if (!t || Number.isNaN(t.getTime())) return;
+        const point = { ts: t, mw };
+        if (String(row.sinsid) === String(mId1)) {
+          term1Rows.push(point);
+        } else if (mId2 && String(row.sinsid) === String(mId2)) {
+          term2Rows.push(point);
+        }
       });
 
       term1Rows.sort((a, b) => a.ts - b.ts);
@@ -2777,15 +2925,34 @@
 
       document.getElementById('scadaChartModalBody').innerHTML = buildSuperset24hChart(term1Rows, term2Rows, hat);
     } catch (err) {
-      document.getElementById('scadaChartModalBody').innerHTML = '<div class="scada-chart-empty">Veri alinamadi <button onclick="openScada24hHistory(\'' + entityKey + '\')">Yenile</button></div>';
+      _renderHistoryError(entityKey);
     }
-  };
+  }
+
+  function _renderHistoryError(entityKey) {
+    const body = document.getElementById('scadaChartModalBody');
+    if (!body) return;
+    body.innerHTML = '<div class="scada-chart-empty">Veri alinamadi <button id="btnRetryScadaHistory">Yenile</button></div>';
+    const retryBtn = document.getElementById('btnRetryScadaHistory');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => openScada24hHistory(entityKey));
+    }
+  }
+
+  function _formatHistoryAxisLabel(timeMs) {
+    const d = new Date(timeMs);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const hour = String(d.getHours()).padStart(2, '0');
+    const minute = String(d.getMinutes()).padStart(2, '0');
+    return day + '.' + month + ' ' + hour + ':' + minute;
+  }
 
   function buildSuperset24hChart(term1, term2, hat) {
     if (!term1.length && !term2.length) return '<div class="scada-chart-empty">Grafik icin yeterli gecmis veri yok.</div>';
     const width = 960;
     const height = 360;
-    const padL = 52;
+    const padL = 62;
     const padR = 24;
     const padT = 22;
     const padB = 42;
@@ -2809,7 +2976,9 @@
     const zeroY = toY(0).toFixed(1);
     const capacity = getCapacityMva('hat', hat);
     const capY = Number.isFinite(capacity) ? toY(Math.min(capacity, maxY)).toFixed(1) : null;
-    
+    const startLabel = _formatHistoryAxisLabel(minTime);
+    const endLabel = _formatHistoryAxisLabel(maxTime);
+
     return `
       <div class="scada-history-chart scada-history-chart-large">
         <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" aria-label="scada-hat-grafigi">
@@ -2817,8 +2986,8 @@
           ${capY != null ? `<line x1="${padL}" y1="${capY}" x2="${width - padR}" y2="${capY}" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.75" />` : ''}
           ${t1Pts ? `<polyline points="${t1Pts}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
           ${t2Pts ? `<polyline points="${t2Pts}" fill="none" stroke="#ef4444" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.8" />` : ''}
-          <text x="${padL}" y="${height - 12}" fill="var(--muted)" font-size="12">${new Date(minTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</text>
-          <text x="${width - padR}" y="${height - 12}" fill="var(--muted)" font-size="12" text-anchor="end">${new Date(maxTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</text>
+          <text x="${padL}" y="${height - 12}" fill="var(--muted)" font-size="11">${startLabel}</text>
+          <text x="${width - padR}" y="${height - 12}" fill="var(--muted)" font-size="11" text-anchor="end">${endLabel}</text>
           <text x="${padL - 8}" y="${zeroY - 6}" fill="var(--muted)" font-size="11" text-anchor="end">0</text>
           <text x="${padL - 8}" y="${padT + 6}" fill="var(--muted)" font-size="11" text-anchor="end">${formatAxisNumber(maxAbs)}</text>
           <text x="${padL - 8}" y="${height - padB + 6}" fill="var(--muted)" font-size="11" text-anchor="end">-${formatAxisNumber(maxAbs)}</text>
@@ -2830,7 +2999,6 @@
       </div>
     `;
   }
-
 
   function buildPanelRows() {
     const filter = rankingState.entityFilter;

@@ -424,6 +424,7 @@ async function scadaDoFetch(options = {}) {
       phaseMessage: `${triggerLabel} sorgu icin oturum kontrol ediliyor.`
     });
 
+    const scope = getCurrentScadaScope();
     const result = SCADA_CONFIG.MOCK_ENABLED
       ? await scadaFetchMock()
       : await chrome.runtime.sendMessage({
@@ -436,8 +437,8 @@ async function scadaDoFetch(options = {}) {
           timeRange: SCADA_CONFIG.QUERY_TIME_RANGE,
           kvFilters: SCADA_CONFIG.QUERY_KV_FILTERS,
           tearFilters: SCADA_CONFIG.QUERY_TEAR_FILTERS,
-          elementNames: SCADA_CONFIG.QUERY_ELEMENT_NAMES,
-          measurementIds: getCurrentScadaScope()
+          elementNames: scope.elementNames || SCADA_CONFIG.QUERY_ELEMENT_NAMES,
+          measurementIds: scope.measurementIds
         }
       });
 
