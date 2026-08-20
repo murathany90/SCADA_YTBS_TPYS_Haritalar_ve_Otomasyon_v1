@@ -1837,23 +1837,25 @@ function makeSnapshotRow(id, timeEpochSec, value) {
   return { sinsid: id, __time: timeEpochSec, maxValue: value };
 }
 
-test('filterHistoricalSnapshots keeps newest row per id at-or-before the instant', () => {
+test('filterHistoricalSnapshots keeps newest row per id+element at-or-before the instant', () => {
   const context = loadBackground({ fetch: async () => ({ ok: false, status: 404 }) });
   const at = 1800000000000;
   const rows = [
-    makeSnapshotRow('A', (at - 300000) / 1000, 10),
-    makeSnapshotRow('A', (at - 120000) / 1000, 12),
-    makeSnapshotRow('B', (at - 60000) / 1000, 5),
-    makeSnapshotRow('A', (at + 60000) / 1000, 99),
-    makeSnapshotRow('C', (at - 50000) / 1000, 1)
+    { ...makeSnapshotRow('A', (at - 300000) / 1000, 10), elementName: 'P' },
+    { ...makeSnapshotRow('A', (at - 120000) / 1000, 12), elementName: 'P' },
+    { ...makeSnapshotRow('A', (at - 60000) / 1000, 5), elementName: 'Q' },
+    { ...makeSnapshotRow('B', (at - 60000) / 1000, 7), elementName: 'U' },
+    { ...makeSnapshotRow('A', (at + 60000) / 1000, 99), elementName: 'P' },
+    { ...makeSnapshotRow('C', (at - 50000) / 1000, 1), elementName: 'U' }
   ];
   const result = context.filterHistoricalSnapshots(rows, at, ['A', 'B']);
 
-  assert.equal(result.received, 4);
-  assert.deepEqual([...result.best.keys()], ['A', 'B']);
-  assert.equal(result.best.get('A').ts.getTime(), at - 120000);
-  assert.equal(result.best.get('B').ts.getTime(), at - 60000);
-  assert.equal(result.best.get('C'), undefined);
+  assert.equal(result.received, 5);
+  assert.deepEqual([...result.best.keys()].sort(), ['A|P', 'A|Q', 'B|U']);
+  assert.equal(result.best.get('A|P').ts.getTime(), at - 120000);
+  assert.equal(result.best.get('A|Q').ts.getTime(), at - 60000, 'ayni id icin P ve Q elemanlari birbirini ezmez');
+  assert.equal(result.best.get('B|U').ts.getTime(), at - 60000);
+  assert.equal(result.best.get('C|U'), undefined);
 });
 
 test('handleScadaHistoricalSnapshotFetch rejects missing at without any network call', async () => {
@@ -1917,7 +1919,7 @@ test('handleScadaHistoricalSnapshotFetch fetches short window and reports metada
   assert.match(postedBodies[0], new RegExp(expectedStart.replace('T', 'T')));
 });
 
-test('handleScadaHistoricalSnapshotFetch retries only missing ids with wide window and throttles fallback', async () => {
+test('handleScadaHistoricalSnapshotFetch caches recovered rows; cache hit skips the wide refetch', async () => {
   const at = 1800000000000;
   let postCount = 0;
   const postedBodies = [];
@@ -1929,7 +1931,12 @@ test('handleScadaHistoricalSnapshotFetch retries only missing ids with wide wind
       }
       postCount += 1;
       postedBodies.push(options.body);
-      return { ok: true, status: 200, json: async () => ({ result: [{ data: [] }] }) };
+      if (postCount === 2) {
+        const rows = [makeSnapshotRow('B', (at - 12 * 3600 * 1000) / 1000, 8)];
+        return { ok: true, status: 200, json: async () => ({ result: [{ data: rows }] }) };
+      }
+      const rows = [makeSnapshotRow('A', (at - 120000) / 1000, 12)];
+      return { ok: true, status: 200, json: async () => ({ result: [{ data: rows }] }) };
     }
   });
 
@@ -1945,15 +1952,72 @@ test('handleScadaHistoricalSnapshotFetch retries only missing ids with wide wind
   });
 
   assert.equal(first.ok, true);
-  assert.equal(first.usedFallback, false);
-  assert.deepEqual(first.meta.missingIds, ['A', 'B']);
+  assert.equal(first.usedFallback, true, 'genis pencere B yi kurtarir');
+  assert.equal(first.meta.recoveredViaFallback, true);
+  assert.deepEqual([...first.meta.matchedIds], ['A', 'B']);
+  assert.deepEqual([...first.meta.missingIds], []);
+  assert.equal(first.data.result[0].data.length, 2);
+
   assert.equal(second.ok, true);
-  assert.deepEqual(second.meta.missingIds, ['A', 'B']);
-  assert.equal(postCount, 3);
+  assert.equal(second.usedFallback, true, 'cache hit B yi onbellekten kurtarir');
+  assert.equal(second.meta.recoveredViaFallback, true);
+  assert.deepEqual([...second.meta.missingIds], []);
+  assert.equal(second.data.result[0].data.length, 2);
+  assert.equal(postCount, 3, 'kisa sorgu tekrarlanir ama genis yedek tekrar edilmez');
 
   const ranges = postedBodies.map((body) => JSON.parse(body).queries[0].time_range);
   assert.equal(ranges.length, 3);
-  assert.equal(ranges[0], ranges[2]);
+  assert.equal(ranges[0], ranges[2], 'ikinci cagri ayni kisa pencereyi kullanir');
   assert.notEqual(ranges[1], ranges[0]);
   assert.notEqual(ranges[1], ranges[2]);
+});
+
+test('handleScadaHistoricalSnapshotFetch network failure does not throttle later fallback retry', async () => {
+  const at = 1800000000000;
+  let postCount = 0;
+  const postedBodies = [];
+  const context = loadBackground({
+    fetch: async (url, options = {}) => {
+      if (String(url).includes('scada_auth.json')) return { ok: false, status: 404 };
+      if (String(url).includes('/csrf_token/')) {
+        return { ok: true, status: 200, json: async () => ({ result: 'snapshot-token-3' }) };
+      }
+      postCount += 1;
+      postedBodies.push(options.body);
+      if (postCount === 1) {
+        const rows = [makeSnapshotRow('A', (at - 120000) / 1000, 12)];
+        return { ok: true, status: 200, json: async () => ({ result: [{ data: rows }] }) };
+      }
+      if (postCount === 2) return { ok: false, status: 500, error: 'server error' };
+      const rows = postCount === 4 ? [makeSnapshotRow('B', (at - 12 * 3600 * 1000) / 1000, 8)] : [];
+      return { ok: true, status: 200, json: async () => ({ result: [{ data: rows }] }) };
+    }
+  });
+
+  const first = await context.handleScadaHistoricalSnapshotFetch({
+    at,
+    measurementIds: ['A', 'B'],
+    scopeKey: 'hat-1'
+  });
+
+  assert.equal(first.ok, true, 'kisa pencere basarisi durum raporunu bozmaz');
+  assert.equal(first.usedFallback, false);
+  assert.deepEqual([...first.meta.matchedIds], ['A'], 'kisa pencerede sadece A eslesir');
+  assert.deepEqual([...first.meta.missingIds], ['B']);
+  assert.equal(postCount, 2);
+
+  const second = await context.handleScadaHistoricalSnapshotFetch({
+    at,
+    measurementIds: ['A', 'B'],
+    scopeKey: 'hat-1'
+  });
+
+  assert.equal(second.ok, true);
+  assert.equal(second.usedFallback, true, 'ag hatasi yedek sorguyu throttle etmez');
+  assert.equal(second.meta.recoveredViaFallback, true);
+  assert.deepEqual([...second.meta.missingIds], ['A'], 'yalniz genis pencereden kurtarilan B eslenir');
+  assert.equal(postCount, 4);
+
+  const ranges = postedBodies.map((body) => JSON.parse(body).queries[0].time_range);
+  assert.equal(ranges[1], ranges[3], 'basarisiz genis sorgu sonraki cagrida tekrar denenir');
 });

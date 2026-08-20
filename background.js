@@ -3791,10 +3791,38 @@ async function handleScadaHistoryFetch(payload) {
   return executeAuthWrapper(authConfig, historyPayload, timeoutMs);
 }
 
-const historicalSnapshotFallbackAt = new Map();
+const FALLBACK_THROTTLE_MS = 5 * 60 * 1000;
+const FALLBACK_CACHE_TTL_MS = 10 * 60 * 1000;
+const FALLBACK_TIME_BUCKET_MS = 5 * 60 * 1000;
+const historicalSnapshotFallbackCache = new Map();        // key -> { fetchedAt, recovered: Map }
+const historicalSnapshotFallbackBlockedUntil = new Map();  // key -> timestamp (never set by network errors)
+
+function fnv1aHash(text) {
+  let hash = 2166136261;
+  for (let i = 0; i < String(text).length; i += 1) {
+    hash ^= String(text).charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+// Fallback wide-window retries are keyed by scope + selected time bucket +
+// missing id set hash, so different scopes, instants or id sets never share
+// throttle/cache state.
+function buildHistoricalFallbackKey(payload, atMs, missingIds) {
+  const scopeKey = String(payload?.scopeKey || payload?.filterKey || 'default');
+  const bucket = Math.floor(Number(atMs) / FALLBACK_TIME_BUCKET_MS);
+  const idsHash = fnv1aHash([...missingIds].map(String).sort().join('\u0001'));
+  return `${scopeKey}|${bucket}|${idsHash}`;
+}
+
+function snapshotCompositeKeyMeasurementId(compositeKey) {
+  return String(compositeKey).split('|')[0];
+}
 
 // Pure helper: keeps only rows at or before `atMs` and the newest one per
-// requested measurement id. Never accepts data after the selected instant.
+// measurement id + element pair. Never accepts data after the selected instant.
+// P/Q/U rows sharing a measurement id never overwrite each other.
 function filterHistoricalSnapshots(rows, atMs, requestedIds) {
   const inputRows = Array.isArray(rows) ? rows : [];
   const requested = new Set((requestedIds || []).map(String));
@@ -3804,6 +3832,7 @@ function filterHistoricalSnapshots(rows, atMs, requestedIds) {
     const id = String(row?.sinsid || row?.measurementId || '').trim();
     if (!id) continue;
     if (requested.size && !requested.has(id)) continue;
+    const elementName = String(row?.elementName ?? row?.el_x ?? '').trim();
     let parsed = null;
     if (globalThis.SCADA_COMMON?.resolveHistoryTimestamp) {
       parsed = globalThis.SCADA_COMMON.resolveHistoryTimestamp(row);
@@ -3816,9 +3845,10 @@ function filterHistoricalSnapshots(rows, atMs, requestedIds) {
     }
     received += 1;
     if (parsed.getTime() > Number(atMs)) continue;
-    const found = best.get(id);
+    const key = `${id}|${elementName}`;
+    const found = best.get(key);
     if (!found || found.ts.getTime() < parsed.getTime()) {
-      best.set(id, { ts: parsed, row });
+      best.set(key, { ts: parsed, row });
     }
   }
   return { best, received };
@@ -3911,37 +3941,55 @@ async function handleScadaHistoricalSnapshotFetch(payload) {
 
   const requestedIds = new Set(mIds);
   const primary = filterHistoricalSnapshots(allRows, at, mIds);
+  let matchedIds = [...new Set([...primary.best.keys()].map(snapshotCompositeKeyMeasurementId))];
+  let missingIds = mIds.filter((id) => !matchedIds.includes(id));
 
   let recoveredViaFallback = false;
-  if (mIds.length) {
-    const missingIds = mIds.filter((id) => !primary.best.has(id));
-    const scopeKey = String(payload?.scopeKey || payload?.filterKey || 'default');
-    const lastFallbackAt = historicalSnapshotFallbackAt.get(scopeKey) || 0;
-    if (missingIds.length && Date.now() - lastFallbackAt >= 5 * 60 * 1000) {
-      try {
-        const wideRange = buildSnapshotRange(at - 24 * 3600 * 1000, at);
-        const fallbackResult = await executeAuthWrapper(authConfig, buildChunkPayload(missingIds, wideRange), timeoutMs);
-        if (fallbackResult.ok) {
-          const rows = globalThis.SCADA_COMMON?.findDataArray
-            ? globalThis.SCADA_COMMON.findDataArray(fallbackResult.data)
-            : [];
-          const recovered = filterHistoricalSnapshots(rows, at, missingIds);
-          let added = 0;
-          recovered.best.forEach((entry, id) => {
-            if (!primary.best.has(id)) {
-              primary.best.set(id, entry);
-              added += 1;
-            }
-          });
-          if (added === 0) historicalSnapshotFallbackAt.set(scopeKey, Date.now());
-          recoveredViaFallback = added > 0;
+  if (mIds.length && missingIds.length) {
+    const fallbackKey = buildHistoricalFallbackKey(payload, at, missingIds);
+    const now = Date.now();
+    const cached = historicalSnapshotFallbackCache.get(fallbackKey);
+    if (cached && now - cached.fetchedAt < FALLBACK_CACHE_TTL_MS) {
+      let added = 0;
+      cached.recovered.forEach((entry, key) => {
+        if (!primary.best.has(key)) {
+          primary.best.set(key, entry);
+          added += 1;
         }
-      } catch (fallbackError) {
-        lastError = fallbackError?.message || String(fallbackError);
-        lastErrorType = 'NETWORK_ERROR';
+      });
+      recoveredViaFallback = added > 0;
+    } else {
+      const blockedUntil = historicalSnapshotFallbackBlockedUntil.get(fallbackKey) || 0;
+      if (now >= blockedUntil) {
+        try {
+          const wideRange = buildSnapshotRange(at - 24 * 3600 * 1000, at);
+          const fallbackResult = await executeAuthWrapper(authConfig, buildChunkPayload(missingIds, wideRange), timeoutMs);
+          if (fallbackResult.ok) {
+            const rows = globalThis.SCADA_COMMON?.findDataArray
+              ? globalThis.SCADA_COMMON.findDataArray(fallbackResult.data)
+              : [];
+            const recovered = filterHistoricalSnapshots(rows, at, missingIds);
+            let added = 0;
+            recovered.best.forEach((entry, key) => {
+              if (!primary.best.has(key)) {
+                primary.best.set(key, entry);
+                added += 1;
+              }
+            });
+            historicalSnapshotFallbackBlockedUntil.set(fallbackKey, now + FALLBACK_THROTTLE_MS);
+            historicalSnapshotFallbackCache.set(fallbackKey, { fetchedAt: now, recovered: recovered.best });
+            recoveredViaFallback = added > 0;
+          }
+        } catch (fallbackError) {
+          lastError = fallbackError?.message || String(fallbackError);
+          lastErrorType = 'NETWORK_ERROR';
+        }
       }
     }
   }
+
+  matchedIds = [...new Set([...primary.best.keys()].map(snapshotCompositeKeyMeasurementId))];
+  missingIds = mIds.filter((id) => !matchedIds.includes(id));
 
   const rows = [];
   primary.best.forEach((entry) => rows.push(entry.row));
@@ -3954,8 +4002,8 @@ async function handleScadaHistoricalSnapshotFetch(payload) {
     meta: {
       at,
       requestedIds: [...requestedIds],
-      matchedIds: [...primary.best.keys()],
-      missingIds: mIds.filter((id) => !primary.best.has(id)),
+      matchedIds,
+      missingIds,
       windowStartMs: at - shortWindowMs,
       windowEndMs: at,
       receivedRows: primary.received,

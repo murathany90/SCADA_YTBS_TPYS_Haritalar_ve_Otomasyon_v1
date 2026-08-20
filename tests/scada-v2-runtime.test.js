@@ -73,6 +73,8 @@ function loadRuntime() {
     countScadaTransportRows: () => 0,
     updateScadaTransportState: () => {},
     scadaFetchMock: async () => ({ ok: true, data: {} }),
+    setTimeout: () => 0,
+    clearTimeout: () => {},
     chrome: { runtime: { sendMessage: async () => ({ ok: false }) } },
     getFlowColor: (value) => value > 80 ? '#7c3aed' : value > 55 ? '#f97316' : '#22c55e',
     getFlowWidth: () => 2,
@@ -937,4 +939,100 @@ test('history parser duplicate timestamp is not counted as 2 points', () => {
   }
   
   assert.equal(maxPoints, 1);
+});
+
+test('buildHistoryCapacitySeries pairs P and Q series into |S| apparent power', () => {
+  const context = loadRuntime();
+  const { buildHistoryCapacitySeries } = context.__SCADA_V2_TEST_HOOKS__;
+  const base = Date.UTC(2026, 4, 1, 8, 0, 0);
+  const makeSeries = (pairing, elementName, values) => ({
+    seriesId: `s:${pairing}`,
+    pairing,
+    elementName,
+    points: values.map((value, index) => ({ ts: new Date(base + index * 60000), value }))
+  });
+
+  const series = [
+    makeSeries('h:TM-A>>TM-B', 'P', [3, 4, 0]),
+    makeSeries('h:TM-A>>TM-B', 'Q', [4, 0, 2]),
+    makeSeries('h:TM-C>>TM-D', 'P', [1])
+  ];
+
+  const output = buildHistoryCapacitySeries(series);
+  assert.equal(output.length, 1, 'yalniz P+Q ikilisi olan eslesme |S| serisi uretir');
+  const s = output[0];
+  assert.equal(s.metricType, 'capacity');
+  assert.equal(s.elementName, 'S');
+  assert.equal(s.points.length, 3);
+  assert.equal(s.points[0].value, 5, 'sqrt(3^2+4^2)=5');
+  assert.equal(s.points[1].value, 4, 'single nonzero leg yields |value|');
+  assert.equal(s.points[2].value, 2, 'single nonzero leg yields |value|');
+});
+
+test('buildHistoryRealLimits reflects measured min/max only on positive scales', () => {
+  const context = loadRuntime();
+  const { buildHistoryRealLimits } = context.__SCADA_V2_TEST_HOOKS__;
+  const t0 = Date.UTC(2026, 4, 1, 8, 0, 0);
+  const refs = buildHistoryRealLimits([
+    { points: [
+      { ts: new Date(t0), value: 0.98 },
+      { ts: new Date(t0 + 60000), value: 1.04 }
+    ] }
+  ]);
+  assert.equal(refs.length, 2);
+  assert.equal(refs[0].value, 0.98);
+  assert.equal(refs[1].value, 1.04);
+  assert.match(refs[0].label, /gercek min/);
+  assert.match(refs[1].label, /gercek max/);
+  assert.equal(buildHistoryRealLimits([]).length, 0);
+});
+
+test('resolveHistoricalRangeBounds clamps future end and falls back to a 7-day window', () => {
+  const context = loadRuntime();
+  const { resolveHistoricalRangeBounds } = context.__SCADA_V2_TEST_HOOKS__;
+  const now = Date.UTC(2026, 4, 1, 8, 0, 0);
+
+  const missing = resolveHistoricalRangeBounds('', '', now);
+  assert.equal(missing.endMs, now);
+  assert.equal(missing.startMs, now - 7 * 24 * 3600 * 1000);
+
+  const futureEnd = resolveHistoricalRangeBounds(
+    '2026-04-20T08:00',
+    '2026-06-01T08:00',
+    now
+  );
+  assert.equal(futureEnd.endMs, now, 'gelecekteki bitis simdiki ana sabitlenir');
+  assert.equal(futureEnd.startMs, new Date('2026-04-20T08:00').getTime());
+});
+
+test('Canliya don restores last live snapshot instantly and triggers one live fetch', async () => {
+  const context = loadRuntime();
+  const { setScadaTimeMode } = context.__SCADA_V2_TEST_HOOKS__;
+  const statuses = [];
+  let liveFetchTrigger = null;
+
+  context.setScadaStatusMessage = (message, tone) => statuses.push({ message, tone });
+  context.scadaDoFetch = async (options = {}) => {
+    liveFetchTrigger = options.trigger;
+    return { ok: true };
+  };
+
+  context.state.scada.enabled = true;
+  context.state.scada.autoRefresh = true;
+  context.state.scada.measurementRowsById = new Map([['m-1', { measurementId: 'm-1', value: 42 }]]);
+  context.state.scada.lastLiveSnapshot = new Map([['m-1', { measurementId: 'm-1', value: 42 }]]);
+  context.state.scada.timeMode = 'historical';
+  context.state.scada.historicalAt = Date.now() - 3600000;
+
+  await setScadaTimeMode('live');
+
+  assert.equal(context.state.scada.timeMode, 'live');
+  assert.equal(context.state.scada.historicalAt, null);
+  assert.equal(context.state.scada.lastLiveSnapshot, null, 'canli anlik goruntusun sonrasi serbest birakilir');
+  assert.equal(context.state.scada.measurementRowsById.get('m-1').value, 42, 'son canli veri aninda geri yuklenir');
+  assert.equal(context.state.scada.sourceKind, 'live');
+  assert.equal(liveFetchTrigger, 'live-return', 'donus aninda tek canli sorgu tetiklenir');
+  assert.equal(context.state.scada.pollState.nextDueAt instanceof Date, true, 'polling zamanlayicisi yeniden baslatilir');
+  assert.equal(context.state.scada.pollState.pendingAutoRefresh, false);
+  assert.equal(statuses.at(-1)?.tone, 'info');
 });

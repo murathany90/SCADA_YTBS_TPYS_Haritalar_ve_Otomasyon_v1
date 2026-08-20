@@ -494,6 +494,7 @@
     switch (triggerType) {
       case 'manual': return 'Manuel';
       case 'auto': return 'Otomatik';
+      case 'live-return': return 'Canliya donus';
       case 'layer-enable': return 'Katman';
       case 'mode-change': return 'Mod';
       case 'filter-change': return 'Filtre';
@@ -2087,7 +2088,7 @@
       return;
     }
 
-    if (triggerType === 'manual' && isDocumentHidden()) {
+    if ((triggerType === 'manual' || triggerType === 'live-return') && isDocumentHidden()) {
       const hiddenMessage = 'SCADA manuel yenileme sekme arka plandayken ertelendi. Sekmeye donup tekrar deneyin.';
       updateScadaFetchMeta({
         status: 'idle',
@@ -3280,6 +3281,7 @@ function _formatHistoryAxisLabel(timestampMs) {
     active: '#22c55e',
     reactive: '#ef4444',
     voltage: '#38bdf8',
+    capacity: '#a78bfa',
     fallback: '#f59e0b'
   };
 
@@ -3287,6 +3289,77 @@ function _formatHistoryAxisLabel(timestampMs) {
 
   function historyPlotValue(paneMode, value) {
     return paneMode === 'abs' ? Math.abs(value) : value;
+  }
+
+  function formatAxisNumber(value) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return '';
+    return numberValue.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+  }
+
+  // Pairs P and Q series of the same entity and builds apparent power
+  // |S| = sqrt(P^2 + Q^2) at timestamps where both magnitudes are present.
+  // MVA capacity is only ever compared against this scale, never the MW axis.
+  function buildHistoryCapacitySeries(chartSeries) {
+    const pairs = new Map();
+    (chartSeries || []).forEach((series) => {
+      const pairing = series?.pairing;
+      if (!pairing) return;
+      if (series.elementName === 'P' || series.metricType === 'active') {
+        if (!pairs.has(pairing)) pairs.set(pairing, {});
+        pairs.get(pairing).active = series;
+      } else if (series.elementName === 'Q' || series.metricType === 'reactive') {
+        if (!pairs.has(pairing)) pairs.set(pairing, {});
+        pairs.get(pairing).reactive = series;
+      }
+    });
+    const output = [];
+    pairs.forEach((pair, pairing) => {
+      if (!pair.active || !pair.reactive) return;
+      const activeByTime = new Map(pair.active.points.map((point) => [point.ts.getTime(), point.value]));
+      const reactiveByTime = new Map(pair.reactive.points.map((point) => [point.ts.getTime(), point.value]));
+      const times = [...new Set([...activeByTime.keys(), ...reactiveByTime.keys()])].sort((a, b) => a - b);
+      const points = [];
+      times.forEach((timeMs) => {
+        const active = activeByTime.get(timeMs);
+        const reactive = reactiveByTime.get(timeMs);
+        if (!Number.isFinite(active) || !Number.isFinite(reactive)) return;
+        points.push({ ts: new Date(timeMs), value: Math.hypot(active, reactive) });
+      });
+      if (!points.length) return;
+      output.push({
+        seriesId: `s:${pairing}`,
+        measurementId: pair.active.measurementId || pairing,
+        elementName: 'S',
+        metricType: 'capacity',
+        unit: 'MVA',
+        pairing,
+        points,
+        terminals: pair.active.terminals || []
+      });
+    });
+    return output;
+  }
+
+  // Real operating band for positive-scale panes: measured min and max of the
+  // visible samples, so the voltage Y axis stays positive/automatic while the
+  // nominal and actual limits are visible.
+  function buildHistoryRealLimits(series) {
+    let minValue = Infinity;
+    let maxValue = -Infinity;
+    (series || []).forEach((item) => {
+      (item.points || []).forEach((point) => {
+        if (!Number.isFinite(point.value)) return;
+        if (point.value < minValue) minValue = point.value;
+        if (point.value > maxValue) maxValue = point.value;
+      });
+    });
+    const refs = [];
+    if (Number.isFinite(minValue) && Number.isFinite(maxValue) && minValue < maxValue) {
+      refs.push({ value: minValue, label: `${formatAxisNumber(minValue)} kV gercek min` });
+      refs.push({ value: maxValue, label: `${formatAxisNumber(maxValue)} kV gercek max` });
+    }
+    return refs;
   }
 
   function buildHistoryCacheKey(elementNames, measurementIds, range, strategy) {
@@ -3484,7 +3557,10 @@ function _formatHistoryAxisLabel(timestampMs) {
         label = `${series.elementName || 'Olcum'}${index > 1 ? `-${index}` : ''}`;
       }
       if (index > 1 && entityType !== 'trafo') label = `${label} #${index}`;
-      return { ...series, label };
+      const pairing = entityType === 'hat'
+        ? `h:${series.terminals?.[0] || ''}>>${series.terminals?.[1] || ''}`
+        : (entityType === 'trafo' ? `t:${index}` : 'b:u');
+      return { ...series, label, pairing };
     });
 
     const isDual = entityType === 'hat' || entityType === 'trafo';
@@ -3495,19 +3571,6 @@ function _formatHistoryAxisLabel(timestampMs) {
     const padB = 34;
     const paneGap = 16;
     const paneHeight = 232;
-    const totalHeight = padT + paneHeight * (isDual ? 2 : 1) + paneGap * (isDual ? 1 : 0) + padB;
-
-    const allTimes = chartSeries.flatMap((series) => series.points.map((point) => point.ts.getTime()));
-    const fullStartMs = Math.min(...allTimes);
-    const fullEndMs = Math.max(...allTimes);
-    let viewStartMs = fullStartMs;
-    let viewEndMs = fullEndMs;
-    const hidden = new Set();
-    let hoverTimeMs = null;
-    let dragging = false;
-    let dragStartClientX = 0;
-    let dragStartViewMs = 0;
-    let redrawQueued = false;
 
     const panes = [];
     if (isDual) {
@@ -3529,17 +3592,27 @@ function _formatHistoryAxisLabel(timestampMs) {
       });
       const capacity = getCapacityMva(entityType, entity);
       if (Number.isFinite(capacity) && capacity > 0) {
-        panes[0].refLines.push({
-          value: capacity,
-          label: `${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA kapasite`
-        });
+        const sSeries = buildHistoryCapacitySeries(chartSeries);
+        if (sSeries.length) {
+          panes.push({
+            key: 'capacity',
+            title: 'Gorunen guc (|S| MVA)',
+            unit: 'MVA',
+            mode: 'abs',
+            seriesGroup: sSeries,
+            refLines: [{
+              value: capacity,
+              label: `${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA kapasite`
+            }]
+          });
+        }
       }
     } else {
       panes.push({
         key: 'voltage',
         title: 'Gerilim (kV)',
         unit: 'kV',
-        mode: 'signed-zero',
+        mode: 'positive',
         seriesGroup: chartSeries,
         refLines: []
       });
@@ -3550,7 +3623,22 @@ function _formatHistoryAxisLabel(timestampMs) {
           label: `${nominal} kV nominal`
         });
       }
+      buildHistoryRealLimits(chartSeries).forEach((limit) => panes[0].refLines.push(limit));
     }
+
+    const totalHeight = padT + paneHeight * panes.length + paneGap * (panes.length ? panes.length - 1 : 0) + padB;
+
+    const allTimes = chartSeries.flatMap((series) => series.points.map((point) => point.ts.getTime()));
+    const fullStartMs = Math.min(...allTimes);
+    const fullEndMs = Math.max(...allTimes);
+    let viewStartMs = fullStartMs;
+    let viewEndMs = fullEndMs;
+    const hidden = new Set();
+    let hoverTimeMs = null;
+    let dragging = false;
+    let dragStartClientX = 0;
+    let dragStartViewMs = 0;
+    let redrawQueued = false;
 
     const svgNamespace = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNamespace, 'svg');
@@ -3585,7 +3673,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         if (Number.isFinite(ref.value) && Math.abs(ref.value) > maxAbs) maxAbs = Math.abs(ref.value);
       });
       maxAbs *= 1.12;
-      if (pane.mode === 'abs') return { minY: 0, maxY: maxAbs };
+      if (pane.mode === 'abs' || pane.mode === 'positive') return { minY: 0, maxY: maxAbs };
       return { minY: -maxAbs, maxY: maxAbs };
     }
 
@@ -5232,6 +5320,67 @@ function _formatHistoryAxisLabel(timestampMs) {
     return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
+  const HISTORICAL_SCRUB_DEBOUNCE_MS = 300;
+
+  // Selected date range defines the slider travel. Missing/invalid edges fall
+  // back to a 7-day window ending now; future ends are clamped to now.
+  function resolveHistoricalRangeBounds(startValue, endValue, nowMs) {
+    const now = Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now();
+    const parseValue = (value) => {
+      if (value == null || value === '') return NaN;
+      const parsed = new Date(String(value)).getTime();
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+    const rawEnd = Number.isFinite(parseValue(endValue)) ? parseValue(endValue) : now;
+    const endMs = Math.min(rawEnd, now);
+    const rawStart = Number.isFinite(parseValue(startValue)) ? parseValue(startValue) : endMs - 7 * 24 * 3600 * 1000;
+    const startMs = Math.min(rawStart, endMs - 60 * 1000);
+    if (startMs >= endMs) return { startMs: endMs - 24 * 3600 * 1000, endMs };
+    return { startMs, endMs };
+  }
+
+  // Debounced snapshot query (250-400 ms) so scrubbing never spams the API;
+  // a released scrubber (change/pointerup) or committed datetime flushes
+  // immediately. setScadaTimeMode deduplicates identical instants.
+  function scheduleHistoricalSnapshotQuery(atMs, options = {}) {
+    const targetMs = Number(atMs);
+    if (!Number.isFinite(targetMs)) return;
+    if (state.scada.timeMode !== 'historical') return;
+    if (state.scada.historicalScrubTimer != null) {
+      if (typeof clearTimeout === 'function') clearTimeout(state.scada.historicalScrubTimer);
+      state.scada.historicalScrubTimer = null;
+    }
+    const run = () => {
+      state.scada.historicalScrubTimer = null;
+      if (state.scada.timeMode !== 'historical') return;
+      setScadaTimeMode('historical', targetMs);
+    };
+    const delay = options.immediate ? 0 : HISTORICAL_SCRUB_DEBOUNCE_MS;
+    if (typeof setTimeout !== 'function' || delay <= 0) {
+      run();
+      return;
+    }
+    state.scada.historicalScrubTimer = setTimeout(run, delay);
+  }
+
+  function syncHistoricalTimeSlider() {
+    const slider = document.getElementById('scadaHistoricalTimeSlider');
+    if (!slider) return;
+    const bounds = resolveHistoricalRangeBounds(
+      document.getElementById('scadaHistoryRangeStart')?.value,
+      document.getElementById('scadaHistoryRangeEnd')?.value
+    );
+    const atMs = Number(state.scada.historicalAt) || bounds.endMs;
+    const clamped = Math.max(bounds.startMs, Math.min(bounds.endMs, atMs));
+    slider.min = String(bounds.startMs);
+    slider.max = String(bounds.endMs);
+    slider.step = '60';
+    slider.value = String(clamped);
+    const atInput = document.getElementById('scadaHistoricalAtInput');
+    const isFocused = typeof document.activeElement !== 'undefined' && document.activeElement === atInput;
+    if (atInput && !isFocused) atInput.value = formatDateTimeLocalInput(clamped);
+  }
+
   function syncScadaTimeControls() {
     const historical = state.scada.timeMode === 'historical';
     const modeButtons = Array.from(document.querySelectorAll('[data-scada-time]'));
@@ -5241,6 +5390,7 @@ function _formatHistoryAxisLabel(timestampMs) {
     });
     const controls = document.getElementById('scadaHistoricalControls');
     if (controls) controls.classList.toggle('hidden', !historical);
+    syncHistoricalTimeSlider();
     updateScadaTimeBadge();
   }
 
@@ -5346,10 +5496,13 @@ function _formatHistoryAxisLabel(timestampMs) {
         if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender();
         if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
         if (typeof refreshRankingTable === 'function') refreshRankingTable();
+        setScadaStatusMessage('Canli moda donuldu; en son canli veri aninda gosteriliyor.', 'info');
+      } else {
+        setScadaStatusMessage('Canli moda donuldu; canli veri yenileniyor.', 'info');
       }
-      if (state.scada.enabled && state.scada.autoRefresh) startScadaAutoScheduler();
       syncScadaTimeControls();
-      setScadaStatusMessage('Canli moda donuldu; zamanlayici yeniden baslatildi.', 'info');
+      await scadaDoFetch({ trigger: 'live-return' });
+      if (state.scada.enabled && state.scada.autoRefresh) startScadaAutoScheduler();
     }
   }
 
@@ -5395,7 +5548,60 @@ function _formatHistoryAxisLabel(timestampMs) {
     if (atInput && !atInput.dataset.boundTime) {
       atInput.dataset.boundTime = '1';
       atInput.value = formatDateTimeLocalInput(state.scada.historicalAt || Date.now());
+      atInput.addEventListener('change', () => {
+        const atMs = atInput.value ? new Date(atInput.value).getTime() : NaN;
+        if (!Number.isFinite(atMs)) {
+          setScadaStatusMessage('Gecersiz gecmis zaman secimi.', 'warn');
+          syncScadaTimeControls();
+          return;
+        }
+        setScadaTimeMode('historical', atMs);
+      });
     }
+    const nowMs = Date.now();
+    const rangeStartInput = document.getElementById('scadaHistoryRangeStart');
+    if (rangeStartInput && !rangeStartInput.value) {
+      rangeStartInput.value = formatDateTimeLocalInput(nowMs - 7 * 24 * 3600 * 1000);
+    }
+    const rangeEndInput = document.getElementById('scadaHistoryRangeEnd');
+    if (rangeEndInput && !rangeEndInput.value) {
+      rangeEndInput.value = formatDateTimeLocalInput(nowMs);
+    }
+    const slider = document.getElementById('scadaHistoricalTimeSlider');
+    if (slider && !slider.dataset.boundTime) {
+      slider.dataset.boundTime = '1';
+      const updateAtInputFromSlider = () => {
+        if (!atInput) return;
+        const valueMs = Number(slider.value);
+        if (Number.isFinite(valueMs)) atInput.value = formatDateTimeLocalInput(valueMs);
+      };
+      slider.addEventListener('input', () => {
+        const valueMs = Number(slider.value);
+        if (!Number.isFinite(valueMs)) return;
+        updateAtInputFromSlider();
+        scheduleHistoricalSnapshotQuery(valueMs);
+      });
+      slider.addEventListener('pointerup', () => {
+        const valueMs = Number(slider.value);
+        if (!Number.isFinite(valueMs)) return;
+        scheduleHistoricalSnapshotQuery(valueMs, { immediate: true });
+      });
+      slider.addEventListener('change', () => {
+        const valueMs = Number(slider.value);
+        if (!Number.isFinite(valueMs)) return;
+        scheduleHistoricalSnapshotQuery(valueMs, { immediate: true });
+      });
+    }
+    ['scadaHistoryRangeStart', 'scadaHistoryRangeEnd'].forEach((rangeId) => {
+      const rangeInput = document.getElementById(rangeId);
+      if (!rangeInput || rangeInput.dataset.boundTime) return;
+      rangeInput.dataset.boundTime = '1';
+      rangeInput.addEventListener('change', () => {
+        syncHistoricalTimeSlider();
+        const valueMs = Number(slider?.value);
+        if (slider && Number.isFinite(valueMs)) scheduleHistoricalSnapshotQuery(valueMs, { immediate: true });
+      });
+    });
     syncScadaTimeControls();
   }
 
@@ -5452,6 +5658,11 @@ function _formatHistoryAxisLabel(timestampMs) {
       buildHistoryEmptyReason,
       buildHistoryCacheKey,
       historyPlotValue,
+      buildHistoryCapacitySeries,
+      buildHistoryRealLimits,
+      resolveHistoricalRangeBounds,
+      scheduleHistoricalSnapshotQuery: typeof scheduleHistoricalSnapshotQuery === 'function' ? scheduleHistoricalSnapshotQuery : undefined,
+      syncHistoricalTimeSlider: typeof syncHistoricalTimeSlider === 'function' ? syncHistoricalTimeSlider : undefined,
       setScadaTimeMode,
       applyScreenDeclutter: typeof applyScreenDeclutter === 'function' ? applyScreenDeclutter : undefined,
       selectActiveVoltagePerTmLevel: typeof selectActiveVoltagePerTmLevel === 'function' ? selectActiveVoltagePerTmLevel : undefined

@@ -141,11 +141,23 @@
                 <button class="segmented-btn" data-scada-time="historical">GEÇMİŞ</button>
               </div>
               <div id="scadaHistoricalControls" class="scada-historical-controls hidden">
-                <input type="datetime-local" id="scadaHistoricalAtInput" step="60"
-                  title="Geçmiş harita için tarih ve saat">
-                <div class="scada-historical-actions">
-                  <button id="btnScadaHistoricalShow" class="tiny">Haritada Göster</button>
-                  <button id="btnScadaHistoricalLive" class="tiny">Canlıya Dön</button>
+                <div class="scada-historical-row">
+                  <label class="scada-historical-label" for="scadaHistoryRangeStart">Aralık başlangıcı</label>
+                  <input type="datetime-local" id="scadaHistoryRangeStart" step="60">
+                  <label class="scada-historical-label" for="scadaHistoryRangeEnd">bitişi</label>
+                  <input type="datetime-local" id="scadaHistoryRangeEnd" step="60">
+                </div>
+                <div class="scada-historical-row">
+                  <input type="range" id="scadaHistoricalTimeSlider" min="0" max="1" step="60"
+                    title="Seçili zaman, kaydırıcı ile taranabilir">
+                </div>
+                <div class="scada-historical-row">
+                  <input type="datetime-local" id="scadaHistoricalAtInput" step="60"
+                    title="Geçmiş harita için tarih ve saat">
+                  <div class="scada-historical-actions">
+                    <button id="btnScadaHistoricalShow" class="tiny">Haritada Göster</button>
+                    <button id="btnScadaHistoricalLive" class="tiny">Canlıya Dön</button>
+                  </div>
                 </div>
               </div>
             </div>
