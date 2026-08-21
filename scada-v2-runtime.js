@@ -504,14 +504,17 @@
     if (typeof requestRender === 'function') requestRender();
   }
 
-  requestScadaOverlayRender = function () {
+  requestScadaOverlayRender = function (options = {}) {
+    const styleOnly = options?.styleOnly === true;
     if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
     if (typeof renderFlowLayer === 'function') renderFlowLayer();
-    if (typeof renderHatLayer === 'function') renderHatLayer();
-    if (typeof renderTmLayer === 'function') renderTmLayer();
-    if (typeof renderBaraLayer === 'function') renderBaraLayer();
-    if (typeof renderBaraSetLayer === 'function') renderBaraSetLayer();
-    if (typeof renderMeasureLayer === 'function') renderMeasureLayer();
+    if (!styleOnly) {
+      if (typeof renderHatLayer === 'function') renderHatLayer();
+      if (typeof renderTmLayer === 'function') renderTmLayer();
+      if (typeof renderBaraLayer === 'function') renderBaraLayer();
+      if (typeof renderBaraSetLayer === 'function') renderBaraSetLayer();
+      if (typeof renderMeasureLayer === 'function') renderMeasureLayer();
+    }
     if (typeof updateSummary === 'function') updateSummary();
     if (typeof syncInfoCardPosition === 'function') syncInfoCardPosition();
   };
@@ -2640,6 +2643,8 @@
       state.scada.lastFetchAt = new Date();
       state.scada.sourceKind = 'live';
       state.scada.snapshotAt = null;
+      // Style-only render: update flow arrows and SCADA card without full geometry rebuild
+      if (typeof requestScadaOverlayRender === 'function') requestScadaOverlayRender({ styleOnly: true });
       setScadaOperationMeta({
         stage: 'done',
         progressPct: 100,
