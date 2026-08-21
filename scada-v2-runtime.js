@@ -2056,11 +2056,20 @@
       const scope = state.scada.currentScope || getCurrentScadaScope();
       const snapshot = serializeScadaDashboardSnapshot(options);
       await chrome.storage.local.set({ [SCADA_DASHBOARD_SNAPSHOT_KEY]: snapshot });
+      // Store only minimal metadata for background refresh - no entities/geometry
+      const backgroundRefreshScope = {
+        mode: scope.mode,
+        filterKey: scope.filterKey,
+        domain: scope.domain,
+        primaryMetric: scope.primaryMetric,
+        measurementIds: scope.measurementIds,
+        elementNames: scope.elementNames
+      };
       await chrome.storage.local.set({
         [SCADA_BACKGROUND_REFRESH_STATE_KEY]: {
           enabled: true,
           updatedAt: Date.now(),
-          scope,
+          scope: backgroundRefreshScope,
           payload: {
             baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
             dashboardId: SCADA_CONFIG.DASHBOARD_ID,
