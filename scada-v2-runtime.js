@@ -3790,13 +3790,21 @@ function _formatHistoryAxisLabel(timestampMs) {
   function resolveHatTerminalVoltageBara(entity) {
     const baras = Array.isArray(state.network?.baraNodes) ? state.network.baraNodes : [];
     const hatKv = String(entity?.kv || entity?.primaryKv || '').trim();
-    const findBara = (tmName) => {
-      if (!tmName) return null;
+    const findBara = (tmName, explicitBaraId) => {
+      if (explicitBaraId) {
+        const exact = baras.find(b => String(b.id) === String(explicitBaraId));
+        if (exact) return { bara: exact, quality: 'exact' };
+      }
+      if (!tmName) return { bara: null, quality: 'none' };
       const tm = String(tmName).trim();
-      return baras.find((b) => String(b.tmName || '').trim() === tm && String(b.kvBucket || b.gerilimKv || '') === hatKv)
-        || baras.find((b) => String(b.tmName || '').trim() === tm) || null;
+      const matches = baras.filter((b) => String(b.tmName || '').trim() === tm && String(b.kvBucket || b.gerilimKv || '') === hatKv);
+      if (matches.length === 1) return { bara: matches[0], quality: 'tm-kv' };
+      return { bara: null, quality: 'none' };
     };
-    return { startBara: findBara(entity?.startTm), endBara: findBara(entity?.endTm) };
+    return {
+      startMatch: findBara(entity?.startTm, entity?.startBaraId || entity?.startNodeId),
+      endMatch: findBara(entity?.endTm, entity?.endBaraId || entity?.endNodeId)
+    };
   }
 
   // Fetches terminal voltage history for hat from bara measurement IDs.
@@ -3805,55 +3813,89 @@ function _formatHistoryAxisLabel(timestampMs) {
     if (typeof SCADA_COMMON === 'undefined' || !SCADA_COMMON.resolveHistoryMetricsByEntity) {
       return { series: [], nominal: true };
     }
-    const { startBara, endBara } = resolveHatTerminalVoltageBara(entity);
+    const { startMatch, endMatch } = resolveHatTerminalVoltageBara(entity);
     const voltageMetrics = [];
-    if (startBara) {
-      const m = SCADA_COMMON.resolveHistoryMetricsByEntity('bara', startBara);
+    if (startMatch && startMatch.bara) {
+      const m = SCADA_COMMON.resolveHistoryMetricsByEntity('bara', startMatch.bara);
       if (m?.voltage?.measurementIds?.length) {
-        voltageMetrics.push({ side: 'start', bara: startBara, metric: m.voltage });
+        voltageMetrics.push({ side: 'start', bara: startMatch.bara, metric: m.voltage, quality: startMatch.quality });
       }
     }
-    if (endBara) {
-      const m = SCADA_COMMON.resolveHistoryMetricsByEntity('bara', endBara);
+    if (endMatch && endMatch.bara) {
+      const m = SCADA_COMMON.resolveHistoryMetricsByEntity('bara', endMatch.bara);
       if (m?.voltage?.measurementIds?.length) {
-        voltageMetrics.push({ side: 'end', bara: endBara, metric: m.voltage });
+        voltageMetrics.push({ side: 'end', bara: endMatch.bara, metric: m.voltage, quality: endMatch.quality });
       }
     }
     if (!voltageMetrics.length) return { series: [], nominal: true };
-    const allIds = [...new Set(voltageMetrics.flatMap((v) => v.metric.measurementIds))];
-    try {
-      const result = await chrome.runtime.sendMessage({
-        type: 'SCADA_HISTORY_FETCH',
-        payload: {
-          baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
-          dashboardId: SCADA_CONFIG.DASHBOARD_ID,
-          chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
-          datasourceId: SCADA_CONFIG.DATASOURCE_ID,
-          elementNames: ['U'],
-          measurementIds: allIds,
-          queryMode: strategy.queryMode === 'timeseries' ? 'timeseries' : 'raw',
-          timeGrain: strategy.timeGrain,
-          startTime: range.startMs,
-          endTime: range.endMs
-        }
-      });
-      if (!result.ok || !result.data) return { series: [], nominal: true };
-      const rows = SCADA_COMMON.findDataArray(result.data) || [];
-      const metricList = voltageMetrics.map((v) => v.metric);
-      const parsed = parseHistorySeriesByElement(rows, metricList);
-      parsed.series.forEach((s) => {
-        const vm = voltageMetrics.find((v) => v.metric.measurementIds.includes(s.measurementId));
-        if (vm) {
-          s._voltageSide = vm.side;
-          s._voltageBaraTm = String(vm.bara?.tmName || '').trim();
-          s._voltageBaraKv = String(vm.bara?.gerilimKv || vm.bara?.kvBucket || '').trim();
-        }
-      });
-      return { series: parsed.series, nominal: false };
-    } catch (err) {
-      console.warn('[SCADA_HISTORY] Terminal voltage fetch failed:', err?.message || err);
-      return { series: [], nominal: true };
+    const allIds = [...new Set(voltageMetrics.flatMap((v) => v.metric.measurementIds))].sort();
+
+    if (!state.scada.hatVoltageHistoryCache) state.scada.hatVoltageHistoryCache = new Map();
+    if (!state.scada.hatVoltageHistoryPromises) state.scada.hatVoltageHistoryPromises = new Map();
+
+    const cacheKey = `hv_${allIds.join('_')}_${range.startMs}_${range.endMs}_${strategy.queryMode}_${strategy.timeGrain}`;
+    const nowMs = Date.now();
+
+    const cached = state.scada.hatVoltageHistoryCache.get(cacheKey);
+    if (cached && (nowMs - cached.fetchedAt < 5 * 60 * 1000)) {
+      return { series: cached.series, nominal: false, fromCache: true };
     }
+
+    const inFlight = state.scada.hatVoltageHistoryPromises.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const fetchPromise = (async () => {
+      try {
+        const result = await chrome.runtime.sendMessage({
+          type: 'SCADA_HISTORY_FETCH',
+          payload: {
+            baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+            dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+            chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+            datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+            elementNames: ['U'],
+            measurementIds: allIds,
+            queryMode: strategy.queryMode === 'timeseries' ? 'timeseries' : 'raw',
+            timeGrain: strategy.timeGrain,
+            startTime: range.startMs,
+            endTime: range.endMs
+          }
+        });
+        if (!result.ok || !result.data) return { series: [], nominal: true };
+        const rows = SCADA_COMMON.findDataArray(result.data) || [];
+        const metricList = voltageMetrics.map((v) => v.metric);
+        const parsed = parseHistorySeriesByElement(rows, metricList);
+        parsed.series.forEach((s) => {
+          const vm = voltageMetrics.find((v) => v.metric.measurementIds.includes(s.measurementId));
+          if (vm) {
+            s._voltageSide = vm.side;
+            s._voltageBaraTm = String(vm.bara?.tmName || '').trim();
+            s._voltageBaraKv = String(vm.bara?.gerilimKv || vm.bara?.kvBucket || '').trim();
+            if (vm.quality === 'exact') {
+               s._voltageQuality = 'Gerçek — terminal/bara eşleşmesi';
+            } else if (vm.quality === 'tm-kv') {
+               s._voltageQuality = 'Gerçek — TM+kV eşleşmesi';
+            } else {
+               s._voltageQuality = 'Gerçek — Bilinmeyen Eşleşme';
+            }
+          }
+        });
+        if (parsed.series.length > 0) {
+           state.scada.hatVoltageHistoryCache.set(cacheKey, { fetchedAt: Date.now(), series: parsed.series });
+        }
+        return { series: parsed.series, nominal: false };
+      } catch (err) {
+        console.warn('[SCADA_HISTORY] Terminal voltage fetch failed:', err?.message || err);
+        return { series: [], nominal: true };
+      } finally {
+        state.scada.hatVoltageHistoryPromises.delete(cacheKey);
+      }
+    })();
+
+    state.scada.hatVoltageHistoryPromises.set(cacheKey, fetchPromise);
+    return fetchPromise;
   }
 
   // Nearest timestamp match with tolerance (returns value or null).
@@ -3995,6 +4037,14 @@ function _formatHistoryAxisLabel(timestampMs) {
     const output = [];
     pairs.forEach((pair, pairing) => {
       if (!pair.active || !pair.reactive) return;
+
+      const isHat = pairing.startsWith('h:');
+      if (isHat) {
+        if (pair.active.terminalSide !== pair.reactive.terminalSide || pair.active.terminalSide === 'unknown') {
+          return;
+        }
+      }
+
       const activeByTime = new Map(pair.active.points.map((point) => [point.ts.getTime(), point.value]));
       const reactiveByTime = new Map(pair.reactive.points.map((point) => [point.ts.getTime(), point.value]));
       const times = [...new Set([...activeByTime.keys(), ...reactiveByTime.keys()])].sort((a, b) => a - b);
@@ -4006,14 +4056,25 @@ function _formatHistoryAxisLabel(timestampMs) {
         points.push({ ts: new Date(timeMs), value: Math.hypot(active, reactive) });
       });
       if (!points.length) return;
+
+      const seriesId = `s:${pairing}`;
+      let label = 'Olcum MVA';
+      if (isHat) {
+         const side = pair.active.terminalSide;
+         const prefix = side === 'start' ? 'Bas. — ' : (side === 'end' ? 'Bit. — ' : '');
+         label = `${prefix}${formatScadaTerminalLabel(pair.active)}`;
+      }
+
       output.push({
-        seriesId: `s:${pairing}`,
+        seriesId,
         measurementId: pair.active.measurementId || pairing,
         elementName: 'S',
         metricType: 'capacity',
         unit: 'MVA',
         pairing,
         points,
+        label,
+        terminalSide: pair.active.terminalSide,
         terminals: pair.active.terminals || []
       });
     });

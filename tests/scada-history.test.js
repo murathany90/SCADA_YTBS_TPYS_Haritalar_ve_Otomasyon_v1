@@ -229,9 +229,14 @@ test('buildHatCurrentSeries computes I correctly using nominal fallback with exa
   const voltageSeriesData = [
     {
       _voltageSide: 'start',
+      _voltageQuality: 'Gerçek — terminal/bara eşleşmesi',
       points: [{ ts: new Date(1000), value: 160 }] // 160 kV at start
+    },
+    {
+      _voltageSide: 'end',
+      _voltageQuality: 'Gerçek — TM+kV eşleşmesi',
+      points: [{ ts: new Date(1000), value: 153.2 }] // 153.2 kV at end
     }
-    // No 'end' voltage exists!
   ];
 
   const entity = { startTm: 'A', endTm: 'B', kv: '154' };
@@ -241,12 +246,13 @@ test('buildHatCurrentSeries computes I correctly using nominal fallback with exa
   const currentSeries = result[0];
   assert.equal(currentSeries.terminalSide, 'end');
 
-  // S = 50. Nominal = 154. I = (1000 * 50) / (sqrt(3) * 154) = 187.45
+  // S = 50. Actual U = 153.2. I = (1000 * 50) / (sqrt(3) * 153.2) = 188.42
   const pt = currentSeries.points[0];
-  assert.ok(pt.value > 187 && pt.value < 188);
-  assert.equal(pt._usedVoltageKv, 154);
-  assert.equal(pt._voltageSource, 'nominal');
-  assert.equal(pt._baraMatchQuality, 'Nominal fallback');
+  assert.ok(pt.value > 188 && pt.value < 189);
+  assert.equal(pt._usedVoltageKv, 153.2);
+  assert.equal(pt._voltageSource, 'actual');
+  assert.equal(pt._baraMatchQuality, 'Gerçek — TM+kV eşleşmesi');
+  assert.notEqual(pt._baraMatchQuality, 'Nominal fallback');
 });
 test('resolveTerminalSide formatting logic', () => {
   const { resolveTerminalSide } = scadaHooks;
