@@ -1966,11 +1966,24 @@
         }
       ])
       : [];
+    const scope = state.scada.currentScope || getCurrentScadaScope();
+    // Exclude heavy entities array (contains geometry like coords) from snapshot
+    // Only store minimal scope metadata needed for restore validation
+    const scopeForSnapshot = scope ? {
+      mode: scope.mode,
+      modeLabel: scope.modeLabel,
+      domain: scope.domain,
+      primaryMetric: scope.primaryMetric,
+      metricTypes: scope.metricTypes,
+      elementNames: scope.elementNames,
+      measurementIds: scope.measurementIds,
+      filterKey: scope.filterKey
+    } : null;
     return {
       schemaVersion: 1,
       source: options.source || 'map',
       at: Number(options.at || Date.now()),
-      scope: state.scada.currentScope || getCurrentScadaScope(),
+      scope: scopeForSnapshot,
       fetchMeta: {
         ...(state.scada.fetchMeta || {}),
         startedAt: serializeDateLike(state.scada.fetchMeta?.startedAt),
