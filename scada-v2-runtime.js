@@ -84,6 +84,8 @@
       formatScadaTerminalLabel,
       buildHatCurrentLimitLines,
       buildHatCurrentSeries,
+    fetchHatVoltageHistory,
+    fetchHatVoltageHistory,
       resolveTerminalSide,
       transformReactiveSeries,
       _nearestVoltageValue
@@ -3833,7 +3835,9 @@ function _formatHistoryAxisLabel(timestampMs) {
     if (!state.scada.hatVoltageHistoryCache) state.scada.hatVoltageHistoryCache = new Map();
     if (!state.scada.hatVoltageHistoryPromises) state.scada.hatVoltageHistoryPromises = new Map();
 
-    const cacheKey = `hv_${allIds.join('_')}_${range.startMs}_${range.endMs}_${strategy.queryMode}_${strategy.timeGrain}`;
+    const startIds = voltageMetrics.filter(v => v.side === 'start').flatMap(v => v.metric.measurementIds).sort().join(',');
+    const endIds = voltageMetrics.filter(v => v.side === 'end').flatMap(v => v.metric.measurementIds).sort().join(',');
+    const cacheKey = `hv|${entity.id || ''}|start:${startIds}|end:${endIds}|${range.startMs}|${range.endMs}|${strategy.queryMode}|${strategy.timeGrain}`;
     const nowMs = Date.now();
 
     const cached = state.scada.hatVoltageHistoryCache.get(cacheKey);

@@ -279,3 +279,78 @@ test('transformReactiveSeries inverts end terminals for hats', () => {
   assert.equal(transformed[2]._displayLabel, '+Q');
   assert.equal(transformed[2].points[0].value, 20);
 });
+
+test('fetchHatVoltageHistory cache avoids duplicate Superset calls', async () => {
+  const { fetchHatVoltageHistory } = scadaHooks;
+
+  // Fake SCADA_COMMON mock
+  global.SCADA_COMMON = {
+    resolveHistoryMetricsByEntity: (type, entity) => {
+      if (entity.id === 'b1') return { voltage: { measurementIds: [100] } };
+      if (entity.id === 'b2') return { voltage: { measurementIds: [200] } };
+      return null;
+    },
+    resolveHistoryValue: () => 154, resolveHistoryTimestamp: () => new Date(1000), resolveHistoryMeasurementId: (d) => d.sinsid, historySeriesId: () => 'id', findDataArray: (data) => data.map(d => ({ __timestamp: 1000, sinsid: d.sinsid, maxValue: 154 }))
+  };
+
+  // Mock global context (state) and chrome for this test
+  global.state = {
+    scada: { hatVoltageHistoryCache: new Map(), hatVoltageHistoryPromises: new Map() },
+    network: {
+      baraNodes: [
+        { id: 'b1', tmName: 'TM1', gerilimKv: '154' },
+        { id: 'b2', tmName: 'TM2', gerilimKv: '154' }
+      ]
+    }
+  };
+
+  let sendMessageCount = 0;
+  global.SCADA_CONFIG = { SUPERSET_ORIGIN: 'mock', DASHBOARD_ID: 1, CHART_SLICE_ID: 1, DATASOURCE_ID: 1 };
+  global.chrome = {
+    runtime: {
+      sendMessage: async (msg) => {
+        sendMessageCount++;
+        return { ok: true, data: [{sinsid: 100}, {sinsid: 200}] };
+      }
+    }
+  };
+
+  const entity = { id: 'hat1', kv: '154', startTm: 'TM1', endTm: 'TM2', startBaraId: 'b1', endBaraId: 'b2' };
+  const range = { startMs: 0, endMs: 1000 };
+  const strategy = { queryMode: 'raw', timeGrain: 'PT1H' };
+
+  // Call 1
+  const res1 = await fetchHatVoltageHistory(entity, range, strategy);
+  assert.equal(sendMessageCount, 1);
+  assert.equal(res1.nominal, false);
+
+  // Call 2 (cached)
+  const res2 = await fetchHatVoltageHistory(entity, range, strategy);
+  assert.equal(sendMessageCount, 1); // No new call!
+  assert.equal(res2.nominal, false);
+});
+
+test('fetchHatVoltageHistory cache distinguishes reversed start/end terminals', async () => {
+  const { fetchHatVoltageHistory } = scadaHooks;
+
+  global.state.scada.hatVoltageHistoryCache = new Map();
+  global.state.scada.hatVoltageHistoryPromises = new Map();
+
+  let sendMessageCount = 0;
+  global.chrome.runtime.sendMessage = async () => {
+    sendMessageCount++;
+    return { ok: true, data: [{sinsid: 100}, {sinsid: 200}] };
+  };
+
+  const entity1 = { id: 'hat1', kv: '154', startTm: 'TM1', endTm: 'TM2', startBaraId: 'b1', endBaraId: 'b2' };
+  const entity2 = { id: 'hat2', kv: '154', startTm: 'TM2', endTm: 'TM1', startBaraId: 'b2', endBaraId: 'b1' };
+  const range = { startMs: 0, endMs: 1000 };
+  const strategy = { queryMode: 'raw', timeGrain: 'PT1H' };
+
+  await fetchHatVoltageHistory(entity1, range, strategy);
+  assert.equal(sendMessageCount, 1);
+
+  // Call with reversed terminals
+  await fetchHatVoltageHistory(entity2, range, strategy);
+  assert.equal(sendMessageCount, 2); // MUST call again because cache key is different!
+});
