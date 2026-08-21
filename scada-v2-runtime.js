@@ -508,13 +508,14 @@
     const styleOnly = options?.styleOnly === true;
     if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
     if (typeof renderFlowLayer === 'function') renderFlowLayer();
-    if (!styleOnly) {
-      if (typeof renderHatLayer === 'function') renderHatLayer();
-      if (typeof renderTmLayer === 'function') renderTmLayer();
-      if (typeof renderBaraLayer === 'function') renderBaraLayer();
-      if (typeof renderBaraSetLayer === 'function') renderBaraSetLayer();
-      if (typeof renderMeasureLayer === 'function') renderMeasureLayer();
-    }
+    // In style-only mode, still render dynamic layers to update SCADA-dependent visuals
+    // (colors, tooltips, loading, etc.). Full rebuild is acceptable for SCADA refresh.
+    if (typeof renderHatLayer === 'function') renderHatLayer();
+    if (typeof renderTmLayer === 'function') renderTmLayer();
+    if (typeof renderTrafoLayer === 'function') renderTrafoLayer();
+    if (typeof renderBaraLayer === 'function') renderBaraLayer();
+    if (typeof renderBaraSetLayer === 'function') renderBaraSetLayer();
+    if (typeof renderMeasureLayer === 'function') renderMeasureLayer();
     if (typeof updateSummary === 'function') updateSummary();
     if (typeof syncInfoCardPosition === 'function') syncInfoCardPosition();
   };
@@ -2470,6 +2471,23 @@
     state.scada.error = null;
     state.scada.errorType = null;
     const requestId = `${triggerType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    
+    // Capture request context for stale response validation
+    const scopeForRequest = getCurrentScadaScope();
+    const requestContext = {
+      fetchSeq: state.scada.fetchSeq,
+      requestId,
+      triggerType,
+      filterKey: scopeForRequest.filterKey,
+      mode: scopeForRequest.mode,
+      domain: scopeForRequest.domain,
+      primaryMetric: scopeForRequest.primaryMetric,
+      timeMode: state.scada.timeMode,
+      measurementIdsSignature: scopeForRequest.measurementIds.map(String).sort().join(','),
+      entityCount: scopeForRequest.entities.length
+    };
+    state.scada.currentRequestContext = requestContext;
+    
     state.scada.operationMeta = null;
     setScadaOperationMeta({
       requestId,
@@ -2597,6 +2615,7 @@
       // must never overwrite the historical view.
       if (state.scada.timeMode !== 'live') {
         scadaLog('info', 'SCADA canli yaniti zaman modu degistigi icin uygulanmadi.');
+        state.scada.currentRequestContext = null;
         return;
       }
 
@@ -2651,6 +2670,54 @@
         rawRows,
         normalizedRows: rowsByMeasurementId.size
       });
+
+      // Validate request context before applying snapshot to reject stale responses
+      function isRequestContextCurrent(requestContext) {
+        if (!requestContext) return true; // Allow if no context captured (backward compat)
+        const currentScope = getCurrentScadaScope();
+        const currentMeasurementIdsSignature = currentScope.measurementIds.map(String).sort().join(',');
+        
+        // Check if critical scope properties have changed
+        if (requestContext.filterKey !== currentScope.filterKey) return false;
+        if (requestContext.mode !== currentScope.mode) return false;
+        if (requestContext.domain !== currentScope.domain) return false;
+        if (requestContext.primaryMetric !== currentScope.primaryMetric) return false;
+        if (requestContext.timeMode !== state.scada.timeMode) return false;
+        if (requestContext.measurementIdsSignature !== currentMeasurementIdsSignature) return false;
+        if (requestContext.fetchSeq !== state.scada.fetchSeq) return false;
+        return true;
+      }
+
+      const requestContext = state.scada.currentRequestContext;
+      if (!isRequestContextCurrent(requestContext)) {
+        scadaLog('warn', `SCADA ${triggerLabel.toLowerCase()} response discarded; scope changed during fetch.`, {
+          requestFilterKey: requestContext?.filterKey,
+          currentFilterKey: getCurrentScadaScope().filterKey,
+          requestMode: requestContext?.mode,
+          currentMode: getCurrentScadaScope().mode,
+          requestFetchSeq: requestContext?.fetchSeq,
+          currentFetchSeq: state.scada.fetchSeq
+        });
+        
+        // Execute pending trigger if any (latest scope will be fetched)
+        const pollState = state.scada.pollState;
+        if (pollState?.pendingTrigger) {
+          const pending = pollState.pendingTrigger;
+          pollState.pendingTrigger = null;
+          scadaLog('info', `Bekleyen ${pending.triggerType} tetigi aktif sorgu sonrasinda calistiriliyor.`);
+          setTimeout(() => {
+            if (state.scada.enabled && !state.scada.fetchInProgress) {
+              scadaDoFetch(pending.options);
+            }
+          }, 0);
+        }
+        
+        // Discard stale response - do not apply
+        state.scada.fetchInProgress = false;
+        if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
+        if (typeof refreshRankingTable === 'function') refreshRankingTable();
+        return;
+      }
 
       const visibleSummary = applyGenericScadaSnapshot(rowsByMeasurementId, scope);
       state.scada.lastFetchAt = new Date();
@@ -2734,6 +2801,7 @@
       }
     } finally {
       state.scada.fetchInProgress = false;
+      state.scada.currentRequestContext = null;
       // Execute any pending trigger (filter-change, mode-change, etc.) after current fetch completes
       const pollState = state.scada.pollState;
       if (pollState?.pendingTrigger) {
