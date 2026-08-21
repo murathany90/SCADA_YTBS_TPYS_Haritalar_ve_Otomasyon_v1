@@ -354,3 +354,88 @@ test('fetchHatVoltageHistory cache distinguishes reversed start/end terminals', 
   await fetchHatVoltageHistory(entity2, range, strategy);
   assert.equal(sendMessageCount, 2); // MUST call again because cache key is different!
 });
+
+test('YIBITAS-YERKOY E2E regression: parseHistorySeriesByElement extracts metadata from entity when aggregate response lacks B-names', () => {
+  const entity = {
+    id: 'hat-yib',
+    startTm: 'yibitas',
+    endTm: 'yerkoy',
+    scada: {
+      active: {
+        rows: [
+          { measurementId: 'P1', b1Name: 'YIBITAS', b2Name: '154', b3Name: 'YERKOY', terminalSide: 'start', candidateSlot: 'primary' },
+          { measurementId: 'P2', b1Name: 'YERKOY', b2Name: '154', b3Name: 'YIBITAS', terminalSide: 'end', candidateSlot: 'primary' }
+        ]
+      },
+      reactive: {
+        rows: [
+          { measurementId: 'Q1', b1Name: 'YIBITAS', b2Name: '154', b3Name: 'YERKOY', terminalSide: 'start', candidateSlot: 'primary' },
+          { measurementId: 'Q2', b1Name: 'YERKOY', b2Name: '154', b3Name: 'YIBITAS', terminalSide: 'end', candidateSlot: 'primary' }
+        ]
+      }
+    }
+  };
+
+  const metricList = [
+    { elementName: 'P', metricType: 'active', measurementIds: ['P1', 'P2'] },
+    { elementName: 'Q', metricType: 'reactive', measurementIds: ['Q1', 'Q2'] }
+  ];
+
+  const rows = [
+    { sinsid: 'P1', timestamp: 1000, 'AVG(maxValue)': 100 },
+    { sinsid: 'P2', timestamp: 1000, 'AVG(maxValue)': -100 },
+    { sinsid: 'Q1', timestamp: 1000, 'AVG(maxValue)': 20 },
+    { sinsid: 'Q2', timestamp: 1000, 'AVG(maxValue)': -20 }
+  ];
+
+  global.SCADA_COMMON = require('../scada-common.js');
+  const parsed = scadaHooks.parseHistorySeriesByElement(rows, metricList);
+  scadaHooks.enrichHatHistorySeriesMetadata(parsed.series, entity);
+
+  assert.strictEqual(parsed.series.length, 4);
+  const p1 = parsed.series.find(s => s.measurementId === 'P1');
+  assert.strictEqual(p1.terminalSide, 'start');
+  assert.strictEqual(p1.label, 'YIBITAS(154)>>YERKOY');
+
+  // Verify Current series ignores missing voltage and uses nominal
+    const chartSeries = parsed.series.map(s => {
+    s.pairing = 'h:' + s.terminalSide;
+    return s;
+  });
+  const currentSeries = scadaHooks.buildHatCurrentSeries(chartSeries, [], { kv: 154 });
+  assert.strictEqual(currentSeries.length, 2);
+  assert.strictEqual(currentSeries[0].points[0]._voltageSource, 'nominal');
+  assert.strictEqual(parsed.series.filter(s => s.metricType === 'active').length, 2);
+  assert.strictEqual(parsed.series.filter(s => s.metricType === 'reactive').length, 2);
+  const sSeries = scadaHooks.buildHistoryCapacitySeries(chartSeries, { timeGrain: 'PT1M' });
+  assert.strictEqual(sSeries.length, 2);
+  const badLabels = parsed.series.filter(s => s.label.startsWith('Olcum'));
+  assert.strictEqual(badLabels.length, 0);
+});
+
+test('YIBITAS-YERKOY MVA pane always shows even if data is missing', () => {
+  // Pass empty chartSeries
+  const sSeries = scadaHooks.buildHistoryCapacitySeries([], { timeGrain: 'PT1M' });
+  assert.strictEqual(sSeries.length, 0);
+});
+
+test('resolveHatTerminalVoltageBara chooses deterministic voltage bara if matches > 1', () => {
+  global.state = {
+    network: {
+      baraNodes: [
+        { id: 'b1', tmName: 'YIBITAS', gerilimKv: '154' },
+        { id: 'b2', tmName: 'YIBITAS', gerilimKv: '154' },
+        { id: 'b3', tmName: 'YERKOY', gerilimKv: '154' }
+      ]
+    }
+  };
+  global.SCADA_COMMON.resolveHistoryMetricsByEntity = (type, entity) => {
+    if (entity.id === 'b2') return { voltage: { measurementIds: ['U1'] } };
+    return { voltage: { measurementIds: [] } };
+  };
+
+  const entity = { kv: '154', startTm: 'YIBITAS', endTm: 'YERKOY' };
+  const res = scadaHooks.resolveHatTerminalVoltageBara(entity);
+  assert.strictEqual(res.startMatch.quality, 'tm-kv');
+  assert.strictEqual(res.startMatch.bara.id, 'b2'); // b2 has U measurement ID!
+});
