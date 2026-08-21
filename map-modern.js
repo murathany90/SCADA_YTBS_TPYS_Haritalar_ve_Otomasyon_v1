@@ -1468,7 +1468,7 @@ function renderHatLayer() {
     if (flow) {
       const mwT = flow.mw >= 0 ? `+${flow.mw.toFixed(1)}` : flow.mw.toFixed(1);
       const tsT = flow.timestamp ? flow.timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
-      const pctText = flow.invalidPct ? '!' : `${flow.displayPct.toFixed(0)}%`;
+      const pctText = flow.invalidPct ? '!' : (Number.isFinite(flow.displayPct) ? `${flow.displayPct.toFixed(0)}%` : '-');
       tooltipHtml += `<br><span style="color:${flow.color};font-weight:700">${mwT} MW · ${pctText}</span>${tsT ? ` · <span class="tt-label">${tsT}</span>` : ''}`;
     } else if (record && (Number.isFinite(record.primaryValue) || Number.isFinite(record.displayPct) || record.invalidPct || record.valueInvalid)) {
       const primaryUnit = record.primaryMetric === 'reactive' ? 'MVar' : 'MW';
