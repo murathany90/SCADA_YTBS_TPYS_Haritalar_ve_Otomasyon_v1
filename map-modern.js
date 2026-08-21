@@ -1852,6 +1852,9 @@ function showInfo({
   } else {
     state.ui.activeEntityPopup = null;
     state.ui.activeHatPopup = null;
+    // Clear any leftover anchored positioning from previous call
+    el.infoCard.style.left = '';
+    el.infoCard.style.top = '';
   }
   (classes || []).forEach((className) => {
     if (className) el.infoCard.classList.add(className);
