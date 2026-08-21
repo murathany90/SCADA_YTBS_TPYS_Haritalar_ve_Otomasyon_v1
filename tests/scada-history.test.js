@@ -211,21 +211,42 @@ test('_nearestVoltageValue matches within tolerance', () => {
   assert.equal(_nearestVoltageValue(map, 3000, 500), null); // Out of tolerance
 });
 
-test('buildHatCurrentSeries computes I correctly using nominal fallback', () => {
-  const nominalKv = 154;
-  const sqrt3 = Math.sqrt(3);
-  const activePoint = 30;
-  const reactivePoint = 40;
+test('buildHatCurrentSeries computes I correctly using nominal fallback with exact matching', () => {
+  const { buildHatCurrentSeries } = scadaHooks;
+  const chartSeries = [
+    {
+      seriesId: 'p_end', measurementId: 101, elementName: 'P', metricType: 'active',
+      pairing: 'h:A>>B', terminalSide: 'end', terminals: ['A', 'x', 'B'],
+      points: [{ ts: new Date(1000), value: 30 }]
+    },
+    {
+      seriesId: 'q_end', measurementId: 102, elementName: 'Q', metricType: 'reactive',
+      pairing: 'h:A>>B', terminalSide: 'end', terminals: ['A', 'x', 'B'],
+      points: [{ ts: new Date(1000), value: 40 }] // 50 MVA
+    }
+  ];
 
-  // Hypotenuse of 30 and 40 is 50 MVA.
-  // I = 1000 * 50 / (sqrt(3) * 154) = 187.45 A
-  const expectedI = (1000 * 50) / (sqrt3 * nominalKv);
+  const voltageSeriesData = [
+    {
+      _voltageSide: 'start',
+      points: [{ ts: new Date(1000), value: 160 }] // 160 kV at start
+    }
+    // No 'end' voltage exists!
+  ];
 
-  const s = Math.hypot(activePoint, reactivePoint);
-  const iAmpere = (1000 * s) / (sqrt3 * nominalKv);
+  const entity = { startTm: 'A', endTm: 'B', kv: '154' };
 
-  assert.equal(s, 50);
-  assert.equal(iAmpere, expectedI);
+  const result = buildHatCurrentSeries(chartSeries, voltageSeriesData, entity);
+  assert.equal(result.length, 1);
+  const currentSeries = result[0];
+  assert.equal(currentSeries.terminalSide, 'end');
+
+  // S = 50. Nominal = 154. I = (1000 * 50) / (sqrt(3) * 154) = 187.45
+  const pt = currentSeries.points[0];
+  assert.ok(pt.value > 187 && pt.value < 188);
+  assert.equal(pt._usedVoltageKv, 154);
+  assert.equal(pt._voltageSource, 'nominal');
+  assert.equal(pt._baraMatchQuality, 'Nominal fallback');
 });
 test('resolveTerminalSide formatting logic', () => {
   const { resolveTerminalSide } = scadaHooks;

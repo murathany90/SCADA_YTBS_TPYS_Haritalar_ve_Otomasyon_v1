@@ -78,23 +78,6 @@
   };
 
 
-  if (typeof globalThis !== 'undefined') {
-    globalThis.__SCADA_V2_TEST_HOOKS__ = {
-      formatScadaTerminalLabel,
-      buildHatCurrentLimitLines,
-      buildHatCurrentSeries,
-      resolveTerminalSide,
-      transformReactiveSeries,
-      _nearestVoltageValue
-    };
-  }
-  if (typeof window !== 'undefined') {
-    window.__SCADA_V2_TEST_HOOKS__ = globalThis.__SCADA_V2_TEST_HOOKS__;
-  }
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports.__SCADA_V2_TEST_HOOKS__ = globalThis.__SCADA_V2_TEST_HOOKS__;
-  }
-
 
   if (typeof globalThis !== 'undefined') {
     globalThis.__SCADA_V2_TEST_HOOKS__ = {
@@ -148,7 +131,6 @@
   };
   state.scada.history = state.scada.history || new Map();
   state.scada.history24hCache = state.scada.history24hCache || new Map();
-  state.scada.hatVoltageHistoryCache = state.scada.hatVoltageHistoryCache || new Map();
   state.scada.hatVoltageHistoryCache = state.scada.hatVoltageHistoryCache || new Map();
   state.scada.timeMode = state.scada.timeMode || 'live';
   state.scada.historicalAt = state.scada.historicalAt || null;
@@ -3891,63 +3873,81 @@ function _formatHistoryAxisLabel(timestampMs) {
   function buildHatCurrentSeries(chartSeries, voltageSeriesData, entity) {
     const sqrt3 = Math.sqrt(3);
     const nominalKv = Number(entity?.kv || entity?.primaryKv || 0) || 0;
-    const pairs = new Map();
-    (chartSeries || []).forEach((s) => {
-      const pk = s?.pairing;
-      if (!pk) return;
-      if (!pairs.has(pk)) pairs.set(pk, {});
-      if (s.elementName === 'P' || s.metricType === 'active') pairs.get(pk).active = s;
-      else if (s.elementName === 'Q' || s.metricType === 'reactive') pairs.get(pk).reactive = s;
-    });
-    const output = [];
-    pairs.forEach((pair, pairing) => {
-      if (!pair.active || !pair.reactive) return;
-      const activeByTime = new Map(pair.active.points.map((p) => [p.ts.getTime(), p.value]));
-      const reactiveByTime = new Map(pair.reactive.points.map((p) => [p.ts.getTime(), p.value]));
-      const times = [...new Set([...activeByTime.keys(), ...reactiveByTime.keys()])].sort((a, b) => a - b);
-      // Find voltage series matching this terminal side
-      const startTm = String(entity?.startTm || '').trim().toLowerCase();
-      const endTm = String(entity?.endTm || '').trim().toLowerCase();
-      const label = String(pair.active.label || '').toLowerCase();
-      let matchedVSeries = null;
-      if (voltageSeriesData && voltageSeriesData.length) {
-        matchedVSeries = voltageSeriesData.find((vs) => {
-          if (!vs._voltageSide) return false;
-          const baraTm = String(vs._voltageBaraTm || '').toLowerCase();
-          if (vs._voltageSide === 'start' && startTm && label.includes(startTm)) return true;
-          if (vs._voltageSide === 'end' && endTm && label.includes(endTm)) return true;
-          if (baraTm && label.includes(baraTm)) return true;
-          return false;
-        }) || voltageSeriesData[0];
+
+    const hatPairs = [];
+    chartSeries.forEach((series) => {
+      if (!series.pairing || !series.points) return;
+      let p = hatPairs.find((x) => x.pairing === series.pairing);
+      if (!p) {
+        p = { pairing: series.pairing, active: null, reactive: null };
+        hatPairs.push(p);
       }
-      const vByTime = matchedVSeries ? new Map(matchedVSeries.points.map((p) => [p.ts.getTime(), p.value])) : null;
-      let usedNominal = false;
+      if (series.elementName === 'P' || series.metricType === 'active') p.active = series;
+      if (series.elementName === 'Q' || series.metricType === 'reactive') p.reactive = series;
+    });
+
+    const isKnownPair = (p) => p.active && p.reactive && p.active.points?.length > 0 && p.reactive.points?.length > 0 && p.active.terminalSide === p.reactive.terminalSide && p.active.terminalSide !== 'unknown';
+
+    const output = [];
+    hatPairs.filter(isKnownPair).forEach((pair) => {
+      const side = pair.active.terminalSide;
+      const matchedVSeries = (voltageSeriesData || []).find((v) => v._voltageSide === side);
+
       const points = [];
-      const toleranceMs = 2 * 60 * 1000;
-      times.forEach((tMs) => {
-        const p = activeByTime.get(tMs);
-        const q = reactiveByTime.get(tMs);
-        if (!Number.isFinite(p) || !Number.isFinite(q)) return;
-        const s = Math.hypot(p, q);
-        let vKv = vByTime ? (vByTime.get(tMs) ?? _nearestVoltageValue(vByTime, tMs, toleranceMs)) : null;
+      let usedNominal = false;
+
+      pair.active.points.forEach((actPt) => {
+        const tMs = actPt.ts.getTime();
+        const reactPt = _nearestVoltageValue(new Map(pair.reactive.points.map((p) => [p.ts.getTime(), p])), tMs, 300000);
+        if (!reactPt) return;
+
+        const pMw = actPt.value;
+        const qMvar = reactPt.value;
+        const s = Math.hypot(pMw, qMvar);
+
+        let vKv = 0;
+        let bQuality = matchedVSeries?._voltageQuality || 'Nominal fallback';
+        if (matchedVSeries) {
+          const vPt = _nearestVoltageValue(new Map(matchedVSeries.points.map((p) => [p.ts.getTime(), p])), tMs, 300000);
+          if (vPt) vKv = vPt.value;
+        }
+
+        let currentUsedNominal = false;
         if (!Number.isFinite(vKv) || vKv <= 0) {
           vKv = nominalKv;
           usedNominal = true;
+          currentUsedNominal = true;
+          bQuality = 'Nominal fallback';
         }
         if (vKv <= 0) return;
         const iAmpere = (1000 * s) / (sqrt3 * vKv);
-        points.push({ ts: new Date(tMs), value: iAmpere });
+        points.push({
+          ts: new Date(tMs),
+          value: iAmpere,
+          _usedVoltageKv: vKv,
+          _voltageSource: currentUsedNominal ? 'nominal' : 'actual',
+          _baraMatchQuality: bQuality
+        });
       });
+
       if (!points.length) return;
+
+      const prefix = side === 'start' ? 'Bas. — ' : (side === 'end' ? 'Bit. — ' : '');
+      const label = `${prefix}${formatScadaTerminalLabel(pair.active)}`;
+
+      const seriesId = `${pair.active.seriesId}_current`;
+      const measurementId = pair.active.measurementId;
       output.push({
-        seriesId: `i:${pairing}`,
-        measurementId: pair.active.measurementId || pairing,
+        seriesId,
+        measurementId,
         elementName: 'I',
         metricType: 'current',
         unit: 'A',
-        pairing,
+        pairing: pair.pairing,
         points,
         terminals: pair.active.terminals || [],
+        terminalSide: side,
+        label,
         _usedNominalVoltage: usedNominal
       });
     });
@@ -4245,7 +4245,8 @@ function _formatHistoryAxisLabel(timestampMs) {
       const pairing = entityType === 'hat'
         ? `h:${series.terminals?.[0] || ''}>>${series.terminals?.[1] || ''}`
         : (entityType === 'trafo' ? `t:${index}` : 'b:u');
-      return { ...series, label, pairing };
+      const terminalSide = entityType === 'hat' ? resolveTerminalSide(series, entity) : 'unknown';
+      return { ...series, label, pairing, terminalSide };
     });
 
     const isDual = entityType === 'hat' || entityType === 'trafo';
@@ -4271,16 +4272,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       });
       // Pane 2: Reaktif guc — hat icin baslangic +Q, bitis -Q cizim
       const rawReactiveSeries = chartSeries.filter((series) => series.elementName === 'Q' || series.metricType === 'reactive');
-      const reactiveSeries = isHatFivePane
-        ? rawReactiveSeries.map((series, idx) => {
-          if (idx === 0) return { ...series, _displayLabel: `Bas. +Q` };
-          return {
-            ...series,
-            _displayLabel: `Bit. -Q`,
-            points: series.points.map((pt) => ({ ...pt, value: -pt.value, _rawValue: pt.value }))
-          };
-        })
-        : rawReactiveSeries;
+      const reactiveSeries = transformReactiveSeries(rawReactiveSeries, isHatFivePane);
       panes.push({
         key: 'reactive',
         title: 'Reaktif guc (MVar)',
@@ -4350,9 +4342,8 @@ function _formatHistoryAxisLabel(timestampMs) {
         });
         // Pane 5: Gerilim (kV)
         const hatVoltageSeries = voltageSeriesData.map((vs) => {
-          const sideLabel = vs._voltageSide === 'start'
-            ? `Bas. ${vs._voltageBaraTm || entity?.startTm || ''}`
-            : `Bit. ${vs._voltageBaraTm || entity?.endTm || ''}`;
+          const prefix = vs._voltageSide === 'start' ? 'Bas. — ' : (vs._voltageSide === 'end' ? 'Bit. — ' : '');
+          const sideLabel = `${prefix}${formatScadaTerminalLabel(vs)}`;
           return {
             ...vs,
             seriesId: `hv:${vs.seriesId || vs.measurementId}`,
@@ -4757,22 +4748,44 @@ function _formatHistoryAxisLabel(timestampMs) {
     }
 
     function updateTooltip(event) {
-      if (!tooltipEl) return;
-      const canvasRect = canvasEl.getBoundingClientRect();
-      if (!canvasRect.width) return;
+      if (!isHovering) return;
+      const { offsetX, offsetY } = event;
+      if (offsetX < _AXIS_WIDTH || offsetX > canvas.width - _AXIS_WIDTH) return;
+      if (offsetY < _PADDING_TOP || offsetY > canvas.height - _PADDING_BOTTOM) return;
+
+      const spanMs = viewSpanMs();
+      const plotW = canvas.width - (_AXIS_WIDTH * 2);
+      const pxRatio = plotW / spanMs;
+      const hoverTimeMs = range.startMs + ((offsetX - _AXIS_WIDTH) / pxRatio);
+      hoverTs = hoverTimeMs;
+
+      // Find the specific pane the user is hovering over
+      const activePane = panes.find(p => offsetY >= p._rect.y && offsetY <= p._rect.y + p._rect.h);
       const rows = [];
-      chartSeries.forEach((series) => {
-        if (hidden.has(series.seriesId) || !series.points.length) return;
-        const nearestIndex = _nearestPointIndex(series.points, hoverTimeMs);
-        const point = series.points[nearestIndex];
-        if (!point) return;
-        if (Math.abs(point.ts.getTime() - hoverTimeMs) > viewSpanMs() * 0.05) return;
-        rows.push(`<div class="scada-chart-tooltip-row" style="--scada-series-color:${_chartSeriesColor(series)};">
-          <span class="scada-chart-tooltip-dot"></span>
-          <span>${escapeHtml(series.label)}</span>
-          <strong>${escapeHtml(formatTooltipValue(series, point))}</strong>
-        </div>`);
-      });
+      if (activePane) {
+        const seriesToRender = activePane.seriesGroup || [];
+        seriesToRender.forEach((series) => {
+          if (hidden.has(series.seriesId) || !series.points.length) return;
+          const nearestIndex = _nearestPointIndex(series.points, hoverTimeMs);
+          const point = series.points[nearestIndex];
+          if (!point) return;
+          if (Math.abs(point.ts.getTime() - hoverTimeMs) > viewSpanMs() * 0.05) return;
+
+          let metaHtml = '';
+          if (series.metricType === 'current' && point._voltageSource) {
+             const vKv = point._usedVoltageKv ? `${formatAxisNumber(point._usedVoltageKv)} kV` : '-';
+             metaHtml = `<div style="font-size: 9px; color: var(--muted); padding-left: 14px; margin-top: -2px;">Gerilim: ${vKv} (${point._baraMatchQuality || point._voltageSource})</div>`;
+          }
+
+          const seriesLabel = series._displayLabel || series.label || series.elementName || 'Olcum';
+
+          rows.push(`<div><div class="scada-chart-tooltip-row" style="--scada-series-color:${_chartSeriesColor(series)};">
+            <span class="scada-chart-tooltip-dot"></span>
+            <span>${escapeHtml(seriesLabel)}</span>
+            <strong>${escapeHtml(formatTooltipValue(series, point))}</strong>
+          </div>${metaHtml}</div>`);
+        });
+      }
       if (!rows.length) {
         tooltipEl.hidden = true;
         return;
