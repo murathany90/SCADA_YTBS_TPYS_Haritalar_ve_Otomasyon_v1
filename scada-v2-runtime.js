@@ -2381,11 +2381,12 @@
       return;
     }
     if (state.scada.fetchInProgress) {
-      if (triggerType === 'auto' && state.scada.pollState) {
-        state.scada.pollState.pendingAutoRefresh = true;
-      }
-      scadaLog('warn', `SCADA ${triggerLabel.toLowerCase()} yenileme istegi atlandi; mevcut sorgu suruyor.`);
-      if (triggerType === 'manual') setScadaStatusMessage('SCADA sorgusu zaten suruyor.', 'warn');
+      // Store the latest pending trigger (including filter-change, mode-change, etc.)
+      // so it can be executed after the current fetch completes
+      state.scada.pollState = state.scada.pollState || {};
+      state.scada.pollState.pendingTrigger = { triggerType, options };
+      scadaLog('warn', `SCADA ${triggerLabel.toLowerCase()} yenileme istegi bekletiliyor; mevcut sorgu suruyor.`);
+      if (triggerType === 'manual') setScadaStatusMessage('SCADA sorgusu zaten suruyor; filtre degisimi bekletildi.', 'warn');
       if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
       return;
     }
@@ -2715,8 +2716,18 @@
       }
     } finally {
       state.scada.fetchInProgress = false;
-      if (state.scada.autoRefresh && state.scada.enabled) {
-        const pollState = state.scada.pollState;
+      // Execute any pending trigger (filter-change, mode-change, etc.) after current fetch completes
+      const pollState = state.scada.pollState;
+      if (pollState?.pendingTrigger) {
+        const pending = pollState.pendingTrigger;
+        pollState.pendingTrigger = null;
+        scadaLog('info', `Bekleyen ${pending.triggerType} tetigi aktif sorgu sonrasinda calistiriliyor.`);
+        setTimeout(() => {
+          if (state.scada.enabled && !state.scada.fetchInProgress) {
+            scadaDoFetch(pending.options);
+          }
+        }, 0);
+      } else if (state.scada.autoRefresh && state.scada.enabled) {
         if (pollState?.pendingAutoRefresh && !isDocumentHidden()) {
           pollState.pendingAutoRefresh = false;
           pollState.lastAutoRunAt = new Date();
