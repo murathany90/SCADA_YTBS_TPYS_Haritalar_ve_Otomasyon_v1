@@ -1999,6 +1999,26 @@
     if (!snapshot || snapshot.schemaVersion !== 1 || !Array.isArray(snapshot.measurementRows)) {
       return { ok: false, reason: 'invalid-snapshot' };
     }
+    
+    // Use live scope with fallback: prefer currentScope (set by app) over computed scope
+    const liveScope = state.scada.currentScope || getCurrentScadaScope();
+    const snapshotScope = snapshot.scope || {};
+    
+    const snapshotMeasurementIds = [...(snapshotScope.measurementIds || [])].sort().join(',');
+    const liveMeasurementIds = [...(liveScope.measurementIds || [])].sort().join(',');
+    
+    const scopeMatches = snapshotScope.filterKey === liveScope.filterKey &&
+                         snapshotScope.mode === liveScope.mode &&
+                         snapshotScope.domain === liveScope.domain &&
+                         snapshotScope.primaryMetric === liveScope.primaryMetric &&
+                         [...(snapshotScope.measurementIds || [])].sort().join(',') === [...(liveScope.measurementIds || [])].sort().join(',');
+    
+    // If scope doesn't match, don't mutate ANY state - return early
+    if (!scopeMatches) {
+      return { ok: false, skipped: true, reason: 'scope-mismatch' };
+    }
+    
+    // Scope matches - now apply all state changes atomically
     const rows = new Map(snapshot.measurementRows.map(([key, row]) => [
       String(key),
       {
@@ -2006,6 +2026,7 @@
         timestamp: reviveDateLike(row?.timestamp)
       }
     ]));
+    
     state.scada.measurementRowsById = rows;
     state.scada.rowsBySinsid = rows;
     state.scada.totalRows = rows.size;
@@ -2018,26 +2039,10 @@
       phaseLabel: 'Onbellek',
       phaseMessage: 'SCADA verisi onbellekten yuklendi; canli yenileme deneniyor.'
     };
-    // Rebuild scope from current topology (entities come from live topology, not snapshot)
-    const liveScope = getCurrentScadaScope();
-    // Validate snapshot metadata against current topology
-    const snapshotScope = snapshot.scope || {};
-    const scopeMatches = snapshotScope.filterKey === liveScope.filterKey &&
-                         snapshotScope.mode === liveScope.mode &&
-                         snapshotScope.domain === liveScope.domain &&
-                         snapshotScope.primaryMetric === liveScope.primaryMetric &&
-                         JSON.stringify(snapshotScope.measurementIds?.sort()) === JSON.stringify(liveScope.measurementIds?.sort());
-    if (options.apply !== false && rows.size && scopeMatches && liveScope.entities?.length) {
-      state.scada.currentScope = liveScope;
-      applyGenericScadaSnapshot(rows, liveScope);
-    } else if (rows.size) {
-      // Snapshot metadata doesn't match current topology - keep minimal scope
-      state.scada.currentScope = {
-        mode: snapshotScope.mode,
-        filterKey: snapshotScope.filterKey,
-        measurementIds: snapshotScope.measurementIds || [],
-        entities: [] // Will be populated on next live fetch
-      };
+    state.scada.currentScope = getCurrentScadaScope();
+    
+    if (options.apply !== false && rows.size && state.scada.currentScope?.entities?.length) {
+      applyGenericScadaSnapshot(rows, state.scada.currentScope);
     }
     requestScadaOverlayRender();
     if (typeof refreshRankingTable === 'function') refreshRankingTable();
@@ -2790,6 +2795,31 @@ try {
         });
       }
     } catch (error) {
+      // Stale exception guard: check if request context is still current before ANY state mutation
+      if (!isRequestContextCurrent(requestContext)) {
+        scadaLog('warn', 'Stale SCADA request exception discarded; scope changed during fetch.', {
+          requestFilterKey: requestContext?.filterKey,
+          currentFilterKey: getCurrentScadaScope().filterKey,
+          requestMode: requestContext?.mode,
+          currentMode: getCurrentScadaScope().mode,
+          requestFetchSeq: requestContext?.fetchSeq,
+          currentFetchSeq: state.scada.fetchSeq
+        });
+        // Execute pending trigger if any (latest scope will be fetched)
+        const pollState = state.scada.pollState;
+        if (pollState?.pendingTrigger) {
+          const pending = pollState.pendingTrigger;
+          pollState.pendingTrigger = null;
+          scadaLog('info', `Bekleyen ${pending.triggerType} tetigi aktif sorgu sonrasinda calistiriliyor.`);
+          setTimeout(() => {
+            if (state.scada.enabled && !state.scada.fetchInProgress) {
+              scadaDoFetch(pending.options);
+            }
+          }, 0);
+        }
+        return;
+      }
+
       const finishedAt = new Date();
       const errorMessage = error.message || String(error);
       updateScadaFetchMeta({
