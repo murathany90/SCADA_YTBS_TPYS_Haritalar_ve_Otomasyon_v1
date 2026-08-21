@@ -6528,7 +6528,7 @@ function _formatHistoryAxisLabel(timestampMs) {
     getFlowRenderNodeCache().clear();
   }
 
-  function buildRenderedFlowPath(row, flow) {
+  function buildRenderedFlowPath(row, flow, parallelGroups) {
     if (state.filters.hatDisplayMode === 'sade' || state.filters.hatDisplayMode === 'sade-ayrik') {
       const startTm = state.network.tmMap.get(row.startTm);
       const endTm = state.network.tmMap.get(row.endTm);
@@ -6538,9 +6538,9 @@ function _formatHistoryAxisLabel(timestampMs) {
       const endPt = endTm ? screenPoint(endTm.lon, endTm.lat) : screenPoint(lastCoord[0], lastCoord[1]);
       let fromPt = startPt;
       let toPt = endPt;
-      if (state.filters.hatDisplayMode === 'sade-ayrik') {
+      if (state.filters.hatDisplayMode === 'sade-ayrik' && parallelGroups) {
         const groupKey = [row.startTm || '', row.endTm || ''].sort().join('|||');
-        const allHats = getVisibleHats().filter((hat) => [hat.startTm || '', hat.endTm || ''].sort().join('|||') === groupKey);
+        const allHats = parallelGroups.get(groupKey) || [];
         const index = Math.max(0, allHats.findIndex((hat) => String(hat.id) === String(row.id)));
         const spacing = 4;
         const offset = -((allHats.length - 1) * spacing) / 2 + index * spacing;
@@ -6640,11 +6640,16 @@ function _formatHistoryAxisLabel(timestampMs) {
     const activeIds = new Set();
     const cache = getFlowRenderNodeCache();
 
+    // Pre-compute parallel groups for sade-ayrik mode (O(N) instead of O(N²))
+    const parallelGroups = state.filters.hatDisplayMode === 'sade-ayrik'
+      ? buildParallelGroups(visibleHats)
+      : null;
+
     visibleHats.forEach((row) => {
       const flow = state.scada.lineFlowByLineId.get(row.id);
       if (!flow) return;
       const flowId = String(row.id);
-      const pathData = buildRenderedFlowPath(row, flow);
+      const pathData = buildRenderedFlowPath(row, flow, parallelGroups);
       let node = cache.get(flowId);
       if (!node || !node.isConnected) {
         node = createRenderedFlowNode(row);
