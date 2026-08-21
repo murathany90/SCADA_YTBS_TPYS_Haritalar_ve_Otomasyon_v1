@@ -198,7 +198,6 @@
 
   const baseHandleVisibilityFiltersChanged = handleVisibilityFiltersChanged;
   handleVisibilityFiltersChanged = function () {
-    buildNetworkIndexes();
     baseHandleVisibilityFiltersChanged();
     if (state.scada.enabled && typeof scadaDoFetch === 'function') {
       scadaDoFetch({ trigger: 'filter-change' });
