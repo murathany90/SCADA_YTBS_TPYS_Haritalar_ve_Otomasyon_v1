@@ -86,9 +86,10 @@
       buildHatCurrentSeries,
       fetchHatVoltageHistory,
       resolveHatTerminalVoltageBara,
+      mountInteractiveHistoryChart,
       buildHistoryCapacitySeries,
       parseHistorySeriesByElement,
-      enrichHatHistorySeriesMetadata, mountInteractiveHistoryChart,
+      enrichHatHistorySeriesMetadata,
     fetchHatVoltageHistory,
       resolveTerminalSide,
       transformReactiveSeries,
@@ -3973,14 +3974,9 @@ function _formatHistoryAxisLabel(timestampMs) {
       const points = [];
       let usedNominal = false;
 
-      let tolerance = 60000;
-      if (strategy?.timeGrain === 'PT5M') tolerance = 300000;
-      else if (strategy?.timeGrain === 'PT1M') tolerance = 60000;
-      else if (strategy?.timeGrain) tolerance = 300000;
-
       pair.active.points.forEach((actPt) => {
         const tMs = actPt.ts.getTime();
-        const reactPt = _nearestVoltageValue(new Map(pair.reactive.points.map((p) => [p.ts.getTime(), p])), tMs, tolerance);
+        const reactPt = _nearestVoltageValue(new Map(pair.reactive.points.map((p) => [p.ts.getTime(), p])), tMs, _getToleranceMs(strategy));
         if (!reactPt) return;
 
         const pMw = actPt.value;
@@ -3990,7 +3986,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         let vKv = 0;
         let bQuality = matchedVSeries?._voltageQuality || 'Nominal fallback';
         if (matchedVSeries) {
-          const vPt = _nearestVoltageValue(new Map(matchedVSeries.points.map((p) => [p.ts.getTime(), p])), tMs, tolerance);
+          const vPt = _nearestVoltageValue(new Map(matchedVSeries.points.map((p) => [p.ts.getTime(), p])), tMs, _getToleranceMs(strategy));
           if (vPt) vKv = vPt.value;
         }
 
@@ -4012,7 +4008,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         });
       });
 
-      if (!points.length) return;
+      // REMOVED: if (!points.length) return;
 
       const prefix = side === 'start' ? 'Bas. — ' : (side === 'end' ? 'Bit. — ' : '');
       const label = `${prefix}${formatScadaTerminalLabel(pair.active)}`;
@@ -4046,7 +4042,14 @@ function _formatHistoryAxisLabel(timestampMs) {
     'hat-voltage': '#06b6d4'
   };
 
-  var activeChartMount = null;
+  let activeChartMount = null;
+
+  
+  function _getToleranceMs(strategy) {
+    if (strategy?.timeGrain === 'PT5M') return 300000;
+    if (strategy?.timeGrain === 'PT1M') return 60000;
+    return 60000; // RAW or default
+  }
 
   function historyPlotValue(paneMode, value) {
     return paneMode === 'abs' ? Math.abs(value) : value;
@@ -4085,10 +4088,8 @@ function _formatHistoryAxisLabel(timestampMs) {
         }
       }
 
-      let tolerance = 60000;
-      if (strategy?.timeGrain === 'PT5M') tolerance = 300000;
-      else if (strategy?.timeGrain === 'PT1M') tolerance = 60000;
-      else if (strategy?.timeGrain) tolerance = 300000;
+      let tolerance = 300000;
+      if (strategy?.timeGrain === 'PT1M') tolerance = 60000;
       else if (strategy?.timeGrain === 'PT5M') tolerance = 300000;
       
       const reactiveByTime = new Map(pair.reactive.points.map((point) => [point.ts.getTime(), point.value]));
@@ -4101,7 +4102,7 @@ function _formatHistoryAxisLabel(timestampMs) {
              points.push({ ts: new Date(tMs), value: Math.hypot(actPt.value, reactVal.value) });
          }
       });
-      if (!points.length) return;
+      // REMOVED: if (!points.length) return;
 
       const seriesId = `s:${pairing}`;
       let label = 'Olcum MVA';
@@ -4412,32 +4413,12 @@ function _formatHistoryAxisLabel(timestampMs) {
       return;
     }
 
-    let filteredSeries = rawSeries;
-    if (entityType === 'hat') {
-      const best = new Map();
-      rawSeries.forEach(s => {
-        const ts = s.terminalSide || resolveTerminalSide(s, entity) || 'unknown';
-        if (ts === 'unknown') {
-            best.set(s.measurementId || Math.random(), s);
-            return;
-        }
-        const key = `${ts}|${s.elementName || s.metricType}`;
-        const current = best.get(key);
-        if (!current) {
-          best.set(key, s);
-        } else if (s.candidateSlot === 'primary' && current.candidateSlot !== 'primary') {
-          best.set(key, s);
-        }
-      });
-      filteredSeries = Array.from(best.values());
-    }
-
     const counts = new Map();
-    const chartSeries = filteredSeries.map((series) => {
+    const chartSeries = rawSeries.map((series) => {
       const ts = series.terminalSide || 'unknown';
       const groupKey = entityType === 'trafo'
         ? `t:${series.elementName}`
-        : (entityType === 'hat' ? `h:${ts}` : 'b:u');
+        : (entityType === 'hat' ? `h:${ts}${series.candidateSlot && series.candidateSlot !== 'primary' ? '-' + series.candidateSlot : ''}` : 'b:u');
       const index = (counts.get(groupKey) || 0) + 1;
       counts.set(groupKey, index);
       let label;
@@ -4451,12 +4432,12 @@ function _formatHistoryAxisLabel(timestampMs) {
       if (index > 1 && entityType !== 'trafo') label = `${label} #${index}`;
       const terminalSide = entityType === 'hat' ? (series.terminalSide || resolveTerminalSide(series, entity)) : 'unknown';
       const pairing = entityType === 'hat'
-        ? `h:${terminalSide}`
+        ? `h:${terminalSide}${series.candidateSlot && series.candidateSlot !== 'primary' ? '-' + series.candidateSlot : ''}`
         : (entityType === 'trafo' ? `t:${index}` : 'b:u');
       return { ...series, label, pairing, terminalSide };
     });
 
-        const isDual = entityType === 'hat' || entityType === 'trafo';
+    const isDual = entityType === 'hat' || entityType === 'trafo';
     const isHatFivePane = entityType === 'hat';
     const width = 920;
     const padL = 66;
@@ -4551,10 +4532,8 @@ function _formatHistoryAxisLabel(timestampMs) {
         });
         // Pane 5: Gerilim (kV)
         const hatVoltageSeries = voltageSeriesData.map((vs) => {
-          const prefix = vs._voltageSide === 'start' ? 'Bas. - ' : (vs._voltageSide === 'end' ? 'Bit. - ' : '');
-          const fallback = vs._voltageSide === 'start' && entity?.startTm ? `Bas. - ${entity.startTm}(${entity.kv || '154'})` : (vs._voltageSide === 'end' && entity?.endTm ? `Bit. - ${entity.endTm}(${entity.kv || '154'})` : '');
-          const originalLabel = formatScadaTerminalLabel(vs);
-          const sideLabel = originalLabel && !originalLabel.startsWith('Olcum') ? `${prefix}${originalLabel}` : (fallback || `Gerilim`);
+          const prefix = vs._voltageSide === 'start' ? 'Bas. — ' : (vs._voltageSide === 'end' ? 'Bit. — ' : '');
+          const sideLabel = `${prefix}${formatScadaTerminalLabel(vs)}`;
           return {
             ...vs,
             seriesId: `hv:${vs.seriesId || vs.measurementId}`,
@@ -5096,7 +5075,9 @@ function _formatHistoryAxisLabel(timestampMs) {
 
     rebuildLegend();
     redraw();
-    if (typeof window !== 'undefined' && window.__SCADA_V2_TEST_HOOKS__) { window.__SCADA_V2_TEST_HOOKS__.lastPanes = panes; }
+    if (typeof window !== 'undefined' && window.__SCADA_V2_TEST_HOOKS__) {
+        window.__SCADA_V2_TEST_HOOKS__.lastPanes = panes;
+    }
   }
 
   function buildPanelRows() {

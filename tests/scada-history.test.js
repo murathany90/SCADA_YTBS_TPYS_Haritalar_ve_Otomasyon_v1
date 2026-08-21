@@ -230,7 +230,7 @@ test('buildHatCurrentSeries computes I correctly using nominal fallback with exa
     {
       _voltageSide: 'start',
       _voltageQuality: 'Gerçek — terminal/bara eşleşmesi',
-      points: [{ ts: new Date(1000), value: 160 }] // 160 kV at star
+      points: [{ ts: new Date(1000), value: 160 }] // 160 kV at start
     },
     {
       _voltageSide: 'end',
@@ -258,7 +258,7 @@ test('resolveTerminalSide formatting logic', () => {
   const { resolveTerminalSide } = scadaHooks;
   assert.equal(resolveTerminalSide({ terminals: ['A', 'B', 'C'] }, { startTm: 'A', endTm: 'C' }), 'start');
   assert.equal(resolveTerminalSide({ terminals: ['A', 'B', 'C'] }, { startTm: 'C', endTm: 'A' }), 'end');
-  assert.equal(resolveTerminalSide({ terminals: ['C', 'B', 'A'] }, { startTm: 'C', endTm: 'A' }), 'start'); // Inverse b3 matches star
+  assert.equal(resolveTerminalSide({ terminals: ['C', 'B', 'A'] }, { startTm: 'C', endTm: 'A' }), 'start'); // Inverse b3 matches start
 });
 
 test('transformReactiveSeries inverts end terminals for hats', () => {
@@ -293,7 +293,7 @@ test('fetchHatVoltageHistory cache avoids duplicate Superset calls', async () =>
     resolveHistoryValue: () => 154, resolveHistoryTimestamp: () => new Date(1000), resolveHistoryMeasurementId: (d) => d.sinsid, historySeriesId: () => 'id', findDataArray: (data) => data.map(d => ({ __timestamp: 1000, sinsid: d.sinsid, maxValue: 154 }))
   };
 
-  // Mock global context (state) and chrome for this tes
+  // Mock global context (state) and chrome for this test
   global.state = {
     scada: { hatVoltageHistoryCache: new Map(), hatVoltageHistoryPromises: new Map() },
     network: {
@@ -442,10 +442,10 @@ test('resolveHatTerminalVoltageBara chooses deterministic voltage bara if matche
 
 test('YIBITAS-YERKOY integration: mountInteractiveHistoryChart renders 5 panes with correct lengths and pairing', () => {
   const entity = {
-    id: 'hat-yib2',
+    id: 'hat-yib',
     startTm: 'yibitas',
     endTm: 'yerkoy',
-    kv: 154,
+    kv: '154',
     scada: {
       active: {
         rows: [
@@ -455,7 +455,7 @@ test('YIBITAS-YERKOY integration: mountInteractiveHistoryChart renders 5 panes w
       },
       reactive: {
         rows: [
-          { measurementId: 'Q1', b1Name: 'YIBITAS', b2Name: '154', b3Name: 'YERKOY', terminalSide: 'start', candidateSlot: 'secondary' },
+          { measurementId: 'Q1', b1Name: 'YIBITAS', b2Name: '154', b3Name: 'YERKOY', terminalSide: 'start', candidateSlot: 'primary' },
           { measurementId: 'Q2', b1Name: 'YERKOY', b2Name: '154', b3Name: 'YIBITAS', terminalSide: 'end', candidateSlot: 'primary' }
         ]
       }
@@ -494,22 +494,51 @@ test('YIBITAS-YERKOY integration: mountInteractiveHistoryChart renders 5 panes w
 
   const context = { state: { filters: {}, scada: { capacitySeason: "summer", entityMetricsByKey: new Map(), getNetworkModelMap: () => new Map(), history: new Map(), history24hCache: new Map(), hatVoltageHistoryCache: new Map(), timeMode: "live" } }, SCADA_CONFIG: {}, document: { createElementNS: () => ({ addEventListener: () => {},  setAttribute: () => {}, appendChild: () => {}, append: () => {}, classList: { add: () => {} }, style: {}, getBoundingClientRect: () => ({ width: 920, height: 600 }), remove: () => {} }), createElement: () => ({ addEventListener: () => {},  setAttribute: () => {}, appendChild: () => {}, append: () => {}, classList: { add: () => {} }, style: {}, getBoundingClientRect: () => ({ width: 920, height: 600 }), remove: () => {} }), createDocumentFragment: () => ({ appendChild: () => {}, append: () => {} }), addEventListener: () => {} }, window: { __SCADA_V2_TEST_HOOKS__: {}, addEventListener: () => {}, removeEventListener: () => {} }, SCADA_COMMON: global.SCADA_COMMON, console, setCapacitySeason: () => {}, initScadaCard: () => {} };
   context.globalThis = context; context.global = context; require('node:vm').createContext(context);
-  const code = fs.readFileSync('scada-v2-runtime.js', 'utf8');
+  const code = require('fs').readFileSync('scada-v2-runtime.js', 'utf8');
   require('node:vm').runInContext(code, context);
   context.window.__SCADA_V2_TEST_HOOKS__.mountInteractiveHistoryChart(canvasEl, null, tooltipEl, config);
   const panes = context.window.__SCADA_V2_TEST_HOOKS__.lastPanes;
+  
   assert.ok(panes);
   assert.strictEqual(panes.length, 5);
 
   const keys = panes.map(p => p.key);
-  assert.strictEqual(JSON.stringify(keys), JSON.stringify(["active", "reactive", "capacity", "current", "hat-voltage"]));
+  assert.strictEqual(keys.join(','), "active,reactive,capacity,current,hat-voltage");
 
+  const activePane = panes.find(p => p.key === 'active');
+  const reactivePane = panes.find(p => p.key === 'reactive');
   const capacityPane = panes.find(p => p.key === 'capacity');
   const currentPane = panes.find(p => p.key === 'current');
+  const voltagePane = panes.find(p => p.key === 'hat-voltage');
 
-  // They should not match because 4 minutes apart > 60s PT1M tolerance
-  assert.strictEqual(capacityPane.seriesGroup.length, 0);
-   // No points matched
-  assert.strictEqual(currentPane.seriesGroup.length, 0);
-   // No points matched
+  assert.strictEqual(activePane.seriesGroup.length, 2);
+  assert.strictEqual(reactivePane.seriesGroup.length, 2);
+  assert.strictEqual(capacityPane.seriesGroup.length, 2);
+  assert.strictEqual(currentPane.seriesGroup.length, 2);
+  assert.strictEqual(voltagePane.seriesGroup.length, 0);
+
+  // Even though there are 2 series, their points array is empty because PT1M tolerance doesn't match 4 mins
+  assert.strictEqual(capacityPane.seriesGroup[0].points.length, 0);
+  assert.strictEqual(currentPane.seriesGroup[0].points.length, 0);
+
+  // But if we simulate matching Q by making it within 60s
+  config.series[2].points[0].ts = new Date(config.series[0].points[0].ts.getTime() + 30000);
+  config.series[3].points[0].ts = new Date(config.series[1].points[0].ts.getTime() + 30000);
+  
+  context.window.__SCADA_V2_TEST_HOOKS__.mountInteractiveHistoryChart(canvasEl, null, tooltipEl, config);
+  const matchedPanes = context.window.__SCADA_V2_TEST_HOOKS__.lastPanes;
+  const matchedCurrentPane = matchedPanes.find(p => p.key === 'current');
+  
+  console.log(JSON.stringify(matchedCurrentPane.seriesGroup, null, 2)); assert.strictEqual(matchedCurrentPane.seriesGroup[0].points.length, 1);
+  assert.strictEqual(matchedCurrentPane.seriesGroup[0].points[0]._usedVoltageKv, 154);
+  assert.strictEqual(matchedCurrentPane.seriesGroup[0].points[0]._voltageSource, 'nominal');
+
+  // Verify no Olcum label
+  let badLabels = 0;
+  panes.forEach(pane => {
+      pane.seriesGroup.forEach(s => {
+          if (/Olcum|Ölçüm/.test(s.label)) badLabels++;
+      });
+  });
+  assert.strictEqual(badLabels, 0);
 });
