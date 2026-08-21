@@ -4035,24 +4035,52 @@ async function handleScadaHistoricalSnapshotFetch(payload) {
         broadcastScadaProgress({ requestId, stage: 'fallback', completedBatches: chunks.length, totalBatches: chunks.length });
         try {
           const wideRange = buildSnapshotRange(at - 24 * 3600 * 1000, at);
-          const fallbackResult = await executeAuthWrapper(authConfig, buildChunkPayload(missingIds, wideRange), timeoutMs);
-          if (fallbackResult.ok) {
-            const rows = globalThis.SCADA_COMMON?.findDataArray
-              ? globalThis.SCADA_COMMON.findDataArray(fallbackResult.data)
-              : [];
-            const recovered = filterHistoricalSnapshots(rows, at, missingIds);
-            let added = 0;
-            recovered.best.forEach((entry, key) => {
-              if (!primary.best.has(key)) {
-                primary.best.set(key, entry);
-                added += 1;
-              }
-            });
-            historicalSnapshotFallbackBlockedUntil.set(fallbackKey, now + FALLBACK_THROTTLE_MS);
-            historicalSnapshotFallbackCache.set(fallbackKey, { fetchedAt: now, recovered: recovered.best });
-            pruneHistoricalFallbackCaches(now);
-            recoveredViaFallback = added > 0;
+          // Batch fallback requests same as primary query (batchSize, maxConcurrency)
+          const fallbackChunks = [];
+          for (let i = 0; i < missingIds.length; i += batchSize) {
+            fallbackChunks.push(missingIds.slice(i, i + batchSize));
           }
+          if (!fallbackChunks.length) fallbackChunks.push([]);
+          
+          let fallbackRecovered = { best: new Map(), received: 0 };
+          for (let i = 0; i < fallbackChunks.length; i += maxConcurrency) {
+            const activeTasks = fallbackChunks.slice(i, i + maxConcurrency).map((chunk) => (
+              executeAuthWrapper(authConfig, buildChunkPayload(chunk, wideRange), timeoutMs)
+            ));
+            const results = await Promise.all(activeTasks);
+            for (const result of results) {
+              if (result.ok) {
+                const rows = globalThis.SCADA_COMMON?.findDataArray
+                  ? globalThis.SCADA_COMMON.findDataArray(result.data)
+                  : [];
+                if (Array.isArray(rows)) {
+                  const recovered = filterHistoricalSnapshots(rows, at, missingIds);
+                  recovered.best.forEach((entry, key) => {
+                    if (!fallbackRecovered.best.has(key)) {
+                      fallbackRecovered.best.set(key, entry);
+                    }
+                  });
+                  fallbackRecovered.received += recovered.received;
+                }
+              } else {
+                lastError = result.error;
+                lastErrorType = result.errorType;
+                httpStatus = result.httpStatus ?? httpStatus;
+              }
+            }
+          }
+          
+          let added = 0;
+          fallbackRecovered.best.forEach((entry, key) => {
+            if (!primary.best.has(key)) {
+              primary.best.set(key, entry);
+              added += 1;
+            }
+          });
+          historicalSnapshotFallbackBlockedUntil.set(fallbackKey, now + FALLBACK_THROTTLE_MS);
+          historicalSnapshotFallbackCache.set(fallbackKey, { fetchedAt: now, recovered: fallbackRecovered.best });
+          pruneHistoricalFallbackCaches(now);
+          recoveredViaFallback = added > 0;
         } catch (fallbackError) {
           lastError = fallbackError?.message || String(fallbackError);
           lastErrorType = 'NETWORK_ERROR';
