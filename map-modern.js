@@ -51,7 +51,9 @@ const state = {
     kv: new Set(['66', '154', '400']),
     networkYtm: new Set(),
     searchKvPins: new Set(),
-    searchYtmPins: new Set()
+    searchYtmPins: new Set(),
+    effectiveKv: null,
+    effectiveYtm: null
   },
   baraSet: {
     loaded: false,
@@ -362,6 +364,7 @@ function initializeFilters() {
       clearSearchPins();
       if (input.checked) state.filters.networkYtm.add(ytm);
       else state.filters.networkYtm.delete(ytm);
+      invalidateFilterCache();
       handleVisibilityFiltersChanged();
     });
     el.ytmFilters.appendChild(label);
@@ -380,6 +383,7 @@ function bindEvents() {
     el.kvFilterAll.addEventListener('change', (e) => {
       clearSearchPins();
       setKvFilterSelection(checkedKvValues(checkedFromEvent(e.target.checked)));
+      invalidateFilterCache();
     });
   }
   el.kvFilters.forEach((input) => input.addEventListener('change', () => {
@@ -387,6 +391,7 @@ function bindEvents() {
     if (input.checked) state.filters.kv.add(input.value);
     else state.filters.kv.delete(input.value);
     syncKvFilterInputs();
+    invalidateFilterCache();
     handleVisibilityFiltersChanged();
   }));
   if (el.btnYtmSelectAll) {
@@ -501,12 +506,14 @@ function syncYtmFilterInputs() {
 function setKvFilterSelection(values) {
   state.filters.kv = new Set((values || []).map((value) => String(value).trim()).filter(Boolean));
   syncKvFilterInputs();
+  invalidateFilterCache();
   handleVisibilityFiltersChanged();
 }
 
 function setYtmFilterSelection(values) {
   state.filters.networkYtm = new Set((values || []).map((value) => String(value).trim()).filter(Boolean));
   syncYtmFilterInputs();
+  invalidateFilterCache();
   handleVisibilityFiltersChanged();
 }
 
@@ -723,17 +730,29 @@ function updateBaraSetInfoText() {
 }
 
 function getEffectiveKvFilter() {
-  return new Set([...state.filters.kv, ...state.filters.searchKvPins]);
+  if (state.filters.effectiveKv) return state.filters.effectiveKv;
+  const set = new Set([...state.filters.kv, ...state.filters.searchKvPins]);
+  state.filters.effectiveKv = set;
+  return set;
 }
 
 function getEffectiveYtmFilter() {
-  return new Set([...state.filters.networkYtm, ...state.filters.searchYtmPins]);
+  if (state.filters.effectiveYtm) return state.filters.effectiveYtm;
+  const set = new Set([...state.filters.networkYtm, ...state.filters.searchYtmPins]);
+  state.filters.effectiveYtm = set;
+  return set;
+}
+
+function invalidateFilterCache() {
+  state.filters.effectiveKv = null;
+  state.filters.effectiveYtm = null;
 }
 
 function clearSearchPins() {
   if (!state.filters.searchKvPins.size && !state.filters.searchYtmPins.size) return;
   state.filters.searchKvPins.clear();
   state.filters.searchYtmPins.clear();
+  invalidateFilterCache();
 }
 
 function ensureSearchVisibility(target) {
@@ -751,6 +770,7 @@ function ensureSearchVisibility(target) {
     ytmCandidates.forEach((value) => state.filters.searchYtmPins.add(value));
     changes.push(ytmCandidates.join(' / '));
   }
+  invalidateFilterCache();
   return changes;
 }
 
