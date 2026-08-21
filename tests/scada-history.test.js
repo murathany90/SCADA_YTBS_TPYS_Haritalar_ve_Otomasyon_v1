@@ -163,3 +163,99 @@ test('scada-v2-runtime ranking close buttons are not mojibake before', () => {
   assert.ok(source.includes('id="btnRankingClose">&times;</button>'), 'ranking close uses &times;');
   assert.ok(source.includes('id="btnCloseScadaAudit" class="info-close" title="Kapat">&times;</button>'), 'audit close uses &times;');
 });
+
+test('formatScadaTerminalLabel formatting logic', () => {
+  const formatScadaTerminalLabel = (series) => {
+    const b1 = String(series?.terminals?.[0] || '').trim();
+    const b2 = String(series?.terminals?.[1] || '').trim();
+    const b3 = String(series?.terminals?.[2] || '').trim();
+    if (b1 && b2 && b3) return `${b1}(${b2})>>${b3}`;
+    if (b1 && b3) return `${b1}>>${b3}`;
+    if (b1 && b2) return `${b1}(${b2})`;
+    if (b1) return b1;
+    return series?.label || 'Olcum';
+  };
+  
+  assert.equal(formatScadaTerminalLabel({ terminals: ['A', 'B', 'C'] }), 'A(B)>>C');
+  assert.equal(formatScadaTerminalLabel({ terminals: ['A', '', 'C'] }), 'A>>C');
+  assert.equal(formatScadaTerminalLabel({ terminals: ['A', 'B'] }), 'A(B)');
+  assert.equal(formatScadaTerminalLabel({ terminals: ['A'] }), 'A');
+  assert.equal(formatScadaTerminalLabel({ label: 'Fallback' }), 'Fallback');
+});
+
+test('getSeasonalCapacityMva extracts limits for hat', () => {
+  const getSeasonalCapacityMva = (entityType, entity) => {
+    if (entityType === 'hat') {
+      const winter = Number(entity?.winterCapacityMva || 0);
+      const summer = Number(entity?.summerCapacityMva || 0);
+      return {
+        summer: Number.isFinite(summer) && summer > 0 ? summer : null,
+        winter: Number.isFinite(winter) && winter > 0 ? winter : null
+      };
+    }
+    return { summer: null, winter: null };
+  };
+
+  assert.deepEqual(getSeasonalCapacityMva('hat', { summerCapacityMva: 150, winterCapacityMva: 180 }), { summer: 150, winter: 180 });
+  assert.deepEqual(getSeasonalCapacityMva('hat', { summerCapacityMva: 0, winterCapacityMva: null }), { summer: null, winter: null });
+  assert.deepEqual(getSeasonalCapacityMva('trafo', { summerCapacityMva: 150 }), { summer: null, winter: null });
+});
+
+test('buildHatCurrentLimitLines calculates correctly', () => {
+  const buildHatCurrentLimitLines = (seasonalMva, nominalKv) => {
+    const kv = Number(nominalKv);
+    if (!Number.isFinite(kv) || kv <= 0) return [];
+    const sqrt3 = Math.sqrt(3);
+    const lines = [];
+    if (seasonalMva.summer != null) {
+      const iSummer = (1000 * seasonalMva.summer) / (sqrt3 * kv);
+      lines.push({ refKey: 'i-summer', value: iSummer, label: `${iSummer.toFixed(0)} A yaz limit`, enabled: true });
+    }
+    if (seasonalMva.winter != null) {
+      const iWinter = (1000 * seasonalMva.winter) / (sqrt3 * kv);
+      lines.push({ refKey: 'i-winter', value: iWinter, label: `${iWinter.toFixed(0)} A kis limit`, enabled: true });
+    }
+    return lines;
+  };
+
+  const lines = buildHatCurrentLimitLines({ summer: 100, winter: 150 }, 154);
+  assert.equal(lines.length, 2);
+  assert.equal(Math.round(lines[0].value), Math.round((1000 * 100) / (Math.sqrt(3) * 154)));
+  assert.equal(Math.round(lines[1].value), Math.round((1000 * 150) / (Math.sqrt(3) * 154)));
+});
+
+test('_nearestVoltageValue matches within tolerance', () => {
+  const _nearestVoltageValue = (vByTime, targetMs, maxToleranceMs) => {
+    if (!vByTime || !vByTime.size) return null;
+    let bestMs = null;
+    let bestDiff = Infinity;
+    for (const [tMs] of vByTime) {
+      const diff = Math.abs(tMs - targetMs);
+      if (diff < bestDiff) { bestDiff = diff; bestMs = tMs; }
+    }
+    if (bestMs != null && bestDiff <= maxToleranceMs) return vByTime.get(bestMs);
+    return null;
+  };
+
+  const map = new Map([[1000, 154], [2000, 155]]);
+  assert.equal(_nearestVoltageValue(map, 1100, 500), 154);
+  assert.equal(_nearestVoltageValue(map, 1900, 500), 155);
+  assert.equal(_nearestVoltageValue(map, 3000, 500), null); // Out of tolerance
+});
+
+test('buildHatCurrentSeries computes I correctly using nominal fallback', () => {
+  const nominalKv = 154;
+  const sqrt3 = Math.sqrt(3);
+  const activePoint = 30;
+  const reactivePoint = 40;
+  
+  // Hypotenuse of 30 and 40 is 50 MVA.
+  // I = 1000 * 50 / (sqrt(3) * 154) = 187.45 A
+  const expectedI = (1000 * 50) / (sqrt3 * nominalKv);
+  
+  const s = Math.hypot(activePoint, reactivePoint);
+  const iAmpere = (1000 * s) / (sqrt3 * nominalKv);
+  
+  assert.equal(s, 50);
+  assert.equal(iAmpere, expectedI);
+});

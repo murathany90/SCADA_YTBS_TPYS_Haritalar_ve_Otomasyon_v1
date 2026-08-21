@@ -3504,7 +3504,12 @@ const range = resolveHistoryRange(presetKey, customStartMs, customEndMs);
       window._scadaBypassCacheFor = null;
     } else if (cached && (nowMs - cached.fetchedAt < 5 * 60 * 1000)) {
       setHistoryStatus(`Onbellekten gosterildi (${cached.source}).`, 'ok');
-      _renderHistoryData(cached.data, entityType, entity, entityKey, cached.wasTruncated, cached.source, strategy, cached.metricList || metricList);
+      let extraConfig = null;
+      if (entityType === 'hat') {
+        const voltageFetchPromise = fetchHatVoltageHistory(entity, range, strategy).catch(() => ({ series: [], nominal: true }));
+        extraConfig = { voltageFetchPromise };
+      }
+      _renderHistoryData(cached.data, entityType, entity, entityKey, cached.wasTruncated, cached.source, strategy, cached.metricList || metricList, extraConfig);
       return;
     }
 
@@ -3582,13 +3587,18 @@ const range = resolveHistoryRange(presetKey, customStartMs, customEndMs);
         : '';
       setHistoryStatus(`${source} cozunurluk · ${data.series.length} seri · ${data.maxPoints} nokta${rangeLabel ? ` · ${rangeLabel}` : ''}`, 'ok');
       state.scada.history24hCache.set(cacheKey, { fetchedAt: nowMs, data, wasTruncated, source, metricList });
-      _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, source, strategy, metricList);
+      let extraConfig = null;
+      if (entityType === 'hat') {
+        const voltageFetchPromise = fetchHatVoltageHistory(entity, range, strategy).catch(() => ({ series: [], nominal: true }));
+        extraConfig = { voltageFetchPromise };
+      }
+      _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, source, strategy, metricList, extraConfig);
     } catch (err) {
       _renderHistoryError(entityKey, err?.message || 'Hata olustu', { mIds: requestedMeasurementIds, count: 0, source });
     }
   }
 
-function _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, source, strategy, metricList) {
+function _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, source, strategy, metricList, extraConfig) {
     const body = document.getElementById('scadaChartModalBody');
     if (!body) return;
     const displaySeries = (data.series || []).slice(0, 6);
@@ -3612,12 +3622,40 @@ function _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, s
       html += '<div class="scada-chart-warning">Veri satir sinirina ulasti; grafik eksik olabilir.</div>';
     }
     body.innerHTML = html;
-    mountInteractiveHistoryChart(
-      document.getElementById('scadaHistoryChartCanvas'),
-      document.getElementById('scadaHistoryLegend'),
-      document.getElementById('scadaChartTooltip'),
-      { series: displaySeries, entityType, entity }
-    );
+
+    const mountConfig = { series: displaySeries, entityType, entity };
+    const voltageFetchPromise = extraConfig?.voltageFetchPromise || null;
+
+    if (entityType === 'hat' && voltageFetchPromise) {
+      // Phase 1: mount with empty voltage data (current/voltage panes show loading)
+      mountConfig._voltageFetchData = { series: [], nominal: true };
+      mountInteractiveHistoryChart(
+        document.getElementById('scadaHistoryChartCanvas'),
+        document.getElementById('scadaHistoryLegend'),
+        document.getElementById('scadaChartTooltip'),
+        mountConfig
+      );
+      // Phase 2: voltage arrives, re-mount with full data
+      voltageFetchPromise.then((voltageResult) => {
+        // Only update if this chart modal is still open
+        const currentCanvas = document.getElementById('scadaHistoryChartCanvas');
+        if (!currentCanvas || !currentCanvas.isConnected) return;
+        mountConfig._voltageFetchData = voltageResult || { series: [], nominal: true };
+        mountInteractiveHistoryChart(
+          document.getElementById('scadaHistoryChartCanvas'),
+          document.getElementById('scadaHistoryLegend'),
+          document.getElementById('scadaChartTooltip'),
+          mountConfig
+        );
+      });
+    } else {
+      mountInteractiveHistoryChart(
+        document.getElementById('scadaHistoryChartCanvas'),
+        document.getElementById('scadaHistoryLegend'),
+        document.getElementById('scadaChartTooltip'),
+        mountConfig
+      );
+    }
   }
 
   function _renderHistoryError(entityKey, reason = 'Veri alınamadı', debugInfo = null) {
@@ -3655,12 +3693,206 @@ function _formatHistoryAxisLabel(timestampMs) {
     return `${pad(date.getDate())}.${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
+  // Produces b1(b2)>>b3 label from SCADA series terminals.
+  function formatScadaTerminalLabel(series) {
+    const b1 = String(series?.terminals?.[0] || '').trim();
+    const b2 = String(series?.terminals?.[1] || '').trim();
+    const b3 = String(series?.terminals?.[2] || '').trim();
+    if (b1 && b2 && b3) return `${b1}(${b2})>>${b3}`;
+    if (b1 && b3) return `${b1}>>${b3}`;
+    if (b1 && b2) return `${b1}(${b2})`;
+    if (b1) return b1;
+    return series?.label || 'Olcum';
+  }
+
+  // Returns both summer and winter capacity without season selection.
+  function getSeasonalCapacityMva(entityType, entity) {
+    if (entityType === 'hat') {
+      const winter = Number(entity?.winterCapacityMva || 0);
+      const summer = Number(entity?.summerCapacityMva || 0);
+      return {
+        summer: Number.isFinite(summer) && summer > 0 ? summer : null,
+        winter: Number.isFinite(winter) && winter > 0 ? winter : null
+      };
+    }
+    return { summer: null, winter: null };
+  }
+
+  // Derives current limit lines from MVA capacity and nominal kV.
+  function buildHatCurrentLimitLines(seasonalMva, nominalKv) {
+    const kv = Number(nominalKv);
+    if (!Number.isFinite(kv) || kv <= 0) return [];
+    const sqrt3 = Math.sqrt(3);
+    const lines = [];
+    if (seasonalMva.summer != null) {
+      const iSummer = (1000 * seasonalMva.summer) / (sqrt3 * kv);
+      lines.push({ refKey: 'i-summer', value: iSummer, label: `${iSummer.toFixed(0)} A yaz limit`, enabled: true });
+    }
+    if (seasonalMva.winter != null) {
+      const iWinter = (1000 * seasonalMva.winter) / (sqrt3 * kv);
+      lines.push({ refKey: 'i-winter', value: iWinter, label: `${iWinter.toFixed(0)} A kis limit`, enabled: true });
+    }
+    return lines;
+  }
+
+  // Finds bara entities matching the hat's start and end TMs.
+  function resolveHatTerminalVoltageBara(entity) {
+    const baras = Array.isArray(state.network?.baraNodes) ? state.network.baraNodes : [];
+    const hatKv = String(entity?.kv || entity?.primaryKv || '').trim();
+    const findBara = (tmName) => {
+      if (!tmName) return null;
+      const tm = String(tmName).trim();
+      return baras.find((b) => String(b.tmName || '').trim() === tm && String(b.kvBucket || b.gerilimKv || '') === hatKv)
+        || baras.find((b) => String(b.tmName || '').trim() === tm) || null;
+    };
+    return { startBara: findBara(entity?.startTm), endBara: findBara(entity?.endTm) };
+  }
+
+  // Fetches terminal voltage history for hat from bara measurement IDs.
+  // Returns { series, nominal } where nominal=true means no real data.
+  async function fetchHatVoltageHistory(entity, range, strategy) {
+    if (typeof SCADA_COMMON === 'undefined' || !SCADA_COMMON.resolveHistoryMetricsByEntity) {
+      return { series: [], nominal: true };
+    }
+    const { startBara, endBara } = resolveHatTerminalVoltageBara(entity);
+    const voltageMetrics = [];
+    if (startBara) {
+      const m = SCADA_COMMON.resolveHistoryMetricsByEntity('bara', startBara);
+      if (m?.voltage?.measurementIds?.length) {
+        voltageMetrics.push({ side: 'start', bara: startBara, metric: m.voltage });
+      }
+    }
+    if (endBara) {
+      const m = SCADA_COMMON.resolveHistoryMetricsByEntity('bara', endBara);
+      if (m?.voltage?.measurementIds?.length) {
+        voltageMetrics.push({ side: 'end', bara: endBara, metric: m.voltage });
+      }
+    }
+    if (!voltageMetrics.length) return { series: [], nominal: true };
+    const allIds = [...new Set(voltageMetrics.flatMap((v) => v.metric.measurementIds))];
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'SCADA_HISTORY_FETCH',
+        payload: {
+          baseUrl: SCADA_CONFIG.SUPERSET_ORIGIN,
+          dashboardId: SCADA_CONFIG.DASHBOARD_ID,
+          chartSliceId: SCADA_CONFIG.CHART_SLICE_ID,
+          datasourceId: SCADA_CONFIG.DATASOURCE_ID,
+          elementNames: ['U'],
+          measurementIds: allIds,
+          queryMode: strategy.queryMode === 'timeseries' ? 'timeseries' : 'raw',
+          timeGrain: strategy.timeGrain,
+          startTime: range.startMs,
+          endTime: range.endMs
+        }
+      });
+      if (!result.ok || !result.data) return { series: [], nominal: true };
+      const rows = SCADA_COMMON.findDataArray(result.data) || [];
+      const metricList = voltageMetrics.map((v) => v.metric);
+      const parsed = parseHistorySeriesByElement(rows, metricList);
+      parsed.series.forEach((s) => {
+        const vm = voltageMetrics.find((v) => v.metric.measurementIds.includes(s.measurementId));
+        if (vm) {
+          s._voltageSide = vm.side;
+          s._voltageBaraTm = String(vm.bara?.tmName || '').trim();
+          s._voltageBaraKv = String(vm.bara?.gerilimKv || vm.bara?.kvBucket || '').trim();
+        }
+      });
+      return { series: parsed.series, nominal: false };
+    } catch (err) {
+      console.warn('[SCADA_HISTORY] Terminal voltage fetch failed:', err?.message || err);
+      return { series: [], nominal: true };
+    }
+  }
+
+  // Nearest timestamp match with tolerance (returns value or null).
+  function _nearestVoltageValue(vByTime, targetMs, maxToleranceMs) {
+    if (!vByTime || !vByTime.size) return null;
+    let bestMs = null;
+    let bestDiff = Infinity;
+    for (const [tMs] of vByTime) {
+      const diff = Math.abs(tMs - targetMs);
+      if (diff < bestDiff) { bestDiff = diff; bestMs = tMs; }
+    }
+    if (bestMs != null && bestDiff <= maxToleranceMs) return vByTime.get(bestMs);
+    return null;
+  }
+
+  // Builds current series I = 1000*S / (sqrt3*V) from P/Q pairs and voltage.
+  function buildHatCurrentSeries(chartSeries, voltageSeriesData, entity) {
+    const sqrt3 = Math.sqrt(3);
+    const nominalKv = Number(entity?.kv || entity?.primaryKv || 0) || 0;
+    const pairs = new Map();
+    (chartSeries || []).forEach((s) => {
+      const pk = s?.pairing;
+      if (!pk) return;
+      if (!pairs.has(pk)) pairs.set(pk, {});
+      if (s.elementName === 'P' || s.metricType === 'active') pairs.get(pk).active = s;
+      else if (s.elementName === 'Q' || s.metricType === 'reactive') pairs.get(pk).reactive = s;
+    });
+    const output = [];
+    pairs.forEach((pair, pairing) => {
+      if (!pair.active || !pair.reactive) return;
+      const activeByTime = new Map(pair.active.points.map((p) => [p.ts.getTime(), p.value]));
+      const reactiveByTime = new Map(pair.reactive.points.map((p) => [p.ts.getTime(), p.value]));
+      const times = [...new Set([...activeByTime.keys(), ...reactiveByTime.keys()])].sort((a, b) => a - b);
+      // Find voltage series matching this terminal side
+      const startTm = String(entity?.startTm || '').trim().toLowerCase();
+      const endTm = String(entity?.endTm || '').trim().toLowerCase();
+      const label = String(pair.active.label || '').toLowerCase();
+      let matchedVSeries = null;
+      if (voltageSeriesData && voltageSeriesData.length) {
+        matchedVSeries = voltageSeriesData.find((vs) => {
+          if (!vs._voltageSide) return false;
+          const baraTm = String(vs._voltageBaraTm || '').toLowerCase();
+          if (vs._voltageSide === 'start' && startTm && label.includes(startTm)) return true;
+          if (vs._voltageSide === 'end' && endTm && label.includes(endTm)) return true;
+          if (baraTm && label.includes(baraTm)) return true;
+          return false;
+        }) || voltageSeriesData[0];
+      }
+      const vByTime = matchedVSeries ? new Map(matchedVSeries.points.map((p) => [p.ts.getTime(), p.value])) : null;
+      let usedNominal = false;
+      const points = [];
+      const toleranceMs = 2 * 60 * 1000;
+      times.forEach((tMs) => {
+        const p = activeByTime.get(tMs);
+        const q = reactiveByTime.get(tMs);
+        if (!Number.isFinite(p) || !Number.isFinite(q)) return;
+        const s = Math.hypot(p, q);
+        let vKv = vByTime ? (vByTime.get(tMs) ?? _nearestVoltageValue(vByTime, tMs, toleranceMs)) : null;
+        if (!Number.isFinite(vKv) || vKv <= 0) {
+          vKv = nominalKv;
+          usedNominal = true;
+        }
+        if (vKv <= 0) return;
+        const iAmpere = (1000 * s) / (sqrt3 * vKv);
+        points.push({ ts: new Date(tMs), value: iAmpere });
+      });
+      if (!points.length) return;
+      output.push({
+        seriesId: `i:${pairing}`,
+        measurementId: pair.active.measurementId || pairing,
+        elementName: 'I',
+        metricType: 'current',
+        unit: 'A',
+        pairing,
+        points,
+        terminals: pair.active.terminals || [],
+        _usedNominalVoltage: usedNominal
+      });
+    });
+    return output;
+  }
+
   const HISTORY_SERIES_COLORS = {
     active: '#22c55e',
     reactive: '#ef4444',
     voltage: '#38bdf8',
     capacity: '#a78bfa',
-    fallback: '#f59e0b'
+    fallback: '#f59e0b',
+    current: '#f97316',
+    'hat-voltage': '#06b6d4'
   };
 
   let activeChartMount = null;
@@ -3845,7 +4077,8 @@ function _formatHistoryAxisLabel(timestampMs) {
         metricType: metric?.metricType || (elementName === 'Q' ? 'reactive' : elementName === 'U' ? 'voltage' : 'active'),
         unit: metric?.unit || (elementName === 'Q' ? 'MVar' : elementName === 'U' ? 'kV' : 'MW'),
         points,
-        terminals: [String(firstRow?.b1Name || ''), String(firstRow?.b2Name || '')]
+        terminals: [String(firstRow?.b1Name || ''), String(firstRow?.b2Name || ''), String(firstRow?.b3Name || '')],
+        firstRow: firstRow || null
       });
     });
 
@@ -3935,9 +4168,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       if (entityType === 'bara') {
         label = 'Gerilim';
       } else if (entityType === 'hat') {
-        const startT = series.terminals?.[0];
-        const endT = series.terminals?.[1];
-        label = startT && endT ? `${startT} >> ${endT}` : 'Hat olcumu';
+        label = formatScadaTerminalLabel(series);
       } else {
         label = `${series.elementName || 'Olcum'}${index > 1 ? `-${index}` : ''}`;
       }
@@ -3949,46 +4180,135 @@ function _formatHistoryAxisLabel(timestampMs) {
     });
 
     const isDual = entityType === 'hat' || entityType === 'trafo';
+    const isHatFivePane = entityType === 'hat';
     const width = 920;
     const padL = 66;
     const padR = 22;
     const padT = 16;
     const padB = 34;
     const paneGap = 16;
-    const paneHeight = 232;
+    const paneHeight = isHatFivePane ? 180 : 232;
 
     const panes = [];
     if (isDual) {
+      // Pane 1: Aktif guc
       panes.push({
         key: 'active',
-        title: 'Aktif guc (|MW|)',
+        title: 'Aktif guc (MW)',
         unit: 'MW',
         mode: 'abs',
         seriesGroup: chartSeries.filter((series) => series.elementName === 'P' || series.metricType === 'active'),
         refLines: []
       });
+      // Pane 2: Reaktif guc — hat icin baslangic +Q, bitis -Q cizim
+      const rawReactiveSeries = chartSeries.filter((series) => series.elementName === 'Q' || series.metricType === 'reactive');
+      const reactiveSeries = isHatFivePane
+        ? rawReactiveSeries.map((series, idx) => {
+          if (idx === 0) return { ...series, _displayLabel: `Bas. +Q` };
+          return {
+            ...series,
+            _displayLabel: `Bit. -Q`,
+            points: series.points.map((pt) => ({ ...pt, value: -pt.value, _rawValue: pt.value }))
+          };
+        })
+        : rawReactiveSeries;
       panes.push({
         key: 'reactive',
-        title: 'Reaktif guc (MVar, isaretli)',
+        title: 'Reaktif guc (MVar)',
         unit: 'MVar',
         mode: 'signed-zero',
-        seriesGroup: chartSeries.filter((series) => series.elementName === 'Q' || series.metricType === 'reactive'),
+        seriesGroup: reactiveSeries,
         refLines: []
       });
-      const capacity = getCapacityMva(entityType, entity);
-      if (Number.isFinite(capacity) && capacity > 0) {
-        const sSeries = buildHistoryCapacitySeries(chartSeries);
-        if (sSeries.length) {
+      // Pane 3: MVA — yaz/kis ayri limit cizgileri (hat), tek limit (trafo)
+      const sSeries = buildHistoryCapacitySeries(chartSeries);
+      if (sSeries.length) {
+        const mvaRefLines = [];
+        if (isHatFivePane) {
+          const seasonal = getSeasonalCapacityMva(entityType, entity);
+          if (seasonal.summer != null) {
+            mvaRefLines.push({ refKey: 'mva-summer', value: seasonal.summer,
+              label: `${seasonal.summer.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA yaz`, enabled: true });
+          }
+          if (seasonal.winter != null) {
+            mvaRefLines.push({ refKey: 'mva-winter', value: seasonal.winter,
+              label: `${seasonal.winter.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA kis`, enabled: true });
+          }
+          if (!mvaRefLines.length) {
+            const capacity = getCapacityMva(entityType, entity);
+            if (Number.isFinite(capacity) && capacity > 0) {
+              mvaRefLines.push({ value: capacity, label: `${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA kapasite` });
+            }
+          }
+        } else {
+          const capacity = getCapacityMva(entityType, entity);
+          if (Number.isFinite(capacity) && capacity > 0) {
+            mvaRefLines.push({ value: capacity, label: `${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA kapasite` });
+          }
+        }
+        panes.push({
+          key: 'capacity',
+          title: 'Gorunen guc (|S| MVA)',
+          unit: 'MVA',
+          mode: 'abs',
+          seriesGroup: sSeries,
+          refLines: mvaRefLines
+        });
+      }
+      // Pane 4 & 5: Hat only — Akim (A) and Gerilim (kV)
+      if (isHatFivePane) {
+        const nominalKv = Number(entity?.kv || entity?.primaryKv || 0) || 0;
+        const seasonal = getSeasonalCapacityMva(entityType, entity);
+        const voltageFetchData = config?._voltageFetchData || null;
+        const voltageSeriesData = voltageFetchData?.series || [];
+        // Pane 4: Akim (A)
+        const currentSeries = buildHatCurrentSeries(chartSeries, voltageSeriesData, entity);
+        const currentLimitLines = buildHatCurrentLimitLines(seasonal, nominalKv);
+        const currentNotes = [];
+        const anyNominal = currentSeries.some((s) => s._usedNominalVoltage);
+        if (anyNominal && nominalKv > 0) {
+          currentNotes.push(`Tahmini akim — nominal ${nominalKv} kV gerilim kullanildi`);
+        } else if (!anyNominal && voltageSeriesData.length) {
+          currentNotes.push('Gercek gerilim ile hesaplandi');
+        }
+        panes.push({
+          key: 'current',
+          title: currentNotes.length ? `Akim (A) — ${currentNotes[0]}` : 'Akim (A)',
+          unit: 'A',
+          mode: 'abs',
+          seriesGroup: currentSeries,
+          refLines: currentLimitLines
+        });
+        // Pane 5: Gerilim (kV)
+        const hatVoltageSeries = voltageSeriesData.map((vs) => {
+          const sideLabel = vs._voltageSide === 'start'
+            ? `Bas. ${vs._voltageBaraTm || entity?.startTm || ''}`
+            : `Bit. ${vs._voltageBaraTm || entity?.endTm || ''}`;
+          return {
+            ...vs,
+            seriesId: `hv:${vs.seriesId || vs.measurementId}`,
+            metricType: 'hat-voltage',
+            label: sideLabel,
+            unit: 'kV'
+          };
+        });
+        if (hatVoltageSeries.length) {
           panes.push({
-            key: 'capacity',
-            title: 'Gorunen guc (|S| MVA)',
-            unit: 'MVA',
-            mode: 'abs',
-            seriesGroup: sSeries,
-            refLines: [{
-              value: capacity,
-              label: `${capacity.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MVA kapasite`
-            }]
+            key: 'hat-voltage',
+            title: 'Gerilim (kV)',
+            unit: 'kV',
+            mode: 'positive',
+            seriesGroup: hatVoltageSeries,
+            refLines: []
+          });
+        } else {
+          panes.push({
+            key: 'hat-voltage',
+            title: 'Gerilim (kV) — veri yok',
+            unit: 'kV',
+            mode: 'positive',
+            seriesGroup: [],
+            refLines: []
           });
         }
       }
@@ -4284,7 +4604,14 @@ function _formatHistoryAxisLabel(timestampMs) {
     function rebuildLegend() {
       if (!legendEl) return;
       legendEl.innerHTML = '';
-      chartSeries.forEach((series) => {
+      // Collect all series across all panes for the legend
+      const allLegendSeries = [];
+      panes.forEach((pane) => {
+        (pane.seriesGroup || []).forEach((series) => {
+          if (!allLegendSeries.some((s) => s.seriesId === series.seriesId)) allLegendSeries.push(series);
+        });
+      });
+      allLegendSeries.forEach((series) => {
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'scada-history-legend-chip' + (hidden.has(series.seriesId) ? ' is-hidden' : '');
@@ -4300,17 +4627,18 @@ function _formatHistoryAxisLabel(timestampMs) {
         });
         legendEl.appendChild(chip);
       });
-      const voltagePane = panes.length === 1 ? panes[0] : null;
-      if (voltagePane && voltagePane.key === 'voltage' && voltagePane.refLines.length) {
+      // Ref-line toggles for all panes that have refLines
+      const panesWithRefs = panes.filter((pane) => pane.refLines && pane.refLines.length);
+      panesWithRefs.forEach((pane) => {
         const separator = document.createElement('span');
         separator.className = 'scada-history-legend-sep';
-        separator.textContent = 'Referans:';
+        separator.textContent = pane.unit + ' Ref:';
         legendEl.appendChild(separator);
-        voltagePane.refLines.forEach((ref) => {
+        pane.refLines.forEach((ref) => {
           const refChip = document.createElement('button');
           refChip.type = 'button';
           refChip.className = 'scada-history-ref-chip' + (ref.enabled === false ? ' is-off' : '');
-          refChip.dataset.refKey = ref.refKey;
+          refChip.dataset.refKey = ref.refKey || '';
           refChip.textContent = ref.label;
           refChip.title = `Referans cizgisini goster/gizle: ${ref.label}`;
           refChip.addEventListener('click', () => {
@@ -4320,7 +4648,7 @@ function _formatHistoryAxisLabel(timestampMs) {
           });
           legendEl.appendChild(refChip);
         });
-      }
+      });
     }
 
     function updateCrosshairFromEvent(event) {
@@ -4353,8 +4681,10 @@ function _formatHistoryAxisLabel(timestampMs) {
     }
 
     function formatTooltipValue(series, point) {
-      const prefix = point.value >= 0 ? '+' : '';
-      return `${prefix}${formatAxisNumber(point.value)} ${series.unit}`;
+      // Reaktif guc tooltip: gercek SCADA Q degeri goster (ters cizilse bile)
+      const displayValue = point._rawValue !== undefined ? point._rawValue : point.value;
+      const prefix = displayValue >= 0 ? '+' : '';
+      return `${prefix}${formatAxisNumber(displayValue)} ${series.unit}`;
     }
 
     function updateTooltip(event) {
