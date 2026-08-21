@@ -4407,9 +4407,22 @@ function _formatHistoryAxisLabel(timestampMs) {
     const entityType = config?.entityType || 'hat';
     const entity = config?.entity || null;
     const strategy = config?.strategy || null;
-    const rawSeries = (config?.series || []).filter((series) => series && Array.isArray(series.points) && series.points.length);
+    
+      if (activeChartMount?.cleanup) {
+        activeChartMount.cleanup();
+      }
+      canvasEl.replaceChildren();
+      if (legendEl) legendEl.replaceChildren();
+      tooltipEl.hidden = true;
+      tooltipEl.innerHTML = '';
+      
+      const rawSeries = (config?.series || []).filter((series) => series && Array.isArray(series.points) && series.points.length);
     if (!rawSeries.length) {
-      canvasEl.innerHTML = '<div class="scada-chart-empty">Grafik icin yeterli gecmis veri yok.</div>';
+      canvasEl.replaceChildren();
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'scada-chart-empty';
+        emptyDiv.textContent = 'Grafik icin yeterli gecmis veri yok.';
+        canvasEl.appendChild(emptyDiv);
       return;
     }
 
@@ -4931,65 +4944,94 @@ function _formatHistoryAxisLabel(timestampMs) {
       }
     }
 
-    function formatTooltipValue(series, point) {
-      // Reaktif guc tooltip: gercek SCADA Q degeri goster (ters cizilse bile)
+    function formatTooltipValue(series, point, fallbackUnit) {
       const displayValue = point._rawValue !== undefined ? point._rawValue : point.value;
       const prefix = displayValue >= 0 ? '+' : '';
-      return `${prefix}${formatAxisNumber(displayValue)} ${series.unit}`;
+      return `${prefix}${formatAxisNumber(displayValue)} ${series.unit || fallbackUnit || ''}`.trim();
     }
 
     function updateTooltip(event) {
-      if (!isHovering) return;
-      const { offsetX, offsetY } = event;
-      if (offsetX < _AXIS_WIDTH || offsetX > canvas.width - _AXIS_WIDTH) return;
-      if (offsetY < _PADDING_TOP || offsetY > canvas.height - _PADDING_BOTTOM) return;
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
 
-      const spanMs = viewSpanMs();
-      const plotW = canvas.width - (_AXIS_WIDTH * 2);
-      const pxRatio = plotW / spanMs;
-      const hoverTimeMs = range.startMs + ((offsetX - _AXIS_WIDTH) / pxRatio);
-      hoverTs = hoverTimeMs;
+      const scaleX = width / rect.width;
+      const scaleY = totalHeight / rect.height;
 
-      // Find the specific pane the user is hovering over
-      const activePane = panes.find(p => offsetY >= p._rect.y && offsetY <= p._rect.y + p._rect.h);
+      const svgX = (event.clientX - rect.left) * scaleX;
+      const svgY = (event.clientY - rect.top) * scaleY;
+      
+      if (svgX < padL || svgX > width - padR || svgY < padT || svgY > totalHeight - padB) {
+         tooltipEl.hidden = true;
+         return;
+      }
+      
+      const hoveredTimeMs = hoverTimeMs;
+      if (hoveredTimeMs == null) return;
+      
+      let activePane = null;
+      for (let i = 0; i < panes.length; i++) {
+        const paneTop = padT + i * (paneHeight + paneGap);
+        const paneBottom = paneTop + paneHeight;
+        if (svgY >= paneTop && svgY <= paneBottom) {
+          activePane = panes[i];
+          break;
+        }
+      }
+      
       const rows = [];
       if (activePane) {
         const seriesToRender = activePane.seriesGroup || [];
         seriesToRender.forEach((series) => {
           if (hidden.has(series.seriesId) || !series.points.length) return;
-          const nearestIndex = _nearestPointIndex(series.points, hoverTimeMs);
+          const nearestIndex = _nearestPointIndex(series.points, hoveredTimeMs);
           const point = series.points[nearestIndex];
           if (!point) return;
-          if (Math.abs(point.ts.getTime() - hoverTimeMs) > viewSpanMs() * 0.05) return;
+          if (Math.abs(point.ts.getTime() - hoveredTimeMs) > viewSpanMs() * 0.05) return;
 
           let metaHtml = '';
           if (series.metricType === 'current' && point._voltageSource) {
              const vKv = point._usedVoltageKv ? `${formatAxisNumber(point._usedVoltageKv)} kV` : '-';
-             metaHtml = `<div style="font-size: 9px; color: var(--muted); padding-left: 14px; margin-top: -2px;">Gerilim: ${vKv} (${point._baraMatchQuality || point._voltageSource})</div>`;
+             const q = point._baraMatchQuality === 'Nominal fallback' ? 'Nominal fallback' : (point._baraMatchQuality || point._voltageSource);
+             metaHtml = `<div style="font-size: 9px; color: var(--muted); padding-left: 14px; margin-top: -2px;">Gerilim: ${vKv}<br>Kaynak: ${q}</div>`;
           }
 
-          const seriesLabel = series._displayLabel || series.label || series.elementName || 'Olcum';
+          let seriesLabel = series._displayLabel || series.label || series.elementName || 'Olcum';
+          
+          if (entityType === 'hat') {
+              const prefix = series.terminalSide === 'start' ? 'Bas. — ' : (series.terminalSide === 'end' ? 'Bit. — ' : '');
+              const cleanTerminal = formatScadaTerminalLabel(series);
+              seriesLabel = `${prefix}${cleanTerminal}`;
+          }
 
           rows.push(`<div><div class="scada-chart-tooltip-row" style="--scada-series-color:${_chartSeriesColor(series)};">
             <span class="scada-chart-tooltip-dot"></span>
             <span>${escapeHtml(seriesLabel)}</span>
-            <strong>${escapeHtml(formatTooltipValue(series, point))}</strong>
+            <strong>${escapeHtml(formatTooltipValue(series, point, activePane.unit))}</strong>
           </div>${metaHtml}</div>`);
         });
       }
+      
       if (!rows.length) {
         tooltipEl.hidden = true;
         return;
       }
-      const timeHtml = `<div class="scada-chart-tooltip-title">${escapeHtml(_formatHistoryAxisLabel(hoverTimeMs))}</div>`;
+      
+      const timeHtml = `<div class="scada-chart-tooltip-title">${escapeHtml(_formatHistoryAxisLabel(hoveredTimeMs))}</div>`;
       tooltipEl.innerHTML = `${timeHtml}${rows.join('')}`;
       tooltipEl.hidden = false;
-      let left = event.clientX - canvasRect.left + 14;
-      let top = event.clientY - canvasRect.top - 10;
-      const tooltipWidth = 220;
-      const clampLeft = Math.max(4, Math.min(canvasRect.width - tooltipWidth - 4, left));
-      const tooltipHeight = Math.min(tooltipEl.offsetHeight || 120, canvasRect.height);
-      const clampTop = Math.max(4, Math.min(canvasRect.height - tooltipHeight - 4, top));
+      tooltipEl.style.pointerEvents = 'none';
+      tooltipEl.style.zIndex = '99999';
+      
+      const host = tooltipEl.offsetParent || canvasEl.parentElement || canvasEl;
+      const hostRect = host.getBoundingClientRect();
+      
+      let left = event.clientX - hostRect.left + 14;
+      let top = event.clientY - hostRect.top + 12;
+      
+      const tooltipWidth = tooltipEl.offsetWidth || 220;
+      const clampLeft = Math.max(4, Math.min(hostRect.width - tooltipWidth - 4, left));
+      const tooltipHeight = tooltipEl.offsetHeight || 120;
+      const clampTop = Math.max(4, Math.min(hostRect.height - tooltipHeight - 4, top));
       tooltipEl.style.left = `${clampLeft}px`;
       tooltipEl.style.top = `${clampTop}px`;
     }

@@ -480,7 +480,7 @@ test('YIBITAS-YERKOY integration: mountInteractiveHistoryChart renders 5 panes w
   const parsed = scadaHooks.parseHistorySeriesByElement(rows, metricList);
   scadaHooks.enrichHatHistorySeriesMetadata(parsed.series, entity);
 
-  const canvasEl = { innerHTML: '', appendChild: () => {}, querySelector: () => null };
+  const canvasEl = { replaceChildren: () => {}, innerHTML: '', appendChild: () => {}, querySelector: () => null };
   const tooltipEl = { style: {} };
   const config = {
     entityType: 'hat',
