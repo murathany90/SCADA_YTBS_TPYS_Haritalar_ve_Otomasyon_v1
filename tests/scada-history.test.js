@@ -230,7 +230,7 @@ test('buildHatCurrentSeries computes I correctly using nominal fallback with exa
     {
       _voltageSide: 'start',
       _voltageQuality: 'Gerçek — terminal/bara eşleşmesi',
-      points: [{ ts: new Date(1000), value: 160 }] // 160 kV at start
+      points: [{ ts: new Date(1000), value: 160 }] // 160 kV at star
     },
     {
       _voltageSide: 'end',
@@ -258,7 +258,7 @@ test('resolveTerminalSide formatting logic', () => {
   const { resolveTerminalSide } = scadaHooks;
   assert.equal(resolveTerminalSide({ terminals: ['A', 'B', 'C'] }, { startTm: 'A', endTm: 'C' }), 'start');
   assert.equal(resolveTerminalSide({ terminals: ['A', 'B', 'C'] }, { startTm: 'C', endTm: 'A' }), 'end');
-  assert.equal(resolveTerminalSide({ terminals: ['C', 'B', 'A'] }, { startTm: 'C', endTm: 'A' }), 'start'); // Inverse b3 matches start
+  assert.equal(resolveTerminalSide({ terminals: ['C', 'B', 'A'] }, { startTm: 'C', endTm: 'A' }), 'start'); // Inverse b3 matches star
 });
 
 test('transformReactiveSeries inverts end terminals for hats', () => {
@@ -293,7 +293,7 @@ test('fetchHatVoltageHistory cache avoids duplicate Superset calls', async () =>
     resolveHistoryValue: () => 154, resolveHistoryTimestamp: () => new Date(1000), resolveHistoryMeasurementId: (d) => d.sinsid, historySeriesId: () => 'id', findDataArray: (data) => data.map(d => ({ __timestamp: 1000, sinsid: d.sinsid, maxValue: 154 }))
   };
 
-  // Mock global context (state) and chrome for this test
+  // Mock global context (state) and chrome for this tes
   global.state = {
     scada: { hatVoltageHistoryCache: new Map(), hatVoltageHistoryPromises: new Map() },
     network: {
@@ -438,4 +438,78 @@ test('resolveHatTerminalVoltageBara chooses deterministic voltage bara if matche
   const res = scadaHooks.resolveHatTerminalVoltageBara(entity);
   assert.strictEqual(res.startMatch.quality, 'tm-kv');
   assert.strictEqual(res.startMatch.bara.id, 'b2'); // b2 has U measurement ID!
+});
+
+test('YIBITAS-YERKOY integration: mountInteractiveHistoryChart renders 5 panes with correct lengths and pairing', () => {
+  const entity = {
+    id: 'hat-yib2',
+    startTm: 'yibitas',
+    endTm: 'yerkoy',
+    kv: 154,
+    scada: {
+      active: {
+        rows: [
+          { measurementId: 'P1', b1Name: 'YIBITAS', b2Name: '154', b3Name: 'YERKOY', terminalSide: 'start', candidateSlot: 'primary' },
+          { measurementId: 'P2', b1Name: 'YERKOY', b2Name: '154', b3Name: 'YIBITAS', terminalSide: 'end', candidateSlot: 'primary' }
+        ]
+      },
+      reactive: {
+        rows: [
+          { measurementId: 'Q1', b1Name: 'YIBITAS', b2Name: '154', b3Name: 'YERKOY', terminalSide: 'start', candidateSlot: 'secondary' },
+          { measurementId: 'Q2', b1Name: 'YERKOY', b2Name: '154', b3Name: 'YIBITAS', terminalSide: 'end', candidateSlot: 'primary' }
+        ]
+      }
+    }
+  };
+
+  const metricList = [
+    { elementName: 'P', metricType: 'active', measurementIds: ['P1', 'P2'] },
+    { elementName: 'Q', metricType: 'reactive', measurementIds: ['Q1', 'Q2'] }
+  ];
+
+  // PT1M regression check
+  const rows = [
+    { sinsid: 'P1', timestamp: new Date('2026-08-20T13:10:00Z').getTime(), 'AVG(maxValue)': 100 },
+    { sinsid: 'P2', timestamp: new Date('2026-08-20T13:10:00Z').getTime(), 'AVG(maxValue)': -100 },
+    // Q is at 13:14:00 (4 minutes apart) -> PT1M strategy is 60s max tolerance
+    { sinsid: 'Q1', timestamp: new Date('2026-08-20T13:14:00Z').getTime(), 'AVG(maxValue)': 20 },
+    { sinsid: 'Q2', timestamp: new Date('2026-08-20T13:14:00Z').getTime(), 'AVG(maxValue)': -20 }
+  ];
+
+  global.SCADA_COMMON = require('../scada-common.js');
+  const parsed = scadaHooks.parseHistorySeriesByElement(rows, metricList);
+  scadaHooks.enrichHatHistorySeriesMetadata(parsed.series, entity);
+
+  const canvasEl = { innerHTML: '', appendChild: () => {}, querySelector: () => null };
+  const tooltipEl = { style: {} };
+  const config = {
+    entityType: 'hat',
+    entity,
+    series: parsed.series,
+    _voltageFetchData: { series: [] },
+    strategy: { timeGrain: 'PT1M' }
+  };
+
+  global.window = { __SCADA_V2_TEST_HOOKS__: {} };
+
+  const context = { state: { filters: {}, scada: { capacitySeason: "summer", entityMetricsByKey: new Map(), getNetworkModelMap: () => new Map(), history: new Map(), history24hCache: new Map(), hatVoltageHistoryCache: new Map(), timeMode: "live" } }, SCADA_CONFIG: {}, document: { createElementNS: () => ({ addEventListener: () => {},  setAttribute: () => {}, appendChild: () => {}, append: () => {}, classList: { add: () => {} }, style: {}, getBoundingClientRect: () => ({ width: 920, height: 600 }), remove: () => {} }), createElement: () => ({ addEventListener: () => {},  setAttribute: () => {}, appendChild: () => {}, append: () => {}, classList: { add: () => {} }, style: {}, getBoundingClientRect: () => ({ width: 920, height: 600 }), remove: () => {} }), createDocumentFragment: () => ({ appendChild: () => {}, append: () => {} }), addEventListener: () => {} }, window: { __SCADA_V2_TEST_HOOKS__: {}, addEventListener: () => {}, removeEventListener: () => {} }, SCADA_COMMON: global.SCADA_COMMON, console, setCapacitySeason: () => {}, initScadaCard: () => {} };
+  context.globalThis = context; context.global = context; require('node:vm').createContext(context);
+  const code = fs.readFileSync('scada-v2-runtime.js', 'utf8');
+  require('node:vm').runInContext(code, context);
+  context.window.__SCADA_V2_TEST_HOOKS__.mountInteractiveHistoryChart(canvasEl, null, tooltipEl, config);
+  const panes = context.window.__SCADA_V2_TEST_HOOKS__.lastPanes;
+  assert.ok(panes);
+  assert.strictEqual(panes.length, 5);
+
+  const keys = panes.map(p => p.key);
+  assert.strictEqual(JSON.stringify(keys), JSON.stringify(["active", "reactive", "capacity", "current", "hat-voltage"]));
+
+  const capacityPane = panes.find(p => p.key === 'capacity');
+  const currentPane = panes.find(p => p.key === 'current');
+
+  // They should not match because 4 minutes apart > 60s PT1M tolerance
+  assert.strictEqual(capacityPane.seriesGroup.length, 0);
+   // No points matched
+  assert.strictEqual(currentPane.seriesGroup.length, 0);
+   // No points matched
 });
