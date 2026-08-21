@@ -3830,8 +3830,32 @@ async function handleScadaHistoryFetch(payload) {
 const FALLBACK_THROTTLE_MS = 5 * 60 * 1000;
 const FALLBACK_CACHE_TTL_MS = 10 * 60 * 1000;
 const FALLBACK_TIME_BUCKET_MS = 5 * 60 * 1000;
+const FALLBACK_MAX_ENTRIES = 200; // Limit cache size
 const historicalSnapshotFallbackCache = new Map();        // key -> { fetchedAt, recovered: Map }
-const historicalSnapshotFallbackBlockedUntil = new Map();  // key -> timestamp (never set by network errors)
+const historicalSnapshotFallbackBlockedUntil = new Map();  // key -> timestamp
+
+// Periodic cache pruning (called on each cache set)
+function pruneHistoricalFallbackCaches(nowMs = Date.now()) {
+  // Prune expired entries from cache
+  for (const [key, value] of historicalSnapshotFallbackCache.entries()) {
+    if (nowMs - (value?.fetchedAt || 0) > FALLBACK_CACHE_TTL_MS) {
+      historicalSnapshotFallbackCache.delete(key);
+    }
+  }
+  // Prune expired blocked entries
+  for (const [key, blockedUntil] of historicalSnapshotFallbackBlockedUntil.entries()) {
+    if (nowMs > blockedUntil) {
+      historicalSnapshotFallbackBlockedUntil.delete(key);
+    }
+  }
+  // Enforce max entries limit (LRU-style: remove oldest)
+  if (historicalSnapshotFallbackCache.size > FALLBACK_MAX_ENTRIES) {
+    const entries = Array.from(historicalSnapshotFallbackCache.entries())
+      .sort((a, b) => (a[1]?.fetchedAt || 0) - (b[1]?.fetchedAt || 0));
+    const toRemove = entries.slice(0, entries.length - FALLBACK_MAX_ENTRIES);
+    toRemove.forEach(([key]) => historicalSnapshotFallbackCache.delete(key));
+  }
+}
 
 function fnv1aHash(text) {
   let hash = 2166136261;
@@ -4026,6 +4050,7 @@ async function handleScadaHistoricalSnapshotFetch(payload) {
             });
             historicalSnapshotFallbackBlockedUntil.set(fallbackKey, now + FALLBACK_THROTTLE_MS);
             historicalSnapshotFallbackCache.set(fallbackKey, { fetchedAt: now, recovered: recovered.best });
+            pruneHistoricalFallbackCaches(now);
             recoveredViaFallback = added > 0;
           }
         } catch (fallbackError) {
