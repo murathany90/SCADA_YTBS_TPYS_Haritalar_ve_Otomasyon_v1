@@ -129,7 +129,6 @@
   }
 
   function getVisibleTrafoEntities() {
-    buildNetworkIndexes();
     const effectiveKv = getEffectiveKvFilter();
     return state.network.trafos.filter((trafo) => {
       const tm = trafo.tm || getEntityTm(trafo);
@@ -213,7 +212,6 @@
   };
 
   getVisibleBaras = function () {
-    buildNetworkIndexes();
     const effectiveKv = getEffectiveKvFilter();
     return state.network.baraNodes.filter((bara) => {
       const tm = bara.tm || getEntityTm(bara);
@@ -223,7 +221,6 @@
   };
 
   getVisibleTms = function () {
-    buildNetworkIndexes();
     const effectiveKv = getEffectiveKvFilter();
     const baseTms = state.network.tmPoints.filter((row) => effectiveKv.has(String(row.kvBucket || row.kv || '')) && matchesYtm(row.ytm));
     if (state.filters.hatDisplayMode === 'sade-ayrik' || state.filters.hatDisplayMode === 'sade') {
@@ -240,7 +237,6 @@
   };
 
   getVisibleHats = function () {
-    buildNetworkIndexes();
     const effectiveKv = getEffectiveKvFilter();
     return state.network.hatLines.filter((row) => effectiveKv.has(String(row.kvBucket || row.kv || '')) && matchesAnyYtm(row.ytmNames));
   };
@@ -268,7 +264,6 @@
   }
 
   resetView = function () {
-    buildNetworkIndexes();
     const points = collectFilterPoints(true);
     if (!points.length) return;
     const lons = points.map((point) => point[0]);
@@ -280,7 +275,6 @@
   };
 
   fitFiltersView = function () {
-    buildNetworkIndexes();
     const points = collectFilterPoints(false);
     if (!points.length) {
       setStatus('Secili filtrede haritada oge bulunamadi.', 'warn');
