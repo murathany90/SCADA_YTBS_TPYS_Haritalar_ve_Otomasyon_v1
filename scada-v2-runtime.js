@@ -3735,6 +3735,30 @@ function _formatHistoryAxisLabel(timestampMs) {
     return series?.label || 'Olcum';
   }
 
+  function buildCanonicalHatHistoryLabel(series, entity) {
+    const b1 = String(series?.terminals?.[0] || '').trim();
+    const b2 = String(series?.terminals?.[1] || '').trim();
+    const b3 = String(series?.terminals?.[2] || '').trim();
+
+    if (b1 && b2 && b3) return `${b1}(${b2})>>${b3}`;
+
+    const nominalKv = Number(entity?.kv || entity?.primaryKv || 0) || '';
+    const startTm = String(entity?.startTm || '').trim();
+    const endTm = String(entity?.endTm || '').trim();
+
+    if (series?.terminalSide === 'start' && startTm && endTm) {
+       return `${startTm}(${nominalKv})>>${endTm}`;
+    }
+    if (series?.terminalSide === 'end' && startTm && endTm) {
+       return `${endTm}(${nominalKv})>>${startTm}`;
+    }
+
+    if (b1 && b3) return `${b1}>>${b3}`;
+    if (b1 && b2) return `${b1}(${b2})`;
+    if (b1) return b1;
+    return series?.label || 'Olcum';
+  }
+
   function resolveTerminalSide(series, entity) {
     if (!series || !entity) return 'unknown';
     const b1 = String(series.terminals?.[0] || '').trim().toLowerCase();
@@ -3973,6 +3997,8 @@ function _formatHistoryAxisLabel(timestampMs) {
 
       const points = [];
       let usedNominal = false;
+      let actualCount = 0;
+      let nominalCount = 0;
 
       pair.active.points.forEach((actPt) => {
         const tMs = actPt.ts.getTime();
@@ -3998,6 +4024,10 @@ function _formatHistoryAxisLabel(timestampMs) {
           bQuality = 'Nominal fallback';
         }
         if (vKv <= 0) return;
+
+        if (currentUsedNominal) nominalCount++;
+        else actualCount++;
+
         const iAmpere = (1000 * s) / (sqrt3 * vKv);
         points.push({
           ts: new Date(tMs),
@@ -4008,10 +4038,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         });
       });
 
-      // REMOVED: if (!points.length) return;
-
-      const prefix = side === 'start' ? 'Bas. — ' : (side === 'end' ? 'Bit. — ' : '');
-      const label = `${prefix}${formatScadaTerminalLabel(pair.active)}`;
+      const label = buildCanonicalHatHistoryLabel(pair.active, entity);
 
       const seriesId = `${pair.active.seriesId}_current`;
       const measurementId = pair.active.measurementId;
@@ -4026,7 +4053,10 @@ function _formatHistoryAxisLabel(timestampMs) {
         terminals: pair.active.terminals || [],
         terminalSide: side,
         label,
-        _usedNominalVoltage: usedNominal
+        _usedNominalVoltage: usedNominal,
+        _actualCount: actualCount,
+        _nominalCount: nominalCount,
+        _totalCount: actualCount + nominalCount
       });
     });
     return output;
@@ -4064,7 +4094,7 @@ function _formatHistoryAxisLabel(timestampMs) {
   // Pairs P and Q series of the same entity and builds apparent power
   // |S| = sqrt(P^2 + Q^2) at timestamps where both magnitudes are present.
   // MVA capacity is only ever compared against this scale, never the MW axis.
-  function buildHistoryCapacitySeries(chartSeries, strategy) {
+  function buildHistoryCapacitySeries(chartSeries, strategy, entity) {
     const pairs = new Map();
     (chartSeries || []).forEach((series) => {
       const pairing = series?.pairing;
@@ -4102,14 +4132,11 @@ function _formatHistoryAxisLabel(timestampMs) {
              points.push({ ts: new Date(tMs), value: Math.hypot(actPt.value, reactVal.value) });
          }
       });
-      // REMOVED: if (!points.length) return;
 
       const seriesId = `s:${pairing}`;
       let label = 'Olcum MVA';
       if (isHat) {
-         const side = pair.active.terminalSide;
-         const prefix = side === 'start' ? 'Bas. — ' : (side === 'end' ? 'Bit. — ' : '');
-         label = `${prefix}${formatScadaTerminalLabel(pair.active)}`;
+         label = buildCanonicalHatHistoryLabel(pair.active, entity);
       }
 
       output.push({
@@ -4235,16 +4262,12 @@ function _formatHistoryAxisLabel(timestampMs) {
         s.terminalSide = m.terminalSide;
         s.terminals = [m.b1, m.b2, m.b3];
         s.candidateSlot = m.candidateSlot;
-        if (!s.label || s.label.startsWith('Olcum')) {
-           s.label = m.label;
+        if (!s.terminalSide || s.terminalSide === 'unknown') {
+           s.terminalSide = resolveTerminalSide(s, entity);
         }
-      }
-      if (!s.terminalSide || s.terminalSide === 'unknown') {
-         s.terminalSide = resolveTerminalSide(s, entity);
-      }
-      if (!s.label || s.label.startsWith('Olcum')) {
-         if (s.terminalSide === 'start' && entity.startTm) s.label = `Bas. - ${entity.startTm}`;
-         else if (s.terminalSide === 'end' && entity.endTm) s.label = `Bit. - ${entity.endTm}`;
+        if (!s.label || s.label.startsWith('Olcum') || s.label.startsWith('Bas.') || s.label.startsWith('Bit.')) {
+           s.label = buildCanonicalHatHistoryLabel(s, entity);
+        }
       }
     });
   }
@@ -4439,7 +4462,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       if (entityType === 'bara') {
         label = 'Gerilim';
       } else if (entityType === 'hat') {
-        label = formatScadaTerminalLabel(series);
+        label = buildCanonicalHatHistoryLabel(series, entity);
       } else {
         label = `${series.elementName || 'Olcum'}${index > 1 ? `-${index}` : ''}`;
       }
@@ -4484,7 +4507,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         refLines: []
       });
       // Pane 3: MVA — yaz/kis ayri limit cizgileri (hat), tek limit (trafo)
-      const sSeries = buildHistoryCapacitySeries(chartSeries, strategy);
+      const sSeries = buildHistoryCapacitySeries(chartSeries, strategy, entity);
       if (true) {
         const mvaRefLines = [];
         if (isHatFivePane) {
@@ -4528,16 +4551,29 @@ function _formatHistoryAxisLabel(timestampMs) {
         // Pane 4: Akim (A)
         const currentSeries = buildHatCurrentSeries(chartSeries, voltageSeriesData, entity, strategy);
         const currentLimitLines = buildHatCurrentLimitLines(seasonal, nominalKv);
-        const currentNotes = [];
-        const anyNominal = currentSeries.some((s) => s._usedNominalVoltage);
-        if (anyNominal && nominalKv > 0) {
-          currentNotes.push(`Tahmini akim — nominal ${nominalKv} kV gerilim kullanildi`);
-        } else if (!anyNominal && voltageSeriesData.length) {
-          currentNotes.push('Gercek gerilim ile hesaplandi');
+        
+        let totalActual = 0;
+        let totalNominal = 0;
+        currentSeries.forEach((s) => {
+           totalActual += (s._actualCount || 0);
+           totalNominal += (s._nominalCount || 0);
+        });
+        const totalPoints = totalActual + totalNominal;
+
+        let currentTitle = 'Akim (A)';
+        if (totalPoints > 0) {
+           if (totalNominal === 0) {
+              currentTitle = 'Akim (A) — gercek terminal gerilimi';
+           } else if (totalActual === 0) {
+              currentTitle = `Akim (A) — tahmini, nominal ${nominalKv} kV`;
+           } else {
+              currentTitle = `Akim (A) — karma gerilim kaynagi (Gercek U ${totalActual} / ${totalPoints} • Nominal fallback ${totalNominal} / ${totalPoints})`;
+           }
         }
+
         panes.push({
           key: 'current',
-          title: currentNotes.length ? `Akim (A) - ${currentNotes[0]}` : 'Akim (A)',
+          title: currentTitle,
           unit: 'A',
           mode: 'abs',
           seriesGroup: currentSeries,
@@ -4546,8 +4582,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         });
         // Pane 5: Gerilim (kV)
         const hatVoltageSeries = voltageSeriesData.map((vs) => {
-          const prefix = vs._voltageSide === 'start' ? 'Bas. — ' : (vs._voltageSide === 'end' ? 'Bit. — ' : '');
-          const sideLabel = `${prefix}${formatScadaTerminalLabel(vs)}`;
+          const sideLabel = buildCanonicalHatHistoryLabel(vs, entity);
           return {
             ...vs,
             seriesId: `hv:${vs.seriesId || vs.measurementId}`,
@@ -4999,9 +5034,7 @@ function _formatHistoryAxisLabel(timestampMs) {
           let seriesLabel = series._displayLabel || series.label || series.elementName || 'Olcum';
           
           if (entityType === 'hat') {
-              const prefix = series.terminalSide === 'start' ? 'Bas. — ' : (series.terminalSide === 'end' ? 'Bit. — ' : '');
-              const cleanTerminal = formatScadaTerminalLabel(series);
-              seriesLabel = `${prefix}${cleanTerminal}`;
+              seriesLabel = buildCanonicalHatHistoryLabel(series, entity);
           }
 
           rows.push(`<div><div class="scada-chart-tooltip-row" style="--scada-series-color:${_chartSeriesColor(series)};">

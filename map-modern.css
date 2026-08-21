@@ -2556,7 +2556,7 @@ button.scada-quality-chip {
 
 .scada-chart-tooltip {
   position: absolute;
-  z-index: 5;
+  z-index: 100;
   min-width: 150px;
   max-width: 280px;
   padding: 7px 9px;
@@ -2565,7 +2565,6 @@ button.scada-quality-chip {
   background: var(--surface-elevated);
   box-shadow: var(--shadow);
   font-size: 11px;
-  color: var(--text);
   pointer-events: none;
 }
 

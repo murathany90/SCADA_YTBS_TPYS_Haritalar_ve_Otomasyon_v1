@@ -180,6 +180,8 @@ test('P0-2 — tooltip no exception and shows correct units', () => {
      move({ clientX: 300, clientY: y });
      console.log("Y=", y, tooltipEl.innerHTML);
      assert.strictEqual(tooltipEl.hidden, false, `Tooltip hidden for Y=${y}`);
+     assert.ok(tooltipEl.style.left && tooltipEl.style.left.endsWith('px'), `Left missing/invalid for Y=${y}`);
+     assert.ok(tooltipEl.style.top && tooltipEl.style.top.endsWith('px'), `Top missing/invalid for Y=${y}`);
      assert.ok(tooltipEl.innerHTML.includes(expectedSubstr), `Missing '${expectedSubstr}' in tooltip for Y=${y}`);
   };
 
@@ -212,4 +214,40 @@ test('P0-4 — no stale canvas vars in updateTooltip', () => {
    assert.ok(!fnStr.includes('hoverTs'));
    assert.ok(!fnStr.includes('canvasRect'));
    assert.ok(!fnStr.includes('p._rect'));
+});
+
+test('P0-3 — current mixed provenance', () => {
+  const { context, windowListeners } = setupEnv();
+  
+  const canvasEl = {
+    children: [],
+    isConnected: true,
+    appendChild: (el) => { canvasEl.children.push(el); el.isConnected = true; },
+    replaceChildren: () => { canvasEl.children.forEach(c => { c.isConnected = false; }); canvasEl.children = []; },
+  };
+  const tooltipEl = { style: {} };
+
+  const now = new Date('2026-08-20T12:00:00Z').getTime();
+  
+  const config = {
+    entityType: 'hat',
+    entity: { id: 'test', kv: 154 },
+    series: [
+       { elementName: 'P', pairing: 'h:start', terminalSide: 'start', points: [{ ts: new Date(now), value: 50 }, { ts: new Date(now + 60000), value: 50 }, { ts: new Date(now + 180000), value: 50 }], metricType: 'active' },
+       { elementName: 'Q', pairing: 'h:start', terminalSide: 'start', points: [{ ts: new Date(now), value: 20 }, { ts: new Date(now + 60000), value: 20 }, { ts: new Date(now + 180000), value: 20 }], metricType: 'reactive' }
+    ],
+    _voltageFetchData: { series: [{ _voltageSide: 'start', points: [{ ts: new Date(now), value: 153 }, { ts: new Date(now + 60000), value: 153 }] }] } // Only 2 U points, one is missing
+  };
+
+  context.window.__SCADA_V2_TEST_HOOKS__.mountInteractiveHistoryChart(canvasEl, null, tooltipEl, config);
+  
+  const panes = context.window.__SCADA_V2_TEST_HOOKS__.lastPanes;
+  const currentPane = panes.find(p => p.key === 'current');
+  console.log("TITLE IS:", currentPane.title); assert.ok(currentPane.title.includes('karma gerilim kaynagi'));
+  assert.ok(currentPane.title.includes('Gercek U 2 / 3'));
+  assert.ok(currentPane.title.includes('Nominal fallback 1 / 3'));
+  
+  const s = currentPane.seriesGroup[0];
+  assert.strictEqual(s._actualCount, 2);
+  assert.strictEqual(s._nominalCount, 1);
 });
