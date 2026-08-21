@@ -23,7 +23,7 @@ function setupEnv() {
           style: {},
           children: [],
           isConnected: false, addEventListener: (e,h)=>_l[e]=h, removeEventListener: (e,h)=>{if(_l[e]===h)delete _l[e];},
-          addEventListener: (event, handler) => { el._listeners[event] = handler; },
+          addEventListener: (event, handler) => { if (!el._listeners[event]) el._listeners[event] = new Set(); el._listeners[event].add(handler); },
           removeEventListener: (event, handler) => {
             if (el._listeners[event] === handler) delete el._listeners[event];
           },
@@ -106,9 +106,9 @@ test('P0-1 — async voltage remount cleans up old SVG', () => {
 test('P0-1 — listener cleanup on remount', () => {
   const { context } = setupEnv();
   
-  let windowListeners = {};
-  context.window.addEventListener = (evt, h) => { windowListeners[evt] = h; };
-  context.window.removeEventListener = (evt, h) => { if (windowListeners[evt] === h) delete windowListeners[evt]; };
+  let windowListeners = new Map();
+  context.window.addEventListener = (evt, h) => { if (!windowListeners.has(evt)) windowListeners.set(evt, new Set()); windowListeners.get(evt).add(h); };
+  context.window.removeEventListener = (evt, h) => { windowListeners.get(evt)?.delete(h); };
 
   const canvasEl = {
     children: [],
@@ -125,11 +125,11 @@ test('P0-1 — listener cleanup on remount', () => {
   };
 
   context.window.__SCADA_V2_TEST_HOOKS__.mountInteractiveHistoryChart(canvasEl, null, tooltipEl, config);
-  const initialMove = windowListeners['mousemove'];
+  const initialMove = Array.from(windowListeners.get('mousemove'))[0];
   assert.ok(initialMove);
 
   context.window.__SCADA_V2_TEST_HOOKS__.mountInteractiveHistoryChart(canvasEl, null, tooltipEl, config);
-  assert.notStrictEqual(windowListeners['mousemove'], initialMove); // Replaced
+  assert.ok(!windowListeners.get('mousemove').has(initialMove));
 
   // Old listener should be dead. Since it returns early:
   let noThrow = true;
@@ -144,8 +144,9 @@ test('P0-1 — listener cleanup on remount', () => {
 test('P0-2 — tooltip no exception and shows correct units', () => {
   const { context } = setupEnv();
   
-  let windowListeners = {};
-  context.window.addEventListener = (evt, h) => { windowListeners[evt] = h; };
+  let windowListeners = new Map();
+  context.window.addEventListener = (evt, h) => { if (!windowListeners.has(evt)) windowListeners.set(evt, new Set()); windowListeners.get(evt).add(h); };
+  context.window.removeEventListener = (evt, h) => { windowListeners.get(evt)?.delete(h); };
 
   const canvasEl = {
     children: [],
@@ -171,7 +172,7 @@ test('P0-2 — tooltip no exception and shows correct units', () => {
   context.window.__SCADA_V2_TEST_HOOKS__.mountInteractiveHistoryChart(canvasEl, null, tooltipEl, config);
   
   // Fake mouse move at different Y coordinates
-  const move = windowListeners['mousemove'];
+  const move = Array.from(windowListeners.get('mousemove'))[0];
   
   const simulateY = (y, expectedSubstr) => {
      tooltipEl.hidden = true;

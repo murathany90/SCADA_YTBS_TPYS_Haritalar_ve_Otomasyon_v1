@@ -4402,27 +4402,28 @@ function _formatHistoryAxisLabel(timestampMs) {
 
   function mountInteractiveHistoryChart(canvasEl, legendEl, tooltipEl, config) {
     if (!canvasEl || !tooltipEl) return;
+
+    if (activeChartMount?.cleanup) {
+      activeChartMount.cleanup();
+    }
+
     const mountToken = {};
-    activeChartMount = mountToken;
     const entityType = config?.entityType || 'hat';
     const entity = config?.entity || null;
     const strategy = config?.strategy || null;
     
-      if (activeChartMount?.cleanup) {
-        activeChartMount.cleanup();
-      }
-      canvasEl.replaceChildren();
-      if (legendEl) legendEl.replaceChildren();
-      tooltipEl.hidden = true;
-      tooltipEl.innerHTML = '';
-      
-      const rawSeries = (config?.series || []).filter((series) => series && Array.isArray(series.points) && series.points.length);
+    canvasEl.replaceChildren();
+    if (legendEl) legendEl.replaceChildren();
+    tooltipEl.hidden = true;
+    tooltipEl.innerHTML = '';
+    
+    const rawSeries = (config?.series || []).filter((series) => series && Array.isArray(series.points) && series.points.length);
     if (!rawSeries.length) {
       canvasEl.replaceChildren();
-        const emptyDiv = document.createElement('div');
-        emptyDiv.className = 'scada-chart-empty';
-        emptyDiv.textContent = 'Grafik icin yeterli gecmis veri yok.';
-        canvasEl.appendChild(emptyDiv);
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'scada-chart-empty';
+      emptyDiv.textContent = 'Grafik icin yeterli gecmis veri yok.';
+      canvasEl.appendChild(emptyDiv);
       return;
     }
 
@@ -5054,7 +5055,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       }
     }
 
-    svg.addEventListener('wheel', (event) => {
+    const onWheel = (event) => {
       event.preventDefault();
       const rect = svg.getBoundingClientRect();
       if (!rect.width) return;
@@ -5069,18 +5070,20 @@ function _formatHistoryAxisLabel(timestampMs) {
       viewEndMs = viewStartMs + newSpan;
       clampView();
       requestRedraw();
-    }, { passive: false });
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
 
-    svg.addEventListener('mousedown', (event) => {
+    const onMouseDown = (event) => {
       if (event.button !== 0) return;
       dragging = true;
       dragStartClientX = event.clientX;
       dragStartViewMs = viewStartMs;
       svg.style.cursor = 'grabbing';
-    });
+    };
+    svg.addEventListener('mousedown', onMouseDown);
 
-    window.addEventListener('mousemove', (event) => {
-      if (activeChartMount !== mountToken || !canvasEl.isConnected) return;
+    const onWindowMouseMove = (event) => {
+      if (activeChartMount?.token !== mountToken || !canvasEl.isConnected) return;
       if (dragging) {
         const rect = svg.getBoundingClientRect();
         if (!rect.width) return;
@@ -5093,27 +5096,49 @@ function _formatHistoryAxisLabel(timestampMs) {
         return;
       }
       updateCrosshairFromEvent(event);
-    });
+    };
+    window.addEventListener('mousemove', onWindowMouseMove);
 
-    window.addEventListener('mouseup', () => {
-      if (activeChartMount !== mountToken) return;
+    const onWindowMouseUp = () => {
       dragging = false;
       svg.style.cursor = 'crosshair';
-    });
+      if (activeChartMount?.token !== mountToken) return;
+    };
+    window.addEventListener('mouseup', onWindowMouseUp);
 
-    svg.addEventListener('mouseleave', () => {
+    const onMouseLeave = () => {
       hoverTimeMs = null;
       if (tooltipEl) tooltipEl.hidden = true;
       redraw();
-    });
+    };
+    svg.addEventListener('mouseleave', onMouseLeave);
 
-    svg.addEventListener('dblclick', () => {
+    const onDoubleClick = () => {
       viewStartMs = fullStartMs;
       viewEndMs = fullEndMs;
       hoverTimeMs = null;
       if (tooltipEl) tooltipEl.hidden = true;
       redraw();
-    });
+    };
+    svg.addEventListener('dblclick', onDoubleClick);
+
+    const cleanup = () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+      svg.removeEventListener('wheel', onWheel);
+      svg.removeEventListener('mousedown', onMouseDown);
+      svg.removeEventListener('mouseleave', onMouseLeave);
+      svg.removeEventListener('dblclick', onDoubleClick);
+      dragging = false;
+      if (svg.isConnected) svg.remove();
+      tooltipEl.hidden = true;
+      tooltipEl.innerHTML = '';
+    };
+
+    activeChartMount = {
+      token: mountToken,
+      cleanup
+    };
 
     rebuildLegend();
     redraw();
