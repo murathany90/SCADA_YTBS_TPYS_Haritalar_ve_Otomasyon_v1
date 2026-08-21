@@ -1464,12 +1464,16 @@ function renderHatLayer() {
       requestRender();
     });
     /* Tooltip with MW + time when SCADA is active */
-    let tooltipHtml = `<strong>${row.name || '-'}</strong><br><span class="tt-label">${row.startTm || '?'} ➔ ${row.endTm || '?'}</span> · ${row.kv || '?'} kV · ${formatNumber(row.lengthKm, ' km')}`;
+    const safeName = escapeHtml(row.name || '-');
+    const safeStartTm = escapeHtml(row.startTm || '?');
+    const safeEndTm = escapeHtml(row.endTm || '?');
+    const safeKv = escapeHtml(row.kv || '?');
+    let tooltipHtml = `<strong>${safeName}</strong><br><span class="tt-label">${safeStartTm} ➔ ${safeEndTm}</span> · ${safeKv} kV · ${formatNumber(row.lengthKm, ' km')}`;
     if (flow) {
       const mwT = flow.mw >= 0 ? `+${flow.mw.toFixed(1)}` : flow.mw.toFixed(1);
       const tsT = flow.timestamp ? flow.timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
       const pctText = flow.invalidPct ? '!' : (Number.isFinite(flow.displayPct) ? `${flow.displayPct.toFixed(0)}%` : '-');
-      tooltipHtml += `<br><span style="color:${flow.color};font-weight:700">${mwT} MW · ${pctText}</span>${tsT ? ` · <span class="tt-label">${tsT}</span>` : ''}`;
+      tooltipHtml += `<br><span style="color:${flow.color};font-weight:700">${mwT} MW · ${pctText}</span>${tsT ? ` · <span class="tt-label">${escapeHtml(tsT)}</span>` : ''}`;
     } else if (record && (Number.isFinite(record.primaryValue) || Number.isFinite(record.displayPct) || record.invalidPct || record.valueInvalid)) {
       const primaryUnit = record.primaryMetric === 'reactive' ? 'MVar' : 'MW';
       const primaryText = record.valueInvalid
@@ -1479,8 +1483,8 @@ function renderHatLayer() {
           : 'Belirsiz';
       const pctText = record.invalidPct ? '!' : Number.isFinite(record.displayPct) ? `${record.displayPct.toFixed(0)}%` : '-';
       const tsT = record.primaryTimestamp ? record.primaryTimestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
-      tooltipHtml += `<br><span style="color:${record.displayColor || strokeColor};font-weight:700">${primaryText} · ${pctText}</span>${tsT ? ` · <span class="tt-label">${tsT}</span>` : ''}`;
-      if (record.uncertaintyTooltip) tooltipHtml += `<br><span class="tt-label">${record.uncertaintyTooltip}</span>`;
+      tooltipHtml += `<br><span style="color:${record.displayColor || strokeColor};font-weight:700">${primaryText} · ${pctText}</span>${tsT ? ` · <span class="tt-label">${escapeHtml(tsT)}</span>` : ''}`;
+      if (record.uncertaintyTooltip) tooltipHtml += `<br><span class="tt-label">${escapeHtml(record.uncertaintyTooltip)}</span>`;
     }
     attachHoverTooltip(path, tooltipHtml);
     attachHoverTooltip(hitPath, () => buildHatHoverTooltipHtml(row), { owner: `hat:${row.id}` });
@@ -1526,7 +1530,7 @@ function renderTmLayer() {
       });
       requestRender();
     });
-    attachHoverTooltip(circle, `<strong>${row.name || '-'}</strong><br><span class="tt-label">${row.kv || '?'} kV TM</span> · ${row.ytm || '?'}`);
+    attachHoverTooltip(circle, `<strong>${escapeHtml(row.name || '-')}</strong><br><span class="tt-label">${escapeHtml(row.kv || '?')} kV TM</span> · ${escapeHtml(row.ytm || '?')}`);
     fragment.appendChild(circle);
   });
   el.tmLayer.appendChild(fragment);
@@ -1558,7 +1562,7 @@ function renderBaraLayer() {
       showBaraInfo(row, false);
       requestRender();
     });
-    attachHoverTooltip(rect, `<strong>${row.tpysBaraAdi || '-'}</strong><br><span class="tt-label">${row.gerilim || '?'} kV Bara</span> · ${row.fullYtm || '?'}`);
+    attachHoverTooltip(rect, `<strong>${escapeHtml(row.tpysBaraAdi || '-')}</strong><br><span class="tt-label">${escapeHtml(row.gerilim || '?')} kV Bara</span> · ${escapeHtml(row.fullYtm || '?')}`);
     fragment.appendChild(rect);
   });
   el.baraLayer.appendChild(fragment);
