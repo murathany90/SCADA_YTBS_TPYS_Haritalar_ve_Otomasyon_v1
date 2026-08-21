@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const scadaCommon = require('../scada-common.js');
+const scadaHooks = require('../scada-v2-runtime.js').__SCADA_V2_TEST_HOOKS__;
 
 test('parseSupersetScadaTimestamp handles epoch seconds and milliseconds with naive-local wall clock', () => {
   const secs = 1724134500; // UTC fields: 2024-08-20 06:15:00
@@ -165,17 +166,8 @@ test('scada-v2-runtime ranking close buttons are not mojibake before', () => {
 });
 
 test('formatScadaTerminalLabel formatting logic', () => {
-  const formatScadaTerminalLabel = (series) => {
-    const b1 = String(series?.terminals?.[0] || '').trim();
-    const b2 = String(series?.terminals?.[1] || '').trim();
-    const b3 = String(series?.terminals?.[2] || '').trim();
-    if (b1 && b2 && b3) return `${b1}(${b2})>>${b3}`;
-    if (b1 && b3) return `${b1}>>${b3}`;
-    if (b1 && b2) return `${b1}(${b2})`;
-    if (b1) return b1;
-    return series?.label || 'Olcum';
-  };
-  
+  const { formatScadaTerminalLabel } = scadaHooks;
+
   assert.equal(formatScadaTerminalLabel({ terminals: ['A', 'B', 'C'] }), 'A(B)>>C');
   assert.equal(formatScadaTerminalLabel({ terminals: ['A', '', 'C'] }), 'A>>C');
   assert.equal(formatScadaTerminalLabel({ terminals: ['A', 'B'] }), 'A(B)');
@@ -202,21 +194,7 @@ test('getSeasonalCapacityMva extracts limits for hat', () => {
 });
 
 test('buildHatCurrentLimitLines calculates correctly', () => {
-  const buildHatCurrentLimitLines = (seasonalMva, nominalKv) => {
-    const kv = Number(nominalKv);
-    if (!Number.isFinite(kv) || kv <= 0) return [];
-    const sqrt3 = Math.sqrt(3);
-    const lines = [];
-    if (seasonalMva.summer != null) {
-      const iSummer = (1000 * seasonalMva.summer) / (sqrt3 * kv);
-      lines.push({ refKey: 'i-summer', value: iSummer, label: `${iSummer.toFixed(0)} A yaz limit`, enabled: true });
-    }
-    if (seasonalMva.winter != null) {
-      const iWinter = (1000 * seasonalMva.winter) / (sqrt3 * kv);
-      lines.push({ refKey: 'i-winter', value: iWinter, label: `${iWinter.toFixed(0)} A kis limit`, enabled: true });
-    }
-    return lines;
-  };
+  const { buildHatCurrentLimitLines } = scadaHooks;
 
   const lines = buildHatCurrentLimitLines({ summer: 100, winter: 150 }, 154);
   assert.equal(lines.length, 2);
@@ -225,17 +203,7 @@ test('buildHatCurrentLimitLines calculates correctly', () => {
 });
 
 test('_nearestVoltageValue matches within tolerance', () => {
-  const _nearestVoltageValue = (vByTime, targetMs, maxToleranceMs) => {
-    if (!vByTime || !vByTime.size) return null;
-    let bestMs = null;
-    let bestDiff = Infinity;
-    for (const [tMs] of vByTime) {
-      const diff = Math.abs(tMs - targetMs);
-      if (diff < bestDiff) { bestDiff = diff; bestMs = tMs; }
-    }
-    if (bestMs != null && bestDiff <= maxToleranceMs) return vByTime.get(bestMs);
-    return null;
-  };
+  const { _nearestVoltageValue } = scadaHooks;
 
   const map = new Map([[1000, 154], [2000, 155]]);
   assert.equal(_nearestVoltageValue(map, 1100, 500), 154);
@@ -248,14 +216,39 @@ test('buildHatCurrentSeries computes I correctly using nominal fallback', () => 
   const sqrt3 = Math.sqrt(3);
   const activePoint = 30;
   const reactivePoint = 40;
-  
+
   // Hypotenuse of 30 and 40 is 50 MVA.
   // I = 1000 * 50 / (sqrt(3) * 154) = 187.45 A
   const expectedI = (1000 * 50) / (sqrt3 * nominalKv);
-  
+
   const s = Math.hypot(activePoint, reactivePoint);
   const iAmpere = (1000 * s) / (sqrt3 * nominalKv);
-  
+
   assert.equal(s, 50);
   assert.equal(iAmpere, expectedI);
+});
+test('resolveTerminalSide formatting logic', () => {
+  const { resolveTerminalSide } = scadaHooks;
+  assert.equal(resolveTerminalSide({ terminals: ['A', 'B', 'C'] }, { startTm: 'A', endTm: 'C' }), 'start');
+  assert.equal(resolveTerminalSide({ terminals: ['A', 'B', 'C'] }, { startTm: 'C', endTm: 'A' }), 'end');
+  assert.equal(resolveTerminalSide({ terminals: ['C', 'B', 'A'] }, { startTm: 'C', endTm: 'A' }), 'start'); // Inverse b3 matches start
+});
+
+test('transformReactiveSeries inverts end terminals for hats', () => {
+  const { transformReactiveSeries } = scadaHooks;
+  const series = [
+    { elementName: 'Q', terminalSide: 'start', points: [{ value: 10 }] },
+    { elementName: 'Q', terminalSide: 'end', points: [{ value: 15 }] },
+    { elementName: 'Q', terminalSide: 'unknown', points: [{ value: 20 }] }
+  ];
+  const transformed = transformReactiveSeries(series, true);
+
+  assert.equal(transformed[0]._displayLabel, 'Bas. +Q');
+  assert.equal(transformed[0].points[0].value, 10);
+
+  assert.equal(transformed[1]._displayLabel, 'Bit. -Q');
+  assert.equal(transformed[1].points[0].value, -15);
+
+  assert.equal(transformed[2]._displayLabel, '+Q');
+  assert.equal(transformed[2].points[0].value, 20);
 });

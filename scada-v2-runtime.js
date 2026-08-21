@@ -77,6 +77,42 @@
     }
   };
 
+
+  if (typeof globalThis !== 'undefined') {
+    globalThis.__SCADA_V2_TEST_HOOKS__ = {
+      formatScadaTerminalLabel,
+      buildHatCurrentLimitLines,
+      buildHatCurrentSeries,
+      resolveTerminalSide,
+      transformReactiveSeries,
+      _nearestVoltageValue
+    };
+  }
+  if (typeof window !== 'undefined') {
+    window.__SCADA_V2_TEST_HOOKS__ = globalThis.__SCADA_V2_TEST_HOOKS__;
+  }
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports.__SCADA_V2_TEST_HOOKS__ = globalThis.__SCADA_V2_TEST_HOOKS__;
+  }
+
+
+  if (typeof globalThis !== 'undefined') {
+    globalThis.__SCADA_V2_TEST_HOOKS__ = {
+      formatScadaTerminalLabel,
+      buildHatCurrentLimitLines,
+      buildHatCurrentSeries,
+      resolveTerminalSide,
+      transformReactiveSeries,
+      _nearestVoltageValue
+    };
+  }
+  if (typeof window !== 'undefined') {
+    window.__SCADA_V2_TEST_HOOKS__ = globalThis.__SCADA_V2_TEST_HOOKS__;
+  }
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports.__SCADA_V2_TEST_HOOKS__ = globalThis.__SCADA_V2_TEST_HOOKS__;
+  }
+
   if (typeof state === 'undefined' || typeof SCADA_CONFIG === 'undefined') return;
 
   const rankingState = {
@@ -112,6 +148,8 @@
   };
   state.scada.history = state.scada.history || new Map();
   state.scada.history24hCache = state.scada.history24hCache || new Map();
+  state.scada.hatVoltageHistoryCache = state.scada.hatVoltageHistoryCache || new Map();
+  state.scada.hatVoltageHistoryCache = state.scada.hatVoltageHistoryCache || new Map();
   state.scada.timeMode = state.scada.timeMode || 'live';
   state.scada.historicalAt = state.scada.historicalAt || null;
   state.scada.lastLiveSnapshot = state.scada.lastLiveSnapshot || null;
@@ -3662,7 +3700,7 @@ function _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, s
     const body = document.getElementById('scadaChartModalBody');
     if (!body) return;
     let html = `<div class="scada-chart-empty">Grafik için yeterli geçmiş veri yok.<br><span style="font-size:11px; opacity:0.8;">${escapeHtml(reason)}</span><br><br><button id="btnRetryScadaHistory">Yenile</button></div>`;
-    
+
     if (debugInfo) {
        html += `
          <div style="font-size: 11px; color: var(--muted); padding: 8px; border-top: 1px solid var(--border-color); margin-top: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
@@ -3672,7 +3710,7 @@ function _renderHistoryData(data, entityType, entity, entityKey, wasTruncated, s
          </div>
        `;
     }
-    
+
     body.innerHTML = html;
     const retryBtn = document.getElementById('btnRetryScadaHistory');
     if (retryBtn) {
@@ -3703,6 +3741,37 @@ function _formatHistoryAxisLabel(timestampMs) {
     if (b1 && b2) return `${b1}(${b2})`;
     if (b1) return b1;
     return series?.label || 'Olcum';
+  }
+
+  function resolveTerminalSide(series, entity) {
+    if (!series || !entity) return 'unknown';
+    const b1 = String(series.terminals?.[0] || '').trim().toLowerCase();
+    const b3 = String(series.terminals?.[2] || '').trim().toLowerCase();
+    const startTm = String(entity.startTm || '').trim().toLowerCase();
+    const endTm = String(entity.endTm || '').trim().toLowerCase();
+
+    if (b1 && startTm && b1 === startTm) return 'start';
+    if (b1 && endTm && b1 === endTm) return 'end';
+    if (b3 && startTm && b3 === startTm) return 'end'; // Inverse relationship
+    if (b3 && endTm && b3 === endTm) return 'start'; // Inverse relationship
+    return 'unknown';
+  }
+
+  function transformReactiveSeries(rawReactiveSeries, isHatFivePane) {
+    return isHatFivePane
+      ? rawReactiveSeries.map((series) => {
+        if (series.terminalSide === 'end') {
+          return {
+            ...series,
+            _displayLabel: `Bit. -Q`,
+            points: series.points.map((pt) => ({ ...pt, value: -pt.value, _rawValue: pt.value }))
+          };
+        } else if (series.terminalSide === 'start') {
+          return { ...series, _displayLabel: `Bas. +Q` };
+        }
+        return { ...series, _displayLabel: `+Q` };
+      })
+      : rawReactiveSeries;
   }
 
   // Returns both summer and winter capacity without season selection.
