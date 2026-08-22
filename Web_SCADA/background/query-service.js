@@ -15,7 +15,7 @@ const WebSCADAQuery = (() => {
     const ids = uniqueIds(payload); const results = [];
     for (const group of chunks(ids)) {
       const response = await WebSCADAApi.fetchChart(config, makePayload(group, config), auth.authMode);
-      results.push(response); if (!response.ok) break;
+      results.push(response);
     }
     const failed = results.find((result) => !result.ok); if (failed && !results.some((result) => result.ok)) return { ...failed, usedFallback: auth.authMode === 'hidden-tab' };
     return { ok: true, data: { result: [{ data: results.flatMap(rowsFrom) }] }, authMode: auth.authMode, usedFallback: auth.authMode === 'hidden-tab', httpStatus: results.find((result) => result.ok)?.httpStatus || null, meta: { totalBatches: chunks(ids).length, completedBatches: results.filter((result) => result.ok).length, failedBatches: results.filter((result) => !result.ok).length } };

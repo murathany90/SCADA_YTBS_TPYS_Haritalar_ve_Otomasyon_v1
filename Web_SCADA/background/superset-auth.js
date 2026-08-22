@@ -23,7 +23,9 @@ const WebSCADAAuth = (() => {
   async function sessionValid(config) {
     try {
       const response = await apiFetch(`${baseUrl(config.baseUrl)}/api/v1/me`, { method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, redirect: 'follow' });
-      return Boolean(response.ok && !/\/login\/?$/i.test(String(response.url || '')));
+      if (!response.ok || /\/login\/?$/i.test(String(response.url || ''))) return false;
+      const json = await response.json(); const user = json?.result;
+      return Boolean(user && typeof user === 'object' && (user.id != null || user.username || user.email));
     } catch { return false; }
   }
   function invalidateCsrf(config) { if (!config || csrf.baseUrl === baseUrl(config.baseUrl)) csrf = { token: '', baseUrl: '', at: 0 }; }
