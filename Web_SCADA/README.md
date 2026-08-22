@@ -1,6 +1,6 @@
 # WebSCADA
 
-WebSCADA v0.1.2 is a standalone Manifest V3 Chrome extension for the current modern
+WebSCADA v0.1.3 is a standalone Manifest V3 Chrome extension for the current modern
 map and Superset SCADA experience. It is intentionally self-contained: all
 runtime code and topology data live below this folder, and it does not import
 or fetch parent-repository files.

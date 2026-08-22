@@ -58,9 +58,9 @@ const WebSCADAAuth = (() => {
     try {
       const page = await fetchLoginPage(config); const meta = extractLoginMeta(page.html, config.baseUrl); const form = new URLSearchParams();
       Object.entries(meta.hiddenInputs).forEach(([key, value]) => form.set(key, value)); form.set(meta.usernameField, String(config.username)); form.set(meta.passwordField, String(config.password)); if (meta.csrfValue && !form.has(meta.csrfField)) form.set(meta.csrfField, meta.csrfValue);
-      const response = await apiFetch(meta.actionUrl, { method: 'POST', credentials: 'include', headers: { Accept: 'text/html,application/xhtml+xml', 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString(), redirect: 'follow' });
-      // A 200 login page is not authentication. The authenticated endpoint is authoritative.
-      if (!response.ok || !await sessionValid(config)) return { ok: false, error: 'Direct login sonrasi oturum dogrulanamadi.', errorType: 'AUTH_VALIDATION_FAILED' };
+      const response = await apiFetch(meta.actionUrl, { method: 'POST', credentials: 'include', headers: { Accept: 'text/html,application/xhtml+xml', 'Content-Type': 'application/x-www-form-urlencoded', Origin: baseUrl(config.baseUrl), Referer: page.loginUrl }, body: form.toString(), redirect: 'follow' });
+      // Login response alone is never authoritative; the retried chart request decides.
+      if (!response.ok) return { ok: false, error: `Direct login basarisiz (${response.status}).`, errorType: 'LOGIN_FAILED' };
       return { ok: true, authMode: 'direct-login' };
     } catch (error) { return { ok: false, error: sanitizeError(error, 'Direct login basarisiz.'), errorType: 'LOGIN_FAILED' }; }
   }
@@ -73,7 +73,6 @@ const WebSCADAAuth = (() => {
       c.tabs.onUpdated.addListener(onUpdated);
     });
   }
-  async function waitForSession(config, timeoutMs = 15000) { const until = Date.now() + timeoutMs; while (Date.now() < until) { if (await sessionValid(config)) return true; await sleep(500); } return false; }
   async function hiddenTabLogin(config) {
     let tabId = null; const c = apiChrome();
     try {
@@ -84,19 +83,17 @@ const WebSCADAAuth = (() => {
         if (!user || !pass || !form) throw new Error('Login form alanlari bulunamadi.');
         [[user, username], [pass, password]].forEach(([node, value]) => { node.focus(); node.value = value; node.dispatchEvent(new Event('input', { bubbles: true })); node.dispatchEvent(new Event('change', { bubbles: true })); }); form.submit();
       }, args: [String(config.username), String(config.password)] });
-      if (!await waitForSession(config)) return { ok: false, error: 'Hidden tab login sonrasi oturum dogrulanamadi.', errorType: 'AUTH_VALIDATION_FAILED' };
+      await sleep(800);
+      const finalTab = await c.tabs.get(tabId).catch(() => null); const origin = (() => { try { return new URL(String(finalTab?.url || '')).origin; } catch { return ''; } })();
+      if (origin) {
+        console.info(`[WebSCADA] Hidden-tab redirect origin: ${origin}`);
+        if (origin !== new URL(baseUrl(config.baseUrl)).origin) console.warn(`[WebSCADA] Hidden-tab login redirected to a different origin: ${origin}`);
+      }
       return { ok: true, authMode: 'hidden-tab' };
     } catch (error) { return { ok: false, error: sanitizeError(error, 'Hidden tab login basarisiz.'), errorType: 'LOGIN_FAILED' }; }
     finally { if (typeof tabId === 'number') await c.tabs.remove(tabId).catch(() => {}); }
   }
-  async function ensureSession(config, onStatus) {
-    if (await sessionValid(config)) return { ok: true, authMode: 'session' };
-    onStatus?.('Superset oturumu aciliyor...'); const direct = await directLogin(config);
-    if (direct.ok) { invalidateCsrf(config); return direct; }
-    onStatus?.('Oturum dogrulaniyor...'); const hidden = await hiddenTabLogin(config);
-    if (hidden.ok) { invalidateCsrf(config); return hidden; }
-    return { ok: false, authMode: 'hidden-tab', error: hidden.error || direct.error || 'Superset oturumu acilamadi.', errorType: hidden.errorType || direct.errorType || 'AUTH_REQUIRED' };
-  }
+  async function ensureSession(config, onStatus) { if (await sessionValid(config)) return { ok: true, authMode: 'session' }; onStatus?.('Superset oturumu aciliyor...'); return directLogin(config); }
   function __setTestDeps(next) { deps = next || {}; csrf = { token: '', baseUrl: '', at: 0 }; }
-  return { loadConfig, ensureSession, sessionValid, directLogin, hiddenTabLogin, csrfToken, invalidateCsrf, baseUrl, extractLoginMeta, __setTestDeps };
+  return { loadConfig, ensureSession, sessionValid, directLogin, hiddenTabLogin, csrfToken, invalidateCsrf, baseUrl, extractLoginMeta, request: apiFetch, __setTestDeps };
 })();

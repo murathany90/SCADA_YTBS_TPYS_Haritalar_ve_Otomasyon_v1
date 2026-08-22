@@ -45,9 +45,11 @@ const WebSCADAApi = (() => {
     const token = await WebSCADAAuth.csrfToken(config);
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 25000);
     try {
-      const response = await fetch(`${WebSCADAAuth.baseUrl(config.baseUrl)}/api/v1/chart/data?dashboard_id=${Number(config.dashboardId || DEFAULTS.dashboardId)}&force=true`, { method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { 'X-CSRFToken': token } : {}) }, body: JSON.stringify(body), signal: controller.signal });
-      if (!response.ok) return { ok: false, error: `Superset sorgusu basarisiz (${response.status}).`, errorType: response.status === 401 || response.status === 403 ? 'AUTH_REQUIRED' : 'UPSTREAM_ERROR', httpStatus: response.status, authMode };
-      return { ok: true, data: await response.json(), httpStatus: response.status, authMode };
+      const response = await WebSCADAAuth.request(`${WebSCADAAuth.baseUrl(config.baseUrl)}/api/v1/chart/data?dashboard_id=${Number(config.dashboardId || DEFAULTS.dashboardId)}&force=true`, { method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { 'X-CSRFToken': token } : {}) }, body: JSON.stringify(body), signal: controller.signal, redirect: 'follow' });
+      const finalUrl = String(response.url || ''); const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase(); const loginResponse = /\/login\/?(?:[?#]|$)/i.test(finalUrl) || /text\/html|application\/xhtml\+xml/.test(contentType);
+      if (response.status === 401 || response.status === 403 || loginResponse) return { ok: false, error: 'Superset yetkilendirmesi gerekli.', errorType: 'AUTH_REQUIRED', httpStatus: response.status, authMode, shouldRetryAuth: true };
+      if (!response.ok) return { ok: false, error: `Superset sorgusu basarisiz (${response.status}).`, errorType: 'UPSTREAM_ERROR', httpStatus: response.status, authMode, shouldRetryAuth: false };
+      try { return { ok: true, data: await response.json(), httpStatus: response.status, authMode, shouldRetryAuth: false }; } catch { return { ok: false, error: 'Superset chart yaniti JSON degil.', errorType: 'NETWORK_ERROR', httpStatus: response.status, authMode, shouldRetryAuth: false }; }
     } catch (error) { return { ok: false, error: error?.name === 'AbortError' ? 'Superset sorgusu zaman asimina ugradi.' : (error.message || String(error)), errorType: error?.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR', authMode }; }
     finally { clearTimeout(timer); }
   }

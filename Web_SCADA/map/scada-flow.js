@@ -369,7 +369,7 @@ function refreshLogPanel() {
   const logs = state.scada.logs || [];
   logContent.innerHTML = logs.slice(-50).reverse().map(e => {
     const cls = e.level === 'error' ? 'log-error' : e.level === 'warn' ? 'log-warn' : 'log-info';
-    const time = e.ts ? e.ts.split('T')[1].split('.')[0] : '';
+    const time = WebSCADALogTime.formatScadaLogTime(e.ts);
     return `<div class="log-entry ${cls}"><span class="log-time">${time}</span> ${e.message}${e.detail ? ` <span class="log-detail">${e.detail}</span>` : ''}</div>`;
   }).join('');
 }
