@@ -25,6 +25,7 @@ function renderFlowLayer() {
   if (!flowLayer) return;
   flowLayer.innerHTML = '';
   if (!state.scada.enabled || !state.scada.lineFlowByLineId.size) return;
+  if (state.scada.currentScope?.mode !== state.filters.scadaMetric) return;
   if (!state.filters.showHat) return;
 
   const bounds = currentGeoBounds();
@@ -84,7 +85,7 @@ function renderFlowLayer() {
     }
 
     const pathId = `fp-${row.id}`;
-    const dur = getArrowSpeed(flow.loadingPct);
+    const dur = getArrowSpeed(Number.isFinite(flow.displayPct) ? flow.displayPct : 0);
     const arrowCount = getArrowCount(flow.hatLengthKm || 0);
 
     /* Invisible path for arrows to follow */
@@ -95,10 +96,9 @@ function renderFlowLayer() {
     motionPath.setAttribute('stroke', 'none');
     fragment.appendChild(motionPath);
 
-    /* Create arrows — black in light mode, white in dark mode */
+    /* Arrow, stroke and percentage chip share the resolved SCADA colour. */
     const arrowSize = Math.max(6, Math.min(10, flow.width * 1.6));
-    const isDark = document.documentElement.getAttribute('data-theme') !== 'light' && !document.body.classList.contains('light-mode');
-    const arrowColor = isDark ? '#ffffff' : '#1e1e1e';
+    const arrowColor = flow.color || (SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af');
     for (let i = 0; i < arrowCount; i++) {
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
@@ -120,14 +120,18 @@ function renderFlowLayer() {
       g.appendChild(anim);
 
       /* Tooltip on arrows */
-      const mwText = flow.mw >= 0 ? `+${flow.mw.toFixed(1)}` : flow.mw.toFixed(1);
-      const pctText = `${flow.loadingPct.toFixed(0)}%`;
+      const primaryValue = Number.isFinite(flow.primaryValue) ? flow.primaryValue : flow.mw;
+      const primaryUnit = flow.primaryUnit || 'MW';
+      const metricText = Number.isFinite(primaryValue)
+        ? `${primaryValue >= 0 ? '+' : ''}${primaryValue.toFixed(1)} ${primaryUnit}`
+        : '-';
+      const pctText = Number.isFinite(flow.displayPct) ? `${flow.displayPct.toFixed(0)}%` : '-';
       const tsText = flow.timestamp ? flow.timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
       const dirText = flow.direction === 'forward'
         ? `${row.startTm || '?'} → ${row.endTm || '?'}`
         : `${row.endTm || '?'} → ${row.startTm || '?'}`;
       if (i === 0) {
-        attachHoverTooltip(g, `<strong>${row.name}</strong><br>${mwText} MW · <span style="color:${flow.color};font-weight:700">${pctText}</span>${tsText ? ` · ${tsText}` : ''}<br><span class="tt-label">${dirText}</span>`);
+        attachHoverTooltip(g, `<strong>${row.name}</strong><br>${metricText} · <span style="color:${flow.color};font-weight:700">${pctText}</span>${tsText ? ` · ${tsText}` : ''}<br><span class="tt-label">${dirText}</span>`);
       }
       g.style.cursor = 'pointer';
       g.style.pointerEvents = 'auto';

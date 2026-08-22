@@ -24,8 +24,7 @@
     { max: 30, color: '#f97316', label: '20-30%' },
     { max: 40, color: '#ef4444', label: '30-40%' },
     { max: 60, color: '#dc2626', label: '40-60%' },
-    { max: 80, color: '#7c3aed', label: '60-80%' },
-    { max: Infinity, color: '#7c3aed', label: '80%+' }
+    { max: Infinity, color: '#7c3aed', label: '60%+' }
   ];
   const INVALID_DISPLAY_THRESHOLD = 300;
   const HAT_VALUE_CAPACITY_MULTIPLIER = 1.5;
@@ -287,9 +286,9 @@
 
   function getThresholdColor(value, thresholds) {
     const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return SCADA_CONFIG.UNMATCHED_HAT_COLOR || '#4b5563';
+    if (!Number.isFinite(numeric)) return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
     const bucket = (thresholds || []).find((entry) => numeric <= entry.max);
-    return bucket?.color || (thresholds?.[thresholds.length - 1]?.color ?? SCADA_CONFIG.UNMATCHED_HAT_COLOR ?? '#4b5563');
+    return bucket?.color || (thresholds?.[thresholds.length - 1]?.color ?? SCADA_CONFIG.NO_MATCH_COLOR ?? '#9ca3af');
   }
 
   function getReactiveRatioColor(ratioPct) {
@@ -297,7 +296,7 @@
   }
 
   function getDisplayColor(record, options = {}) {
-    if (!record) return SCADA_CONFIG.UNMATCHED_HAT_COLOR || '#4b5563';
+    if (!record) return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
     if (record.invalidPct || record.valueInvalid) {
       return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
     }
@@ -320,9 +319,9 @@
     if (record.primaryMetric === 'voltage' && Number.isFinite(record.primaryValue) && typeof getVoltagePuColor === 'function') {
       const nominal = Number(record.entity?.gerilimKv || record.entity?.kvBucket || 0) || 0;
       const pu = nominal > 0 ? record.primaryValue / nominal : null;
-      return Number.isFinite(pu) ? getVoltagePuColor(pu) : (SCADA_CONFIG.UNMATCHED_HAT_COLOR || '#4b5563');
+      return Number.isFinite(pu) ? getVoltagePuColor(pu) : (SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af');
     }
-    return SCADA_CONFIG.UNMATCHED_HAT_COLOR || '#4b5563';
+    return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
   }
 
   function hasHatUncertainty(record, options = {}) {
@@ -432,10 +431,11 @@
 
   const METRIC_ELEMENT_BY_TYPE = { voltage: 'U', active: 'P', reactive: 'Q' };
 
-  // Live map scope follows the selected mode: hat-active -> only P/active,
-  // hat-reactive -> only Q/reactive, trafo-* -> same, voltage -> only U.
+  // Hat MVar colors use the current |Q|/|P| ratio, so a live reactive request
+  // must fetch both metrics. Trafo reactive remains capacity based and only Q.
   function getLiveMetricTypes(modeConfig) {
     if (modeConfig.domain === 'bara') return ['voltage'];
+    if (modeConfig.domain === 'hat' && modeConfig.primaryMetric === 'reactive') return ['active', 'reactive'];
     return [modeConfig.primaryMetric];
   }
 
@@ -1132,8 +1132,8 @@
     const reactiveMagnitude = getLoadingHintValue(resolved?.reactive);
     if (!Number.isFinite(reactiveMagnitude)) return null;
     const activeMagnitude = getLoadingHintValue(resolved?.active);
-    if (!Number.isFinite(activeMagnitude) || activeMagnitude < 1) return Infinity;
-    return (Math.abs(reactiveMagnitude) / Math.max(Math.abs(activeMagnitude), 1)) * 100;
+    if (!Number.isFinite(activeMagnitude) || activeMagnitude <= 0) return null;
+    return (Math.abs(reactiveMagnitude) / Math.abs(activeMagnitude)) * 100;
   }
 
   function isHatMetricValueInvalid(entity, metricType, normalizedValue) {
@@ -1195,16 +1195,16 @@
       if (!Number.isFinite(ratioPct)) {
         return {
           displayPct: null,
-          displayPctRaw: ratioPct,
+          displayPctRaw: null,
           displayPctMode: 'reactive-ratio',
-          invalidPct: true
+          invalidPct: Number.isFinite(getLoadingHintValue(resolved?.reactive))
         };
       }
       return {
         displayPct: ratioPct,
         displayPctRaw: ratioPct,
         displayPctMode: 'reactive-ratio',
-        invalidPct: ratioPct > INVALID_DISPLAY_THRESHOLD
+        invalidPct: false
       };
     }
     return {
@@ -1853,8 +1853,14 @@
   }
 
   function buildVisibleSummary(scope, metricMap) {
+    const presentationEntries = scope.domain === 'bara'
+      ? getVoltagePanelRepresentatives(metricMap)
+      : scope.entities.map((entity) => ({
+        entity,
+        record: metricMap.get(`${scope.domain}:${entity.id}`) || null
+      }));
     const summary = {
-      total: scope.entities.length,
+      total: presentationEntries.length,
       matched: 0,
       stale: 0,
       delayed: 0,
@@ -1869,8 +1875,7 @@
       filterKey: scope.filterKey,
       metricMode: scope.mode
     };
-    scope.entities.forEach((entity) => {
-      const record = metricMap.get(`${scope.domain === 'bara' ? 'bara' : scope.domain}:${entity.id}`);
+    presentationEntries.forEach(({ entity, record }) => {
       if (!record) {
         summary.unmatched += 1;
         summary.missing += 1;
@@ -1915,6 +1920,69 @@
     });
     state.scada.visibleSummary = summary;
     return summary;
+  }
+
+  function hasTransferBaraToken(value) {
+    return /(^|[^a-z0-9])(bt|transfer)(?=$|[^a-z0-9])/i.test(String(value || ''));
+  }
+
+  function isTransferBaraForVoltagePanel(bara) {
+    if (hasTransferBaraToken(bara?.kullanim) || hasTransferBaraToken(bara?.turu)) return true;
+    return hasTransferBaraToken(bara?.name);
+  }
+
+  function getVoltagePanelTimestamp(record) {
+    const timestamp = record?.primaryTimestamp;
+    if (typeof timestamp?.getTime === 'function') return Number(timestamp.getTime()) || 0;
+    const parsed = Date.parse(timestamp || '');
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function getVoltagePanelStalePriority(record) {
+    if (record?.primaryStaleState === 'live') return 3;
+    if (record?.primaryStaleState === 'warn') return 2;
+    if (record?.primaryStaleState === 'dead') return 1;
+    return 0;
+  }
+
+  function getVoltagePanelTmKey(bara) {
+    return String(bara?.tmId || bara?.tm?.id || bara?.tmName || bara?.tm?.name || bara?.id || '');
+  }
+
+  function isBetterVoltagePanelRepresentative(candidate, current) {
+    if (!current) return true;
+    const candidateStalePriority = getVoltagePanelStalePriority(candidate.record);
+    const currentStalePriority = getVoltagePanelStalePriority(current.record);
+    if (candidateStalePriority !== currentStalePriority) return candidateStalePriority > currentStalePriority;
+
+    const candidateTimestamp = getVoltagePanelTimestamp(candidate.record);
+    const currentTimestamp = getVoltagePanelTimestamp(current.record);
+    if (candidateTimestamp !== currentTimestamp) return candidateTimestamp > currentTimestamp;
+
+    const candidateKv = Number(candidate.entity?.gerilimKv || candidate.entity?.kvBucket || 0);
+    const currentKv = Number(current.entity?.gerilimKv || current.entity?.kvBucket || 0);
+    if (candidateKv !== currentKv) return candidateKv > currentKv;
+
+    const candidateKey = `${normalizeText(candidate.entity?.name)}\u0000${String(candidate.entity?.id || '')}`;
+    const currentKey = `${normalizeText(current.entity?.name)}\u0000${String(current.entity?.id || '')}`;
+    return candidateKey.localeCompare(currentKey, 'tr') < 0;
+  }
+
+  function getVoltagePanelRepresentatives(metricMap = state.scada.entityMetricsByKey) {
+    const candidatesByTm = new Map();
+    const visibleBaras = typeof getVisibleBaras === 'function' ? getVisibleBaras() : [];
+    visibleBaras.forEach((bara) => {
+      if (!['154', '400'].includes(String(bara.kvBucket || bara.gerilimKv || ''))) return;
+      if (isTransferBaraForVoltagePanel(bara)) return;
+      const record = metricMap?.get(`bara:${bara.id}`);
+      if (!record || !Number.isFinite(record.primaryValue)) return;
+      const tmKey = getVoltagePanelTmKey(bara);
+      const candidate = { entity: bara, record };
+      if (isBetterVoltagePanelRepresentative(candidate, candidatesByTm.get(tmKey))) {
+        candidatesByTm.set(tmKey, candidate);
+      }
+    });
+    return [...candidatesByTm.values()];
   }
 
   function applyGenericScadaSnapshot(measurementRowsById, scope) {
@@ -2292,7 +2360,7 @@
       nextFlows.set(hatId, {
         ...flow,
         staleState: 'dead',
-        color: SCADA_CONFIG.STALE_COLOR,
+        color: SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af',
         unavailable: true
       });
     });
@@ -2918,9 +2986,9 @@ try {
         { label: '1.05-1.20', color: '#7c3aed', count: 0 },
         { label: '1.20+', color: '#6b7280', count: 0 }
       ];
-      state.scada.entityMetricsByKey.forEach((record) => {
-        if (record.entityType !== 'bara' || !Number.isFinite(record.primaryValue) || record.sourceAmbiguous) return;
-        const nominal = Number(record.entity.gerilimKv || 0) || 1;
+      getVoltagePanelRepresentatives().forEach(({ entity, record }) => {
+        if (record.sourceAmbiguous) return;
+        const nominal = Number(entity.gerilimKv || 0) || 1;
         const pu = nominal > 0 ? record.primaryValue / nominal : null;
         if (!Number.isFinite(pu)) return;
         if (pu < 0.80) counts[0].count += 1;
@@ -5479,10 +5547,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         }, record));
       });
     } else {
-      (typeof getVisibleBaras === 'function' ? getVisibleBaras() : [])
-        .filter((bara) => ['154', '400'].includes(String(bara.kvBucket || bara.gerilimKv || '')))
-        .forEach((bara) => {
-          const record = state.scada.entityMetricsByKey.get(`bara:${bara.id}`);
+      getVoltagePanelRepresentatives().forEach(({ entity: bara, record }) => {
           const nominal = Number(bara.gerilimKv || bara.kvBucket || 0) || 0;
           rows.push(addStatusFields({
             entityKey: `bara:${bara.id}`,
@@ -7346,6 +7411,11 @@ function _formatHistoryAxisLabel(timestampMs) {
       getLiveMetricTypes,
       getHistoryMetricTypes,
       getCurrentScadaScope,
+      getVoltagePanelRepresentatives,
+      getMetricLegendCounts,
+      computeReactiveRatioPct,
+      buildPanelRows,
+      setRankingEntityFilter,
       resolveHistoricalRangeBounds,
       scheduleHistoricalSnapshotQuery: typeof scheduleHistoricalSnapshotQuery === 'function' ? scheduleHistoricalSnapshotQuery : undefined,
       syncHistoricalTimeSlider: typeof syncHistoricalTimeSlider === 'function' ? syncHistoricalTimeSlider : undefined,

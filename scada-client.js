@@ -41,15 +41,15 @@ const SCADA_CONFIG = {
   MOCK_ENABLED: false,
   MOCK_DATA_PATH: 'data/mock_scada.json',
   LOADING_THRESHOLDS: [
-    { max: 30, color: '#22c55e', label: '0-30%' },
-    { max: 55, color: '#eab308', label: '30-55%' },
-    { max: 65, color: '#f97316', label: '55-65%' },
-    { max: 80, color: '#ef4444', label: '65-80%' },
+    { max: 55, color: '#22c55e', label: '0-55%' },
+    { max: 65, color: '#eab308', label: '55-65%' },
+    { max: 75, color: '#f97316', label: '65-75%' },
+    { max: 80, color: '#ef4444', label: '75-80%' },
     { max: 90, color: '#dc2626', label: '80-90%' },
     { max: Infinity, color: '#7c3aed', label: '90%+' }
   ],
   NO_MATCH_COLOR: '#9ca3af',
-  UNMATCHED_HAT_COLOR: '#4b5563',
+  UNMATCHED_HAT_COLOR: '#9ca3af',
   STALE_COLOR: '#f59e0b',
   FLOW_MIN_WIDTH: 1.5,
   FLOW_MAX_WIDTH: 6,
@@ -703,6 +703,7 @@ function pushFlowHistory(hatId, mw, pct, timestamp) {
 }
 
 function getFlowColor(loadingPct) {
+  if (!Number.isFinite(Number(loadingPct))) return SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af';
   for (const threshold of SCADA_CONFIG.LOADING_THRESHOLDS) {
     if (loadingPct <= threshold.max) return threshold.color;
   }

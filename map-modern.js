@@ -1363,6 +1363,40 @@ function partitionSelectedHats(hats) {
   return normalHats.concat(selectedHats);
 }
 
+function getHatStrokeStyle(row) {
+  const baseWidth = row.kv === '400' ? 2.8 : row.kv === '154' ? 2.1 : 1.7;
+  const baseColor = HAT_TM_COLORS[row.kv] || HAT_TM_COLORS[''];
+  const hatMetricActive = String(state.filters.scadaMetric || '').startsWith('hat');
+  const displayMode = state.filters.scadaMapDisplayMode || 'flow';
+  const useScadaHatColors = Boolean(state.scada.enabled)
+    && hatMetricActive
+    && (displayMode === 'flow' || displayMode === 'heatmap');
+  if (!useScadaHatColors) return { color: baseColor, width: baseWidth, opacity: 1, flow: null, record: null };
+
+  const noDataColor = SCADA_CONFIG?.NO_MATCH_COLOR || '#9ca3af';
+  // A mode transition must not colour the new mode from the previous mode's
+  // snapshot. A same-mode snapshot remains visible until its atomic refresh.
+  if (state.scada.currentScope?.mode !== state.filters.scadaMetric) {
+    return { color: noDataColor, width: row.kv === '400' ? 2.2 : 1.5, opacity: 0.92, flow: null, record: null };
+  }
+  const flow = state.scada.lineFlowByLineId?.get(row.id) || null;
+  const record = state.scada.entityMetricsByKey?.get(`hat:${row.id}`) || null;
+  if (!flow || flow.unavailable || flow.invalidPct || !Number.isFinite(flow.displayPct)) {
+    return { color: noDataColor, width: row.kv === '400' ? 2.2 : 1.5, opacity: 0.92, flow, record };
+  }
+
+  const color = flow.displayPctMode === 'reactive-ratio'
+    ? (flow.color || noDataColor)
+    : getFlowColor(flow.displayPct);
+  let width = Math.max(flow.width, row.kv === '400' ? 2.8 : 2);
+  let opacity = 1;
+  if (displayMode === 'heatmap') {
+    width += row.kv === '400' ? 1.2 : 0.9;
+    opacity = 0.96;
+  }
+  return { color, width, opacity, flow, record };
+}
+
 function renderHatLayer() {
   el.hatLayer.innerHTML = '';
   if (!state.filters.showHat && !isSelectionForceVisible('hat')) return;
@@ -1418,33 +1452,11 @@ function renderHatLayer() {
     path.setAttribute('d', d);
     path.removeAttribute('stroke-dasharray');
     path.setAttribute('opacity', '1');
-    /* SCADA-aware coloring: only hat metrics in flow/heatmap mode can override base line colors */
-    const scadaOn = state.scada.enabled && state.scada.entityMetricsByKey instanceof Map && state.scada.entityMetricsByKey.size > 0;
-    const hatMetricActive = String(state.filters.scadaMetric || '').startsWith('hat');
-    const hatDisplayMode = state.filters.scadaMapDisplayMode || 'flow';
-    const useScadaHatColors = scadaOn && hatMetricActive && (hatDisplayMode === 'flow' || hatDisplayMode === 'heatmap');
-    const flow = useScadaHatColors ? state.scada.lineFlowByLineId.get(row.id) : null;
-    const record = useScadaHatColors ? state.scada.entityMetricsByKey.get(`hat:${row.id}`) : null;
-    let strokeWidth = row.kv === '400' ? 2.8 : row.kv === '154' ? 2.1 : 1.7;
-    let strokeColor = HAT_TM_COLORS[row.kv] || HAT_TM_COLORS[''];
-    let strokeOpacity = 1;
-    if (useScadaHatColors && flow) {
-      strokeColor = flow.color;
-      strokeWidth = Math.max(flow.width, row.kv === '400' ? 2.8 : 2);
-      if (hatDisplayMode === 'heatmap') {
-        strokeWidth += row.kv === '400' ? 1.2 : 0.9;
-        strokeOpacity = 0.96;
-      }
-    } else if (useScadaHatColors && record && (record.sourceAmbiguous || record.unresolved || record.candidateConflict || record.backupUsed || record.uncertaintyReason || record.invalidPct)) {
-      strokeColor = record.displayColor || (SCADA_CONFIG?.NO_MATCH_COLOR || '#9ca3af');
-      strokeWidth = row.kv === '400' ? 2.4 : 1.8;
-      if (hatDisplayMode === 'heatmap') strokeWidth += 0.8;
-      strokeOpacity = 0.92;
-    } else if (useScadaHatColors && !flow) {
-      strokeColor = SCADA_CONFIG?.UNMATCHED_HAT_COLOR || '#4b5563';
-      strokeWidth = row.kv === '400' ? 2.2 : 1.5;
-      strokeOpacity = 0.35;
-    }
+    const strokeStyle = getHatStrokeStyle(row);
+    const { flow, record } = strokeStyle;
+    let strokeWidth = strokeStyle.width;
+    const strokeColor = strokeStyle.color;
+    const strokeOpacity = strokeStyle.opacity;
 
     path.setAttribute('stroke', strokeColor);
     path.removeAttribute('stroke-dasharray');
@@ -1504,10 +1516,14 @@ function renderHatLayer() {
     const safeKv = escapeHtml(row.kv || '?');
     let tooltipHtml = `<strong>${safeName}</strong><br><span class="tt-label">${safeStartTm} ➔ ${safeEndTm}</span> · ${safeKv} kV · ${formatNumber(row.lengthKm, ' km')}`;
     if (flow) {
-      const mwT = flow.mw >= 0 ? `+${flow.mw.toFixed(1)}` : flow.mw.toFixed(1);
+      const primaryValue = Number.isFinite(flow.primaryValue) ? flow.primaryValue : flow.mw;
+      const primaryUnit = flow.primaryUnit || 'MW';
+      const primaryText = Number.isFinite(primaryValue)
+        ? `${primaryValue >= 0 ? '+' : ''}${primaryValue.toFixed(1)} ${primaryUnit}`
+        : '-';
       const tsT = flow.timestamp ? flow.timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
       const pctText = flow.invalidPct ? '!' : (Number.isFinite(flow.displayPct) ? `${flow.displayPct.toFixed(0)}%` : '-');
-      tooltipHtml += `<br><span style="color:${flow.color};font-weight:700">${mwT} MW · ${pctText}</span>${tsT ? ` · <span class="tt-label">${escapeHtml(tsT)}</span>` : ''}`;
+      tooltipHtml += `<br><span style="color:${flow.color};font-weight:700">${primaryText} · ${pctText}</span>${tsT ? ` · <span class="tt-label">${escapeHtml(tsT)}</span>` : ''}`;
     } else if (record && (Number.isFinite(record.primaryValue) || Number.isFinite(record.displayPct) || record.invalidPct || record.valueInvalid)) {
       const primaryUnit = record.primaryMetric === 'reactive' ? 'MVar' : 'MW';
       const primaryText = record.valueInvalid
@@ -2029,6 +2045,7 @@ if (typeof globalThis !== 'undefined' && globalThis.__MAP_MODERN_TEST_HOOKS__) {
     getVisibleTms,
     getVisibleBaras,
     partitionSelectedHats,
+    getHatStrokeStyle,
     getMapState: () => state,
     getMapElements: () => el
   });

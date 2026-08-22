@@ -34,6 +34,16 @@ function loadMapModern() {
     setTimeout,
     clearTimeout,
     __MAP_MODERN_TEST_HOOKS__: {},
+    SCADA_CONFIG: { NO_MATCH_COLOR: '#9ca3af' },
+    getFlowColor(value) {
+      if (!Number.isFinite(value)) return '#9ca3af';
+      if (value <= 55) return '#22c55e';
+      if (value <= 65) return '#eab308';
+      if (value <= 75) return '#f97316';
+      if (value <= 80) return '#ef4444';
+      if (value <= 90) return '#dc2626';
+      return '#7c3aed';
+    },
     document: documentStub,
     window: {
       chrome: {
@@ -162,4 +172,28 @@ test('selected hat partition preserves input order and draws selected hats last'
   assert.deepEqual(Array.from(hooks.partitionSelectedHats(hats).map((hat) => hat.id)), ['parallel-a', 'selected', 'parallel-b']);
   state.selection = { kind: 'hat', id: 'selected', measureSourceId: '', measureTargetIds: [] };
   assert.deepEqual(Array.from(hooks.partitionSelectedHats(hats).map((hat) => hat.id)), ['parallel-a', 'parallel-b', 'selected']);
+});
+
+test('hat SCADA stroke never falls back to the 154 kV base color during refresh', () => {
+  const hooks = loadMapModern();
+  const state = hooks.getMapState();
+  const hat = { id: 'hat-154', kv: '154' };
+  state.scada.enabled = true;
+  state.filters.scadaMetric = 'hat-active';
+  state.filters.scadaMapDisplayMode = 'flow';
+  state.scada.currentScope = { mode: 'hat-active' };
+  state.scada.entityMetricsByKey = new Map();
+  state.scada.lineFlowByLineId = new Map();
+
+  assert.equal(hooks.getHatStrokeStyle(hat).color, '#9ca3af', 'bos gecis aninda turuncu baz renk kullanilmaz');
+
+  state.scada.lineFlowByLineId.set('hat-154', {
+    displayPct: 5,
+    displayPctMode: 'loading',
+    invalidPct: false,
+    unavailable: false,
+    width: 2,
+    color: '#22c55e'
+  });
+  assert.equal(hooks.getHatStrokeStyle(hat).color, '#22c55e', 'gecerli eski snapshot rengi korunur');
 });

@@ -47,15 +47,15 @@ function loadRuntime() {
       QUERY_TIME_RANGE: 'DATEADD(DATETIME("now"), -24, hour) : now',
       QUERY_ROW_LIMIT: 50000,
       LOADING_THRESHOLDS: [
-        { max: 30, color: '#22c55e', label: '0-30%' },
-        { max: 55, color: '#eab308', label: '30-55%' },
-        { max: 65, color: '#f97316', label: '55-65%' },
-        { max: 80, color: '#ef4444', label: '65-80%' },
+        { max: 55, color: '#22c55e', label: '0-55%' },
+        { max: 65, color: '#eab308', label: '55-65%' },
+        { max: 75, color: '#f97316', label: '65-75%' },
+        { max: 80, color: '#ef4444', label: '75-80%' },
         { max: 90, color: '#dc2626', label: '80-90%' },
         { max: Infinity, color: '#7c3aed', label: '90%+' }
       ],
       NO_MATCH_COLOR: '#9ca3af',
-      UNMATCHED_HAT_COLOR: '#4b5563',
+      UNMATCHED_HAT_COLOR: '#9ca3af',
       FLOW_MIN_WIDTH: 1.5,
       FLOW_MAX_WIDTH: 6,
       FLOW_PCT_SCALE: 100,
@@ -96,7 +96,15 @@ function loadRuntime() {
     setTimeout: () => 0,
     clearTimeout: () => {},
     chrome: { runtime: { sendMessage: async () => ({ ok: false }) } },
-    getFlowColor: (value) => value > 80 ? '#7c3aed' : value > 55 ? '#f97316' : '#22c55e',
+    getFlowColor: (value) => {
+      if (!Number.isFinite(value)) return '#9ca3af';
+      if (value <= 55) return '#22c55e';
+      if (value <= 65) return '#eab308';
+      if (value <= 75) return '#f97316';
+      if (value <= 80) return '#ef4444';
+      if (value <= 90) return '#dc2626';
+      return '#7c3aed';
+    },
     getFlowWidth: () => 2,
     currentGeoBounds: () => ({}),
     intersects: () => true,
@@ -736,7 +744,7 @@ test('buildRenderedFlowPath reverses sade mode path for reverse flow', () => {
   assert.equal(pathData, 'M 30 40 L 10 20');
 });
 
-test('buildEntityMetricRecord flags %300 ustu oranlari gecersiz olarak isaretler', () => {
+test('hat reactive ratio above 60 stays purple instead of being capped as invalid', () => {
   const context = loadRuntime();
   const { buildEntityMetricRecord, rebuildLineFlowMap } = context.__SCADA_V2_TEST_HOOKS__;
   const entity = buildTerminalEntity({
@@ -749,8 +757,8 @@ test('buildEntityMetricRecord flags %300 ustu oranlari gecersiz olarak isaretler
     }
   });
   const measurementRows = new Map([
-    ['p-1', { measurementId: 'p-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp: new Date('2026-04-20T08:07:00.000Z'), value: 10 }],
-    ['q-1', { measurementId: 'q-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp: new Date('2026-04-20T08:07:00.000Z'), value: 50 }]
+    ['p-1', { measurementId: 'p-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp: new Date(), value: 10 }],
+    ['q-1', { measurementId: 'q-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp: new Date(), value: 50 }]
   ]);
 
   const record = buildEntityMetricRecord('hat', entity, {
@@ -766,9 +774,9 @@ test('buildEntityMetricRecord flags %300 ustu oranlari gecersiz olarak isaretler
     primaryMetric: 'reactive'
   }, new Map([[record.entityKey, record]]));
 
-  assert.equal(record.invalidPct, true);
-  assert.equal(record.uncertaintyReason, 'invalid-pct');
-  assert.equal(flowMap.has('hat-invalid-ratio'), false);
+  assert.equal(record.invalidPct, false);
+  assert.equal(record.displayPct, 500);
+  assert.equal(flowMap.get('hat-invalid-ratio').color, '#7c3aed');
 });
 
 test('getReadableTextColor returns dark text for bright chips and white for dark chips', () => {
@@ -1072,7 +1080,7 @@ test('Canliya don restores last live snapshot instantly and triggers one live fe
   assert.equal(statuses.at(-1)?.tone, 'info');
 });
 
-test('live scope sends only the primary metric: hat-active P, trafo-reactive Q, history keeps P+Q', () => {
+test('live scope fetches P+Q for hat-reactive while trafo-reactive remains Q only', () => {
   const context = loadRuntime();
   const hooks = context.__SCADA_V2_TEST_HOOKS__;
   const hatEntity = { id: 'hat-1', scada: { active: { ids: ['m-h-p-1'] }, reactive: { ids: ['m-h-q-1'] } } };
@@ -1089,6 +1097,12 @@ test('live scope sends only the primary metric: hat-active P, trafo-reactive Q, 
   assert.deepEqual(Array.from(historyScope.elementNames), ['P', 'Q'], 'gecmis hat P+Q ister');
   assert.deepEqual(Array.from(historyScope.measurementIds).sort(), ['m-h-p-1', 'm-h-q-1'].sort());
 
+  context.state.filters.scadaMetric = 'hat-reactive';
+  liveScope = hooks.getCurrentScadaScope({ history: false });
+  assert.deepEqual(Array.from(liveScope.metricTypes), ['active', 'reactive']);
+  assert.deepEqual(Array.from(liveScope.elementNames), ['P', 'Q']);
+  assert.deepEqual(Array.from(liveScope.measurementIds).sort(), ['m-h-p-1', 'm-h-q-1'].sort());
+
   context.state.filters.scadaMetric = 'trafo-reactive';
   context.getVisibleTrafoEntities = () => [trafoEntity];
   liveScope = hooks.getCurrentScadaScope({ history: false });
@@ -1104,6 +1118,76 @@ test('live scope sends only the primary metric: hat-active P, trafo-reactive Q, 
   liveScope = hooks.getCurrentScadaScope({ history: false });
   assert.deepEqual(Array.from(liveScope.metricTypes), ['voltage']);
   assert.deepEqual(Array.from(liveScope.elementNames), ['U']);
+});
+
+test('voltage panel uses one non-transfer SCADA representative per TM everywhere', () => {
+  const context = loadRuntime();
+  const hooks = context.__SCADA_V2_TEST_HOOKS__;
+  const timestamp = (minutes) => new Date(Date.UTC(2026, 7, 22, 10, minutes, 0));
+  const bara = (id, name, kv, extra = {}) => ({ id, name, tmId: 'tm-urgup', tmName: 'URGUP', kvBucket: String(kv), gerilimKv: kv, ...extra });
+  const record = (entity, value, staleState = 'live', minutes = 0) => ({
+    entityType: 'bara', entity, primaryMetric: 'voltage', primaryValue: value,
+    voltage: { value, timestamp: timestamp(minutes) }, primaryTimestamp: timestamp(minutes), primaryStaleState: staleState,
+    primaryStatusText: staleState === 'live' ? 'Canli' : staleState === 'warn' ? 'Gecikmeli' : 'Bayat',
+    timeState: staleState, timeStateLabel: staleState, ageLabel: '', sourceAmbiguous: false
+  });
+  const b1 = bara('b1', '154 B1', 154);
+  const b2 = bara('b2', '154 B2', 154);
+  const bt = bara('bt', '154 BT', 154);
+  const b400 = bara('b400', '400 B1', 400);
+  const cases = [
+    { name: 'B1 data, B2 and BT empty', bars: [b1, b2, bt], records: [[b1, 154, 'live', 1]], expected: 'b1' },
+    { name: 'B1 and B2 live', bars: [b1, b2], records: [[b1, 154, 'live', 1], [b2, 153, 'live', 1]], expected: 'b1' },
+    { name: 'B1 and BT live', bars: [b1, bt], records: [[b1, 154, 'live', 1], [bt, 154, 'live', 2]], expected: 'b1' },
+    { name: 'only BT live', bars: [bt], records: [[bt, 154, 'live', 1]], expected: null },
+    { name: '400 and 154 live', bars: [b1, b400], records: [[b1, 154, 'live', 2], [b400, 400, 'live', 2]], expected: 'b400' }
+  ];
+
+  for (const scenario of cases) {
+    const metrics = new Map(scenario.records.map(([entity, value, staleState, minutes]) => [
+      `bara:${entity.id}`, record(entity, value, staleState, minutes)
+    ]));
+    context.getVisibleBaras = () => scenario.bars;
+    context.state.scada.entityMetricsByKey = metrics;
+    const representatives = hooks.getVoltagePanelRepresentatives(metrics);
+    assert.equal(representatives.length, scenario.expected ? 1 : 0, scenario.name);
+    if (scenario.expected) assert.equal(representatives[0].entity.id, scenario.expected, scenario.name);
+  }
+
+  context.getVisibleBaras = () => [b1, b2, bt];
+  const metrics = new Map([[`bara:${b1.id}`, record(b1, 154, 'live', 1)]]);
+  context.state.scada.entityMetricsByKey = metrics;
+  context.state.filters.scadaListEntity = 'voltage';
+  hooks.setRankingEntityFilter('voltage');
+  const panelRows = hooks.buildPanelRows();
+  const scope = { domain: 'bara', entities: [b1, b2, bt], filterKey: 'voltage', mode: 'voltage' };
+  const summary = hooks.buildVisibleSummary(scope, metrics);
+  const legendTotal = hooks.getMetricLegendCounts({ domain: 'bara', primaryMetric: 'voltage' }).reduce((total, entry) => total + entry.count, 0);
+  assert.equal(panelRows.length, 1, 'panel only renders the representative');
+  assert.equal(summary.total, 1, 'summary counts the same representative list');
+  assert.equal(legendTotal, 1, 'legend counts the same representative list');
+});
+
+test('loading and reactive ratio colors follow their separate boundary tables', () => {
+  const context = loadRuntime();
+  const { getDisplayColor, computeReactiveRatioPct } = context.__SCADA_V2_TEST_HOOKS__;
+  const colorFor = (pct, mode = 'loading') => getDisplayColor({
+    primaryMetric: mode === 'reactive-ratio' ? 'reactive' : 'active', primaryValue: 1,
+    primaryStaleState: 'live', displayPct: pct, displayPctMode: mode, invalidPct: false
+  });
+  for (const [pct, color] of [[0, '#22c55e'], [55, '#22c55e'], [55.1, '#eab308'], [65, '#eab308'], [65.1, '#f97316'], [75, '#f97316'], [75.1, '#ef4444'], [80, '#ef4444'], [80.1, '#dc2626'], [90, '#dc2626'], [90.1, '#7c3aed'], [120, '#7c3aed']]) {
+    assert.equal(colorFor(pct), color, `MW ${pct}%`);
+  }
+  for (const [pct, color] of [[0, '#22c55e'], [10, '#22c55e'], [10.1, '#eab308'], [20, '#eab308'], [20.1, '#f97316'], [30, '#f97316'], [30.1, '#ef4444'], [40, '#ef4444'], [40.1, '#dc2626'], [60, '#dc2626'], [60.1, '#7c3aed']]) {
+    assert.equal(colorFor(pct, 'reactive-ratio'), color, `MVar ${pct}%`);
+  }
+  const resolved = (p, q) => ({ active: p == null ? null : { normalizedValue: p }, reactive: q == null ? null : { normalizedValue: q } });
+  assert.equal(computeReactiveRatioPct(resolved(100, 20)), 20);
+  assert.equal(computeReactiveRatioPct(resolved(100, -20)), 20);
+  assert.equal(computeReactiveRatioPct(resolved(50, 40)), 80);
+  assert.equal(computeReactiveRatioPct(resolved(null, 20)), null);
+  assert.equal(computeReactiveRatioPct(resolved(100, null)), null);
+  assert.equal(computeReactiveRatioPct(resolved(0, 20)), null);
 });
 
 test('failed or empty historical fetch rolls back to live and re-triggers a live fetch', async () => {
