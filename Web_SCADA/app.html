@@ -30,7 +30,7 @@
       </button>
       <div class="sidebar-inner">
         <div class="sidebar-head">
-          <h2 style="margin: 0 0 10px 0; font-size: 18px; color: var(--accent);">SCADA/YTBS/TPYS/YKS Haritalar</h2>
+          <h2 style="margin: 0 0 10px 0; font-size: 18px; color: var(--accent);">WebSCADA — YTBS Sebeke Haritasi</h2>
         </div>
 
         <section class="panel tools-panel top-gap">
@@ -305,13 +305,13 @@
   </section>
   <section id="webscadaData" class="webscada-view" aria-label="Datalar">
     <div class="workspace-head"><h1>Datalar</h1><p>Yerel topology envanteri ve secili varlik</p></div>
-    <div class="data-toolbar"><label>Ara <input id="dataSearch" type="search" placeholder="TM, hat, trafo veya bara"></label><label>Tip <select id="dataType"><option value="">Tumu</option><option value="tm">TM</option><option value="hat">Hat</option><option value="trafo">Trafo</option><option value="bara">Bara</option></select></label><label>Gerilim <select id="dataKv"><option value="">Tumu</option><option>400</option><option>154</option><option>66</option></select></label><button id="dataCsv">CSV indir</button></div>
-    <div id="dataCount" class="workspace-note"></div><div class="data-table-wrap"><table><thead><tr><th>Tip</th><th>Ad</th><th>TM</th><th>kV</th><th>Islem</th></tr></thead><tbody id="dataRows"></tbody></table></div>
+    <div class="data-toolbar"><label>Ara <input id="dataSearch" type="search" placeholder="TM, hat, trafo veya bara"></label><label>Tip <select id="dataType"><option value="">Tumu</option><option value="tm">Trafo Merkezi</option><option value="hat">Hat</option><option value="bara">Bara</option><option value="trafo-transmission">Trafo - Iletim</option><option value="trafo-distribution">Trafo - Dagitim</option><option value="santral" disabled>Santral (yakinda)</option></select></label><label>YTM <select id="dataYtm"><option value="">Tumu</option></select></label><label>Gerilim <select id="dataKv"><option value="">Tumu</option><option>400</option><option>154</option><option>66</option></select></label><label>SCADA <select id="dataScada"><option value="">Tumu</option><option value="matched">Eslesmis</option><option value="unmatched">Eslesmemis</option></select></label><label>Satir <select id="dataPageSize"><option>50</option><option>100</option><option>250</option></select></label><button id="dataCsv">CSV indir</button></div>
+    <div id="dataCount" class="workspace-note"></div><div class="data-table-wrap"><table><thead><tr><th>Tip</th><th>Ad</th><th>TM</th><th>YTM</th><th>kV</th><th>SCADA</th><th>Islem</th></tr></thead><tbody id="dataRows"></tbody></table></div><div class="pager"><button id="dataPrev">Onceki</button><span id="dataPageInfo"></span><button id="dataNext">Sonraki</button></div><dialog id="entityDetail"><button id="detailClose" class="dialog-close">Kapat</button><div id="detailBody"></div></dialog>
   </section>
   <section id="webscadaQuery" class="webscada-view" aria-label="Sorgular">
     <div class="workspace-head"><h1>Sorgular</h1><p>Superset verisiyle temel zaman araligi sorgusu</p></div>
     <div id="querySelection" class="workspace-note">Bir varlik secilmedi.</div>
-    <div class="query-toolbar"><label>Baslangic <input id="queryStart" type="datetime-local"></label><label>Bitis <input id="queryEnd" type="datetime-local"></label><label>Olcum <select id="queryMetric"><option value="P">MW (P)</option><option value="Q">MVar (Q)</option><option value="U">kV (U)</option></select></label><button id="runQuery" class="primary">Sorguyu calistir</button><button id="queryCsv">CSV indir</button></div>
+    <div class="query-toolbar"><label>Preset <select id="queryPreset"><option value="1">1 saat</option><option value="6">6 saat</option><option value="24" selected>24 saat</option><option value="72">3 gun</option><option value="168">7 gun</option><option value="custom">Ozel</option></select></label><label>Baslangic <input id="queryStart" type="datetime-local"></label><label>Bitis <input id="queryEnd" type="datetime-local"></label><label>Granularity <select id="queryGrain"><option value="PT1M">1 dk</option><option value="PT5M">5 dk</option><option value="PT10M">10 dk</option><option value="PT15M">15 dk</option><option value="PT30M">30 dk</option><option value="PT1H">1 saat</option></select></label><fieldset class="metric-picks"><legend>Metric</legend><label><input class="queryMetric" type="checkbox" value="P" checked> MW</label><label><input class="queryMetric" type="checkbox" value="Q" checked> MVar</label><label><input class="queryMetric" type="checkbox" value="U"> Gerilim</label></fieldset><button id="runQuery" class="primary">Sorguyu calistir</button><button id="queryCsv">CSV indir</button></div>
     <div id="queryStatus" class="workspace-note">Hazir.</div><div id="queryChart" class="query-chart" aria-label="Sorgu grafigi"></div>
     <div class="data-table-wrap"><table><thead><tr><th>Zaman</th><th>Olcum</th><th>Deger</th><th>Varlik</th></tr></thead><tbody id="queryRows"></tbody></table></div>
   </section>
@@ -319,6 +319,8 @@
   <script src="core/topology-store.js"></script>
   <script src="core/selection-store.js"></script>
   <script src="core/scada-utils.js"></script>
+  <script src="core/entity-resolver.js"></script>
+  <script src="core/workspace-utils.js"></script>
   <script src="app.js"></script>
   <script src="map/map-common.js"></script>
   <script src="map/scada-common.js"></script>

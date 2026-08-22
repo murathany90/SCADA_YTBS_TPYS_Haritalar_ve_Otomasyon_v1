@@ -1,77 +1,44 @@
 (() => {
-  const byId = (id) => document.getElementById(id);
-  const state = { entities: [], filtered: [], queryRows: [] };
-  const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[ch]);
-  const kvOf = (entity) => String(entity.kvBucket || entity.kv || entity.primaryKv || entity.gerilimKv || '').replace(/\.0$/, '');
-  const tmOf = (entity) => entity.tmName || entity.tm || entity.startTm || entity.name || '-';
-  const nameOf = (entity) => entity.displayName || entity.name || entity.id || '-';
-
-  function switchTab(tab) {
-    document.querySelectorAll('.webscada-tab').forEach((button) => button.classList.toggle('active', button.dataset.webscadaTab === tab));
-    document.querySelectorAll('.webscada-view').forEach((view) => view.classList.toggle('active', view.id === `webscada${tab[0].toUpperCase()}${tab.slice(1)}`));
-    if (tab === 'map') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  const $ = (id) => document.getElementById(id); const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[c]);
+  const app = { entities: [], filtered: [], pageRows: [], page: 1, queryRows: [], selected: null, queryStartedAt: 0 };
+  const nameOf = (e) => e?.displayName || e?.name || e?.id || '-'; const tmOf = (e) => e?.tmName || e?.tm || e?.startTm || e?.name || '-'; const kvOf = (e) => String(e?.kvBucket || e?.kv || e?.primaryKv || e?.gerilimKv || '').replace(/\.0$/, '');
+  const ytmOf = (e) => e?.ytm || (Array.isArray(e?.ytmNames) ? e.ytmNames.join(', ') : '') || '-'; const typeOf = (e) => WebSCADAEntityResolver.entityType(e);
+  const typeLabel = (e) => ({ tm:'Trafo Merkezi',hat:'Hat',bara:'Bara','trafo-transmission':'Trafo - Iletim','trafo-distribution':'Trafo - Dagitim' })[typeOf(e)] || typeOf(e);
+  const selectedMetrics = () => [...document.querySelectorAll('.queryMetric:checked')].map((input) => input.value);
+  function switchTab(tab) { document.querySelectorAll('.webscada-tab').forEach((b) => b.classList.toggle('active', b.dataset.webscadaTab === tab)); document.querySelectorAll('.webscada-view').forEach((v) => v.classList.toggle('active', v.id === `webscada${tab[0].toUpperCase()}${tab.slice(1)}`)); if (tab === 'map') requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); }
+  function updateStatus() { const s = window.__TPYS_STATE?.scada; const meta = s?.fetchMeta; const scada = !s?.enabled ? 'Baglanti yok' : (meta?.triggerType === 'history' ? 'Gecmis' : 'Canli'); const superset = meta?.error ? 'Hata' : (s?.fetchInProgress ? 'Oturum aciliyor' : 'Bagli'); const at = s?.lastDataTimestamp ? new Date(s.lastDataTimestamp).toLocaleTimeString('tr-TR') : '-'; $('webscadaStatus').textContent = `SCADA: ${scada} | Superset: ${superset} | Son veri: ${at}`; }
+  function filterData(reset = true) {
+    if (reset) app.page = 1; const search = $('dataSearch').value.trim().toLocaleLowerCase('tr-TR'); const type = $('dataType').value; const ytm = $('dataYtm').value; const kv = $('dataKv').value; const scada = $('dataScada').value;
+    app.filtered = app.entities.filter((e) => (!type || typeOf(e) === type) && (!ytm || ytmOf(e) === ytm || ytmOf(e).includes(ytm)) && (!kv || kvOf(e) === kv) && (!scada || (scada === 'matched') === WebSCADAEntityResolver.hasScadaMatch(e)) && (!search || `${nameOf(e)} ${tmOf(e)} ${e.id || ''} ${ytmOf(e)}`.toLocaleLowerCase('tr-TR').includes(search)));
+    renderData();
   }
-  function updateStatus() {
-    const map = window.__TPYS_STATE;
-    const text = map?.scada?.fetchMeta?.phaseMessage || map?.map?.status?.text || 'Hazir';
-    byId('webscadaStatus').textContent = text;
+  function renderData() {
+    const slice = WebSCADAWorkspaceUtils.pageSlice(app.filtered, app.page, $('dataPageSize').value); app.page = slice.page; app.pageRows = slice.rows;
+    $('dataCount').textContent = `${slice.from}–${slice.to} / ${slice.total.toLocaleString('tr-TR')}`; $('dataPageInfo').textContent = `Sayfa ${slice.page}/${slice.pages}`; $('dataPrev').disabled = slice.page <= 1; $('dataNext').disabled = slice.page >= slice.pages;
+    $('dataRows').innerHTML = slice.rows.map((e, index) => `<tr><td>${esc(typeLabel(e))}</td><td>${esc(nameOf(e))}</td><td>${esc(tmOf(e))}</td><td>${esc(ytmOf(e))}</td><td>${esc(kvOf(e))}</td><td>${WebSCADAEntityResolver.hasScadaMatch(e) ? 'Eslesmis' : 'Eslesmemis'}</td><td><button class="row-action" data-action="map" data-index="${index}">Haritada Goster</button> <button class="row-action" data-action="query" data-index="${index}">Sorgula</button> <button class="row-action" data-action="detail" data-index="${index}">Detay</button></td></tr>`).join('') || '<tr><td colspan="7">Eslesen veri yok.</td></tr>';
   }
-  function filterData() {
-    const query = byId('dataSearch').value.trim().toLocaleLowerCase('tr-TR'); const type = byId('dataType').value; const kv = byId('dataKv').value;
-    state.filtered = state.entities.filter((entity) => (!type || entity.kind === type) && (!kv || kvOf(entity) === kv) && (!query || `${nameOf(entity)} ${tmOf(entity)} ${entity.id || ''}`.toLocaleLowerCase('tr-TR').includes(query)));
-    byId('dataCount').textContent = `${state.filtered.length.toLocaleString('tr-TR')} varlik`;
-    byId('dataRows').innerHTML = state.filtered.slice(0, 2000).map((entity, index) => `<tr><td>${esc(entity.kind)}</td><td>${esc(nameOf(entity))}</td><td>${esc(tmOf(entity))}</td><td>${esc(kvOf(entity))}</td><td><button class="row-action" data-entity-index="${index}">Sec / haritada ac</button></td></tr>`).join('') || '<tr><td colspan="5">Eslesen veri yok.</td></tr>';
-  }
-  function selectEntity(entity, navigate) {
-    window.WebSCADASelection.select(entity);
-    byId('querySelection').textContent = `${entity.kind}: ${nameOf(entity)} secili.`;
-    if (navigate) {
-      switchTab('map');
-      const input = byId('searchInput'); input.value = nameOf(entity); byId('btnSearch').click();
-    }
-  }
-  function downloadCsv(filename, rows) {
-    const headers = Object.keys(rows[0] || {}); if (!headers.length) return;
-    const body = [headers.join(';'), ...rows.map((row) => headers.map((key) => `"${String(row[key] ?? '').replace(/"/g, '""')}"`).join(';'))].join('\r\n');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([body], { type: 'text/csv;charset=utf-8' })); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 0);
-  }
-  function localTime(ms) { const date = new Date(ms); const p = (n) => String(n).padStart(2, '0'); return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`; }
-  function measurementIds(entity) {
-    const candidates = [entity?.sinsid, entity?.measurementId, entity?.scadaMeasurementId, entity?.scada?.sinsid, entity?.id];
-    return candidates.filter((value) => value !== undefined && value !== null && String(value).trim()).map(String).slice(0, 1);
-  }
-  function valueOf(row) { return row?.['AVG(maxValue)'] ?? row?.maxValue ?? row?.value ?? row?.valueAvg ?? ''; }
-  function timeOf(row) { return row?.['MAX(__time)'] ?? row?.__time ?? row?.timestamp ?? ''; }
+  function selectEntity(entity) { app.selected = entity; WebSCADASelection.select(entity); $('querySelection').textContent = `${typeLabel(entity)}: ${nameOf(entity)} secili.`; }
+  function focusMap(entity) { selectEntity(entity); switchTab('map'); $('searchInput').value = nameOf(entity); $('btnSearch').click(); }
+  function detail(entity) { const ids = WebSCADAEntityResolver.resolveMeasurementIds(entity, ['P','Q','U'], app.entities); $('detailBody').innerHTML = `<h2>${esc(nameOf(entity))}</h2><dl><dt>ID</dt><dd>${esc(entity.id)}</dd><dt>Tip</dt><dd>${esc(typeLabel(entity))}</dd><dt>TM</dt><dd>${esc(tmOf(entity))}</dd><dt>YTM</dt><dd>${esc(ytmOf(entity))}</dd><dt>kV</dt><dd>${esc(kvOf(entity))}</dd><dt>SCADA</dt><dd>${ids.length ? `Eslesmis (${ids.length} olcum)` : 'Eslesmemis'}</dd></dl>`; $('entityDetail').showModal(); }
+  function csv(name, rows) { const keys = Object.keys(rows[0] || {}); if (!keys.length) return; const data = [keys.join(';'), ...rows.map((row) => keys.map((key) => `"${String(row[key] ?? '').replace(/"/g,'""')}"`).join(';'))].join('\r\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type:'text/csv;charset=utf-8' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 0); }
+  function localTime(ms) { const d = new Date(ms), p = (v) => String(v).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+  function setPreset() { const preset = $('queryPreset').value; if (preset === 'custom') return; const end = Date.now(), start = end - Number(preset) * 3600000; $('queryStart').value = localTime(start); $('queryEnd').value = localTime(end); $('queryGrain').value = WebSCADAWorkspaceUtils.autoGrain(start, end); }
+  function valueOf(row) { return row?.['AVG(maxValue)'] ?? row?.maxValue ?? row?.value ?? ''; } function timeOf(row) { return row?.__time ?? row?.timestamp ?? row?.['MAX(__time)'] ?? ''; }
   function drawChart(rows) {
-    const values = rows.map((row) => Number(valueOf(row))).filter(Number.isFinite); const chart = byId('queryChart');
-    if (!values.length) { chart.innerHTML = '<div class="empty">Grafik icin sayisal veri yok.</div>'; return; }
-    const min = Math.min(...values), max = Math.max(...values), range = max - min || 1;
-    const path = values.map((value, index) => `${index ? 'L' : 'M'} ${(index / Math.max(1, values.length - 1) * 960 + 20).toFixed(1)} ${(130 - (value - min) / range * 105).toFixed(1)}`).join(' ');
-    chart.innerHTML = `<svg viewBox="0 0 1000 150" role="img" aria-label="Sorgu zaman serisi"><path d="M20 130H980" stroke="#cbd5e1"/><path d="${path}" fill="none" stroke="#0e7490" stroke-width="3"/><text x="20" y="146" fill="#526273" font-size="12">${esc(min.toFixed(2))}</text><text x="925" y="20" fill="#526273" font-size="12">${esc(max.toFixed(2))}</text></svg>`;
+    const chart = $('queryChart'); const byMetric = new Map(); rows.forEach((row) => { const t = new Date(timeOf(row)).getTime(), v = Number(valueOf(row)); if (!Number.isFinite(t) || !Number.isFinite(v)) return; const metric = row.elementName || 'Olcum'; if (!byMetric.has(metric)) byMetric.set(metric, []); byMetric.get(metric).push({t,v}); });
+    if (!byMetric.size) { chart.innerHTML = '<div class="empty">Grafik icin sayisal veri yok.</div>'; return; }
+    const colors = ['#0e7490','#f97316','#7c3aed']; chart.innerHTML = [...byMetric].map(([metric, points], i) => { points.sort((a,b)=>a.t-b.t); const reduced = points.length > 700 ? points.filter((_, n) => n % Math.ceil(points.length / 700) === 0) : points; const minT = reduced[0].t, maxT = reduced.at(-1).t, minV = Math.min(...reduced.map(p=>p.v)), maxV = Math.max(...reduced.map(p=>p.v)), spanT = maxT-minT||1, spanV=maxV-minV||1; let last = null; const path = reduced.map((p,n) => { const x=20+(p.t-minT)/spanT*940, y=125-(p.v-minV)/spanV*100; const cmd = !last || p.t-last.t > Math.max(1,spanT/reduced.length)*3 ? 'M' : 'L'; last=p; return `${cmd}${x.toFixed(1)},${y.toFixed(1)}`; }).join(' '); return `<div class="series"><strong style="color:${colors[i%colors.length]}">${esc(metric)} (${esc(minV.toFixed(2))}…${esc(maxV.toFixed(2))})</strong><svg viewBox="0 0 1000 150"><path d="M20 125H960" stroke="#cbd5e1"/><path d="${path}" fill="none" stroke="${colors[i%colors.length]}" stroke-width="3"><title>${esc(metric)} zaman serisi</title></path><text x="20" y="145">${new Date(minT).toLocaleString('tr-TR')}</text><text x="750" y="145">${new Date(maxT).toLocaleString('tr-TR')}</text></svg></div>`; }).join('');
   }
   async function runQuery() {
-    const entity = window.WebSCADASelection.get();
-    if (!entity) { byId('queryStatus').textContent = 'Once Datalar sekmesinden bir varlik secin.'; return; }
-    const ids = measurementIds(entity); if (!ids.length) { byId('queryStatus').textContent = 'Secili varlik icin olcum kimligi yok.'; return; }
-    const button = byId('runQuery'); button.disabled = true; button.textContent = 'Yukleniyor...'; byId('queryStatus').textContent = 'Superset sorgusu calisiyor...';
-    try {
-      const metric = byId('queryMetric').value; const start = new Date(byId('queryStart').value).toISOString(); const end = new Date(byId('queryEnd').value).toISOString();
-      const response = await chrome.runtime.sendMessage({ type: 'WEBSCADA_QUERY', payload: { measurementIds: ids, elementNames: [metric], timeRange: `${start} : ${end}` } });
-      if (!response?.ok) throw new Error(response?.error || 'Sorgu basarisiz.');
-      state.queryRows = (response.data?.result || []).flatMap((item) => item.data || []); drawChart(state.queryRows);
-      byId('queryRows').innerHTML = state.queryRows.slice(0, 1000).map((row) => `<tr><td>${esc(timeOf(row))}</td><td>${esc(row.elementName || metric)}</td><td>${esc(valueOf(row))}</td><td>${esc(nameOf(entity))}</td></tr>`).join('') || '<tr><td colspan="4">Veri yok.</td></tr>';
-      byId('queryStatus').textContent = `${state.queryRows.length} satir alindi.`;
-    } catch (error) { byId('queryStatus').textContent = `Sorgu hatasi: ${error.message}`; }
-    finally { button.disabled = false; button.textContent = 'Sorguyu calistir'; }
+    if (!app.selected) { $('queryStatus').textContent = 'Once Datalar sekmesinden bir varlik secin.'; return; } const metrics = selectedMetrics(); const ids = WebSCADAEntityResolver.resolveMeasurementIds(app.selected, metrics, app.entities); const start = new Date($('queryStart').value).getTime(), end = new Date($('queryEnd').value).getTime(), grain = $('queryGrain').value; const check = WebSCADAWorkspaceUtils.guardrail(ids.length, start, end, grain);
+    if (!metrics.length || !ids.length) { $('queryStatus').textContent = 'Secilen varlik ve metric icin canonical SCADA olcumu yok.'; return; } if (!check.ok) { $('queryStatus').textContent = `Sorgu cok buyuk (${check.estimated.toLocaleString('tr-TR')} nokta tahmini). Tarihi, entity veya granularity degerini daraltin.`; return; }
+    const button = $('runQuery'); button.disabled = true; button.textContent = 'Sorgulaniyor...'; app.queryStartedAt = Date.now(); const tick = setInterval(() => $('queryStatus').textContent = `Sorgulaniyor... ${Math.round((Date.now()-app.queryStartedAt)/1000)} sn`, 250);
+    try { const response = await chrome.runtime.sendMessage({ type:'WEBSCADA_QUERY', payload:{ measurementIds:ids, elementNames:metrics, startTime:start, endTime:end, timeGrain:grain, queryMode:'timeseries' } }); if (!response?.ok) throw new Error(response?.error || 'Sorgu basarisiz.'); app.queryRows = (response.data?.result || []).flatMap((item) => item.data || []); drawChart(app.queryRows); $('queryRows').innerHTML = app.queryRows.slice(0,1000).map((row)=>`<tr><td>${esc(timeOf(row))}</td><td>${esc(row.elementName || '')}</td><td>${esc(valueOf(row))}</td><td>${esc(nameOf(app.selected))}</td></tr>`).join('') || '<tr><td colspan="4">Veri yok.</td></tr>'; $('queryStatus').textContent = app.queryRows.length ? `${$('queryPreset').value === 'custom' ? 'Ozel aralik' : $('queryPreset').value + ' saat'} / ${app.queryRows.length} kayit yuklendi.` : 'Secilen tarih araliginda veri bulunamadi.'; } catch (error) { $('queryStatus').textContent = `Sorgu hatasi: ${error.message}`; } finally { clearInterval(tick); button.disabled=false; button.textContent='Sorguyu calistir'; }
   }
   document.addEventListener('DOMContentLoaded', async () => {
-    const now = Date.now(); byId('queryStart').value = localTime(now - 24 * 3600 * 1000); byId('queryEnd').value = localTime(now);
-    document.querySelectorAll('.webscada-tab').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.webscadaTab)));
-    ['dataSearch', 'dataType', 'dataKv'].forEach((id) => byId(id).addEventListener(id === 'dataSearch' ? 'input' : 'change', filterData));
-    byId('dataRows').addEventListener('click', (event) => { const index = event.target.dataset.entityIndex; if (index !== undefined) selectEntity(state.filtered[Number(index)], true); });
-    byId('dataCsv').addEventListener('click', () => downloadCsv('webscada-topology.csv', state.filtered.map((entity) => ({ type: entity.kind, ad: nameOf(entity), tm: tmOf(entity), kv: kvOf(entity), id: entity.id || '' }))));
-    byId('runQuery').addEventListener('click', runQuery); byId('queryCsv').addEventListener('click', () => downloadCsv('webscada-query.csv', state.queryRows));
-    try { const { network } = await window.WebSCADATopology.loadAll(); state.entities = window.WebSCADATopology.listEntities(network); filterData(); } catch (error) { byId('dataCount').textContent = `Topology yuklenemedi: ${error.message}`; }
-    setInterval(updateStatus, 500); updateStatus();
+    setPreset(); document.querySelectorAll('.webscada-tab').forEach((b)=>b.addEventListener('click',()=>switchTab(b.dataset.webscadaTab))); ['dataSearch','dataType','dataYtm','dataKv','dataScada','dataPageSize'].forEach((id)=>$(id).addEventListener(id==='dataSearch'?'input':'change',()=>filterData(true))); $('dataPrev').addEventListener('click',()=>{app.page--;renderData();}); $('dataNext').addEventListener('click',()=>{app.page++;renderData();});
+    $('dataRows').addEventListener('click',(event)=>{ const node=event.target.closest('[data-action]'); if(!node)return; const entity=app.pageRows[Number(node.dataset.index)]; if(node.dataset.action==='map')focusMap(entity); if(node.dataset.action==='query'){selectEntity(entity);switchTab('query');} if(node.dataset.action==='detail')detail(entity); }); $('detailClose').addEventListener('click',()=>$('entityDetail').close()); $('dataCsv').addEventListener('click',()=>csv('webscada-topology.csv',app.filtered.map((e)=>({type:typeLabel(e),ad:nameOf(e),tm:tmOf(e),ytm:ytmOf(e),kv:kvOf(e),scada:WebSCADAEntityResolver.hasScadaMatch(e)?'Eslesmis':'Eslesmemis',id:e.id||''}))));
+    $('queryPreset').addEventListener('change',setPreset); $('runQuery').addEventListener('click',runQuery); $('queryCsv').addEventListener('click',()=>csv('webscada-query.csv',app.queryRows));
+    try { const {network}=await WebSCADATopology.loadAll(); app.entities=WebSCADATopology.listEntities(network); [...new Set(app.entities.map(ytmOf).filter((v)=>v&&v!=='-'))].sort((a,b)=>a.localeCompare(b,'tr')).forEach((value)=>$('dataYtm').insertAdjacentHTML('beforeend',`<option value="${esc(value)}">${esc(value)}</option>`)); filterData(); } catch(error) { $('dataCount').textContent=`Topology yuklenemedi: ${error.message}`; } setInterval(updateStatus,500); updateStatus();
   });
 })();
