@@ -211,7 +211,7 @@ async function main() {
     await waitStep('hat-popup-search-open', () => mapPage.waitForFunction(() => {
       const card = document.querySelector('#infoCard');
       const kicker = card?.querySelector('.info-kicker')?.textContent || '';
-      return Boolean(card && !card.classList.contains('hidden') && card.textContent.includes('Grafik Goster') && /Hat/i.test(kicker));
+      return Boolean(card && !card.classList.contains('hidden') && card.querySelector('#btnShowScadaChart') && /Hat/i.test(kicker));
     }, { timeout: 15000 }));
 
     await record('Anchored popup + chart modal', async () => {

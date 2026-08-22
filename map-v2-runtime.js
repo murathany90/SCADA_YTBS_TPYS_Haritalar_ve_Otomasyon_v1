@@ -502,43 +502,52 @@
     return String(trafo?.name || trafo?.displayName || '-').trim();
   }
 
-  function buildVoltageCandidateScore(record, bara) {
-    const nominal = Number(bara?.gerilimKv || bara?.kvBucket || 0) || 1;
-    const pu = nominal > 0 && Number.isFinite(record?.primaryValue) ? record.primaryValue / nominal : null;
-    return [
-      getTimePriority(record?.primaryStaleState),
-      Number(record?.primaryTimestamp?.getTime?.() || 0),
-      Number.isFinite(pu) ? Math.abs(pu - 1) : -1,
-      String(bara?.name || '')
-    ];
+  function hasTransferBaraToken(value) {
+    const tokens = normalizeText(value).split(' ').filter(Boolean);
+    return tokens.includes('bt') || tokens.includes('transfer');
   }
 
-  function sortVoltageCandidates(left, right) {
-    if (left[0] !== right[0]) return right[0] - left[0];
-    if (left[1] !== right[1]) return right[1] - left[1];
-    if (left[2] !== right[2]) return right[2] - left[2];
-    return String(left[3] || '').localeCompare(String(right[3] || ''), 'tr');
+  function isTransferBaraForVoltage(bara) {
+    // Structured topology data takes priority when it explicitly identifies a transfer bus.
+    if (hasTransferBaraToken(bara?.kullanim) || hasTransferBaraToken(bara?.turu)) return true;
+    // Older topology rows do not always expose that classification, so retain a token-only name fallback.
+    return hasTransferBaraToken(bara?.name);
+  }
+
+  function getVoltageTimestampMs(record) {
+    const timestamp = record?.primaryTimestamp;
+    if (typeof timestamp?.getTime === 'function') return Number(timestamp.getTime()) || 0;
+    const parsed = Date.parse(timestamp || '');
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function getVoltageCandidateTieKey(candidate) {
+    return `${normalizeText(candidate?.bara?.name)}\u0000${String(candidate?.bara?.id || '')}`;
+  }
+
+  function isBetterVoltageCandidate(candidate, current) {
+    if (!current) return true;
+    const candidateTimePriority = getTimePriority(candidate.record?.primaryStaleState);
+    const currentTimePriority = getTimePriority(current.record?.primaryStaleState);
+    if (candidateTimePriority !== currentTimePriority) return candidateTimePriority > currentTimePriority;
+
+    const candidateTimestamp = getVoltageTimestampMs(candidate.record);
+    const currentTimestamp = getVoltageTimestampMs(current.record);
+    if (candidateTimestamp !== currentTimestamp) return candidateTimestamp > currentTimestamp;
+
+    return getVoltageCandidateTieKey(candidate).localeCompare(getVoltageCandidateTieKey(current), 'tr') < 0;
   }
 
   function selectActiveVoltagePerTmLevel(items) {
     const byLevel = new Map();
     (items || []).forEach((bara) => {
       const record = getMetricRecord('bara', bara.id);
-      if (!record || !Number.isFinite(record.primaryValue)) return;
+      if (!record || !Number.isFinite(record.primaryValue) || isTransferBaraForVoltage(bara)) return;
       const levelKey = String(bara.kvBucket || bara.gerilimKv || '');
-      const list = byLevel.get(levelKey) || [];
-      list.push({ bara, record, visual: getMetricVisual('bara', bara) });
-      byLevel.set(levelKey, list);
+      const candidate = { bara, record, visual: getMetricVisual('bara', bara) };
+      if (isBetterVoltageCandidate(candidate, byLevel.get(levelKey))) byLevel.set(levelKey, candidate);
     });
-    const selected = [];
-    byLevel.forEach((list) => {
-      list.sort((left, right) => sortVoltageCandidates(
-        buildVoltageCandidateScore(left.record, left.bara),
-        buildVoltageCandidateScore(right.record, right.bara)
-      ));
-      if (list[0]) selected.push(list[0]);
-    });
-    return selected.sort((left, right) => Number(right.bara?.gerilimKv || 0) - Number(left.bara?.gerilimKv || 0));
+    return ['400', '154'].map((levelKey) => byLevel.get(levelKey)).filter(Boolean);
   }
 
   function buildVoltageOverlayGroups() {
@@ -554,9 +563,9 @@
     });
     return [...byTmId.values()].map(({ tm, items }) => {
       const activeLevels = selectActiveVoltagePerTmLevel(items);
-      const representative = activeLevels
-        .slice()
-        .sort((left, right) => Number(right.visual?.priorityScore || 0) - Number(left.visual?.priorityScore || 0))[0] || null;
+      const representative = activeLevels.reduce((best, entry) => (
+        !best || Number(entry.visual?.priorityScore || 0) > Number(best.visual?.priorityScore || 0) ? entry : best
+      ), null);
       return {
         tm,
         activeLevels,
@@ -1267,4 +1276,10 @@
   globalThis.getEntityTm = getEntityTm;
   globalThis.openTrafoDetails = openTrafoDetails;
   globalThis.openBaraNodeDetails = openBaraNodeDetails;
+  if (globalThis.__MAP_V2_TEST_HOOKS__) {
+    Object.assign(globalThis.__MAP_V2_TEST_HOOKS__, {
+      isTransferBaraForVoltage,
+      selectActiveVoltagePerTmLevel
+    });
+  }
 })();

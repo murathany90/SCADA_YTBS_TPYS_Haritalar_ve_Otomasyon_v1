@@ -26,9 +26,10 @@ $files = @(
   'rgdh-catalog-data.js', 'rgdh-auxiliary-catalog.js', 'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_v2.csv',
   'yks_izleme_modul/yks_docs/rgdh_unite_tanimi_.csv', 'yks-rgdh-instrumentation.js', 'yks-rgdh-diagnostic-bridge.js',
   'map.html', 'map.css', 'map.js', 'map-common.js', 'map-modern.html', 'map-modern.css', 'map-modern.js',
-  'map-v2-runtime.js', 'scada-common.js', 'scada-client.js', 'scada-flow.js', 'scada-v2-runtime.js'
+  'map-v2-runtime.js', 'scada-common.js', 'scada-client.js', 'scada-flow.js', 'scada-v2-runtime.js',
+  'data/kml_layers.json', 'data/kml_layers_v2.json', 'data/mapping.json', 'data/scada_auth.json'
 )
-$directories = @('data', 'lib')
+$directories = @('lib')
 if (Test-Path -LiteralPath $extensionRoot) { Remove-Item -LiteralPath $extensionRoot -Recurse -Force }
 New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
 foreach ($relativePath in $files) {
@@ -62,9 +63,14 @@ $zipCheck = $false
 try {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
-  $secretInZip = $zipArchive.Entries | Where-Object { $_.FullName -like '*scada_auth.json' }
+  $zipEntries = @($zipArchive.Entries.FullName | ForEach-Object { $_ -replace '\\', '/' })
   $zipArchive.Dispose()
-  if (-not $secretInZip) { throw "[FAIL] ZIP MUST contain credential file for local build." }
+  foreach ($requiredPath in @('data/kml_layers.json', 'data/kml_layers_v2.json', 'data/mapping.json', 'data/scada_auth.json')) {
+    if ($zipEntries -notcontains $requiredPath) { throw "[FAIL] ZIP runtime data missing: $requiredPath" }
+  }
+  foreach ($forbiddenPath in @('data/scada_auth.example.json', 'data/mock_scada.json')) {
+    if ($zipEntries -contains $forbiddenPath) { throw "[FAIL] ZIP development data must be excluded: $forbiddenPath" }
+  }
   $zipCheck = $true
 } catch {
   if (-not $zipCheck) { throw $_ }
