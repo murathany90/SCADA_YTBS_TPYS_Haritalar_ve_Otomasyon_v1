@@ -188,12 +188,13 @@ test('hat SCADA stroke never falls back to the 154 kV base color during refresh'
   assert.equal(hooks.getHatStrokeStyle(hat).color, '#9ca3af', 'bos gecis aninda turuncu baz renk kullanilmaz');
 
   state.scada.lineFlowByLineId.set('hat-154', {
-    displayPct: 5,
+    displayPct: 30,
     displayPctMode: 'loading',
     invalidPct: false,
     unavailable: false,
+    direction: 'unknown',
     width: 2,
     color: '#22c55e'
   });
-  assert.equal(hooks.getHatStrokeStyle(hat).color, '#22c55e', 'gecerli eski snapshot rengi korunur');
+  assert.equal(hooks.getHatStrokeStyle(hat).color, '#22c55e', 'yon belirsiz olsa da gecerli %30 yesil kalir');
 });

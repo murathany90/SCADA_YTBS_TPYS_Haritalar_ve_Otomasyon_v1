@@ -1342,9 +1342,9 @@ function buildHatHoverTooltipHtml(row) {
   if (record && Number.isFinite(record.directionValue)) {
     const resolutionLabel = record.resolvedTerminalMismatch
       ? 'Terminal yorumlu'
-      : record.unresolved
-        ? 'Yon belirsiz'
-        : record.candidateConflict || record.backupUsed || record.invalidPct || record.valueInvalid
+      : record.unresolved || record.sourceAmbiguous || record.candidateConflict || record.backupUsed
+        ? 'Yön belirsiz'
+        : record.invalidPct || record.valueInvalid
           ? 'Uyarili'
           : 'Cozulmus';
     const terminalLabel = record.terminalSide || '-';
@@ -1524,6 +1524,9 @@ function renderHatLayer() {
       const tsT = flow.timestamp ? flow.timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
       const pctText = flow.invalidPct ? '!' : (Number.isFinite(flow.displayPct) ? `${flow.displayPct.toFixed(0)}%` : '-');
       tooltipHtml += `<br><span style="color:${flow.color};font-weight:700">${primaryText} · ${pctText}</span>${tsT ? ` · <span class="tt-label">${escapeHtml(tsT)}</span>` : ''}`;
+      if (flow.direction === 'unknown' || record?.uncertaintyTooltip) {
+        tooltipHtml += `<br><span class="tt-label">${escapeHtml(flow.direction === 'unknown' ? 'Yön belirsiz' : record.uncertaintyTooltip)}</span>`;
+      }
     } else if (record && (Number.isFinite(record.primaryValue) || Number.isFinite(record.displayPct) || record.invalidPct || record.valueInvalid)) {
       const primaryUnit = record.primaryMetric === 'reactive' ? 'MVar' : 'MW';
       const primaryText = record.valueInvalid

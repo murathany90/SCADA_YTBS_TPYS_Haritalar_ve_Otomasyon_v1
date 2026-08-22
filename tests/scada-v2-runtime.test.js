@@ -779,6 +779,57 @@ test('hat reactive ratio above 60 stays purple instead of being capped as invali
   assert.equal(flowMap.get('hat-invalid-ratio').color, '#7c3aed');
 });
 
+test('valid loading keeps a colored line when flow direction is unknown', () => {
+  const context = loadRuntime();
+  const { rebuildLineFlowMap, getMetricLegendCounts } = context.__SCADA_V2_TEST_HOOKS__;
+  const record = {
+    entityType: 'hat',
+    entityId: 'hat-unknown-direction',
+    entityKey: 'hat:hat-unknown-direction',
+    entity: { id: 'hat-unknown-direction', name: 'Yon Belirsiz Hat' },
+    primaryMetric: 'active',
+    primaryValue: 30,
+    primaryStaleState: 'live',
+    displayPct: 30,
+    displayPctMode: 'loading',
+    loadingPct: 30,
+    invalidPct: false,
+    valueInvalid: false,
+    candidateConflict: true,
+    directionValue: 30
+  };
+  const metrics = new Map([[record.entityKey, record]]);
+  context.state.scada.entityMetricsByKey = metrics;
+  const flows = rebuildLineFlowMap({ key: 'hat-active', domain: 'hat', primaryMetric: 'active' }, metrics);
+  assert.equal(flows.get('hat-unknown-direction').color, '#22c55e');
+  assert.equal(flows.get('hat-unknown-direction').direction, 'unknown');
+  assert.equal(getMetricLegendCounts({ domain: 'hat', primaryMetric: 'active' }).reduce((total, entry) => total + entry.count, 0), 1);
+});
+
+test('hat reactive near-zero MW leaves the ratio gray with an explicit reason', () => {
+  const context = loadRuntime();
+  const { buildEntityMetricRecord } = context.__SCADA_V2_TEST_HOOKS__;
+  const entity = buildTerminalEntity({
+    scada: {
+      active: { ids: ['p-1'], rows: [buildTerminalCandidate('p-1', 'start', 1)] },
+      reactive: { ids: ['q-1'], rows: [buildTerminalCandidate('q-1', 'start', 1)] }
+    }
+  });
+  for (const [p, q] of [[0.5, 20], [0.01, 1]]) {
+    const now = new Date();
+    const record = buildEntityMetricRecord('hat', entity, {
+      key: 'hat-reactive', domain: 'hat', primaryMetric: 'reactive'
+    }, new Map([
+      ['p-1', { measurementId: 'p-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp: now, value: p }],
+      ['q-1', { measurementId: 'q-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp: now, value: q }]
+    ]));
+    assert.equal(record.displayPct, null, `P=${p}`);
+    assert.equal(record.displayColor, '#9ca3af', `P=${p}`);
+    assert.equal(record.displayPctReason, 'active-too-low', `P=${p}`);
+    assert.match(record.uncertaintyTooltip, /MW çok düşük/, `P=${p}`);
+  }
+});
+
 test('getReadableTextColor returns dark text for bright chips and white for dark chips', () => {
   const context = loadRuntime();
   const { getReadableTextColor } = context.__SCADA_V2_TEST_HOOKS__;
@@ -841,10 +892,7 @@ test('buildEntityMetricRecord keeps loading and display pct null when capacity i
   assert.equal(record.loadingPct, null);
   assert.equal(record.displayPct, null);
   assert.equal(record.displayColor, '#9ca3af');
-  assert.equal(flow.capacityMva, null);
-  assert.equal(flow.loadingPct, null);
-  assert.equal(flow.displayPct, null);
-  assert.equal(flow.color, '#9ca3af');
+  assert.equal(flow, undefined, 'gecerli yuklenme yuzdesi olmayan hat akim/ok kaydi olusturmaz');
 });
 
 test('scadaDoFetch defers manual fetch while document is hidden', async () => {
@@ -1030,14 +1078,14 @@ test('positive voltage axis never negative and never forced to 0', () => {
   assert.equal(empty.maxY, 1);
 });
 
-test('resolveHistoricalRangeBounds clamps future end and falls back to a 7-day window', () => {
+test('resolveHistoricalRangeBounds clamps future end and falls back to a 24-hour window', () => {
   const context = loadRuntime();
   const { resolveHistoricalRangeBounds } = context.__SCADA_V2_TEST_HOOKS__;
   const now = Date.UTC(2026, 4, 1, 8, 0, 0);
 
   const missing = resolveHistoricalRangeBounds('', '', now);
   assert.equal(missing.endMs, now);
-  assert.equal(missing.startMs, now - 7 * 24 * 3600 * 1000);
+  assert.equal(missing.startMs, now - 24 * 3600 * 1000);
 
   const futureEnd = resolveHistoricalRangeBounds(
     '2026-04-20T08:00',
@@ -1046,6 +1094,16 @@ test('resolveHistoricalRangeBounds clamps future end and falls back to a 7-day w
   );
   assert.equal(futureEnd.endMs, now, 'gelecekteki bitis simdiki ana sabitlenir');
   assert.equal(futureEnd.startMs, new Date('2026-04-20T08:00').getTime());
+});
+
+test('historical slider selection does not start a Superset query', () => {
+  const context = loadRuntime();
+  const { scheduleHistoricalSnapshotQuery } = context.__SCADA_V2_TEST_HOOKS__;
+  const selectedAt = Date.UTC(2026, 4, 1, 7, 55, 0);
+  context.state.scada.timeMode = 'live';
+  scheduleHistoricalSnapshotQuery(selectedAt);
+  assert.equal(context.state.scada.historicalSelectedAt, selectedAt);
+  assert.equal(context.state.scada.timeMode, 'live');
 });
 
 test('Canliya don restores last live snapshot instantly and triggers one live fetch', async () => {

@@ -31,6 +31,11 @@
   const HISTORY_CACHE_TTL_MS = 5 * 60 * 1000;
   const HISTORY_CACHE_MAX_ENTRIES = 40;
   const HAT_UNCERTAINTY_TEXT = {
+    'reactive-active-too-low': {
+      label: 'MW çok düşük',
+      short: 'MW çok düşük / oran hesaplanamadı.',
+      detail: 'MW çok düşük / oran hesaplanamadı'
+    },
     'backup-terminal': {
       label: 'Yedek uc',
       short: 'Yedek uc olcumu kullanildi.',
@@ -172,6 +177,8 @@
   }
   state.scada.timeMode = state.scada.timeMode || 'live';
   state.scada.historicalAt = state.scada.historicalAt || null;
+  state.scada.historicalSelectedAt = state.scada.historicalSelectedAt || null;
+  state.scada.historicalSelectionOpen = Boolean(state.scada.historicalSelectionOpen);
   state.scada.lastLiveSnapshot = state.scada.lastLiveSnapshot || null;
   state.scada.pollState = state.scada.pollState || {
     timerId: null,
@@ -386,6 +393,7 @@
     else if (record.unresolvedReason === 'orientation-unknown') reasons.push('orientation-unknown');
     else if (record.unresolvedReason === 'ambiguous-live' || record.sourceAmbiguous) reasons.push('ambiguous-live');
     if (record.resolvedTerminalMismatch) reasons.push('resolved-terminal-mismatch');
+    if (record.displayPctReason === 'active-too-low') reasons.push('reactive-active-too-low');
     if (record.valueInvalid) reasons.push('invalid-value');
     if (record.invalidPct) reasons.push('invalid-pct');
 
@@ -1132,7 +1140,7 @@
     const reactiveMagnitude = getLoadingHintValue(resolved?.reactive);
     if (!Number.isFinite(reactiveMagnitude)) return null;
     const activeMagnitude = getLoadingHintValue(resolved?.active);
-    if (!Number.isFinite(activeMagnitude) || activeMagnitude <= 0) return null;
+    if (!Number.isFinite(activeMagnitude) || Math.abs(activeMagnitude) < 1) return null;
     return (Math.abs(reactiveMagnitude) / Math.abs(activeMagnitude)) * 100;
   }
 
@@ -1193,25 +1201,31 @@
     if (modeConfig.primaryMetric === 'reactive') {
       const ratioPct = computeReactiveRatioPct(resolved);
       if (!Number.isFinite(ratioPct)) {
+        const activeMagnitude = getLoadingHintValue(resolved?.active);
         return {
           displayPct: null,
           displayPctRaw: null,
           displayPctMode: 'reactive-ratio',
-          invalidPct: Number.isFinite(getLoadingHintValue(resolved?.reactive))
+          invalidPct: Number.isFinite(getLoadingHintValue(resolved?.reactive)),
+          displayPctReason: Number.isFinite(activeMagnitude) && Math.abs(activeMagnitude) < 1
+            ? 'active-too-low'
+            : ''
         };
       }
       return {
         displayPct: ratioPct,
         displayPctRaw: ratioPct,
         displayPctMode: 'reactive-ratio',
-        invalidPct: false
+        invalidPct: false,
+        displayPctReason: ''
       };
     }
     return {
       displayPct: Number.isFinite(loadingPct) ? loadingPct : null,
       displayPctRaw: Number.isFinite(loadingPct) ? loadingPct : null,
       displayPctMode: 'loading',
-      invalidPct: Number.isFinite(loadingPct) && loadingPct > INVALID_DISPLAY_THRESHOLD
+      invalidPct: Number.isFinite(loadingPct) && loadingPct > INVALID_DISPLAY_THRESHOLD,
+      displayPctReason: ''
     };
   }
 
@@ -1757,6 +1771,7 @@
       displayPctRaw: displayMetrics.displayPctRaw,
       displayPctMode: displayMetrics.displayPctMode,
       invalidPct: Boolean(displayMetrics.invalidPct),
+      displayPctReason: displayMetrics.displayPctReason || '',
       timeState: primaryStaleState,
       timeStateLabel: primaryStatusText,
       ageLabel: getAgeLabel(primaryTimestamp)
@@ -1802,9 +1817,8 @@
       // Live dead records are dropped; historical snapshots keep the flow with
       // a historical-stale flag so the arrow stays visible with a warning.
       if (record.primaryStaleState === 'dead' && state.scada.timeMode !== 'historical') return;
-      if (record.sourceAmbiguous || record.unresolved || record.candidateConflict || record.backupUsed) return;
       const direction = getHatFlowDirection(record);
-      if (direction === 'unknown') return;
+      if (!Number.isFinite(record.displayPct) || record.invalidPct || record.valueInvalid) return;
       const value = record.primaryValue;
       const staleState = record.primaryStaleState;
       const historicalStale = state.scada.timeMode === 'historical' && staleState === 'dead';
@@ -1819,6 +1833,7 @@
         displayPct,
         displayPctMode: record.displayPctMode || 'loading',
         invalidPct: Boolean(record.invalidPct),
+        displayPctReason: record.displayPctReason || '',
         capacityMva: Number.isFinite(record.capacityMva) ? record.capacityMva : null,
         direction,
         directionMetric: record.directionMetric || modeConfig.primaryMetric,
@@ -3011,7 +3026,7 @@ try {
     }));
     state.scada.entityMetricsByKey.forEach((record) => {
       if (record.entityType === 'bara') return;
-      if (!Number.isFinite(record.displayPct) || record.invalidPct || hasHatUncertainty(record) || record.primaryStaleState === 'dead') return;
+      if (!Number.isFinite(record.displayPct) || record.invalidPct || record.primaryStaleState === 'dead') return;
       const bucket = counts.find((entry, index) => record.displayPct <= thresholds[index].max);
       if (bucket) bucket.count += 1;
     });
@@ -3041,6 +3056,7 @@ try {
     const elEnrichHint = document.getElementById('scadaEnrichHint');
     const btnRefresh = document.querySelector('[data-scada-btn="refresh"]');
     const btnRefreshLabel = document.getElementById('scadaRefreshBtnLabel');
+    const btnHistoricalShow = document.getElementById('btnScadaHistoricalShow');
 
     const formatClock = (value) => {
       if (!value) return '-';
@@ -3081,6 +3097,11 @@ try {
       elFetchMessage.textContent = opActive && op.message
         ? op.message
         : (fetchMeta.phaseMessage || 'Henuz sorgu yapilmadi.');
+    }
+    if (btnHistoricalShow) {
+      const historicalLoading = opActive && op.kind === 'historical';
+      btnHistoricalShow.disabled = historicalLoading;
+      btnHistoricalShow.textContent = historicalLoading ? 'Yükleniyor...' : 'Haritada Göster';
     }
     // Compact "Son sorgu" summary line (e.g. "364 olcum • 267/312").
     if (elFetchSummary) {
@@ -6864,7 +6885,7 @@ function _formatHistoryAxisLabel(timestampMs) {
 
   function patchRenderedFlowNode(node, row, flow, pathData) {
     const pathId = `fp-${row.id}`;
-    const arrowColor = document.documentElement.getAttribute('data-theme') === 'light' ? '#111827' : '#f8fafc';
+    const arrowColor = flow.color || (SCADA_CONFIG.NO_MATCH_COLOR || '#9ca3af');
     const duration = `${getArrowSpeed(Number.isFinite(flow.displayPct) ? flow.displayPct : (Number.isFinite(flow.loadingPct) ? flow.loadingPct : 0))}s`;
     const motionPath = node.querySelector('[data-role="motion-path"]');
     const arrow = node.querySelector('[data-role="arrow"]');
@@ -6889,6 +6910,10 @@ function _formatHistoryAxisLabel(timestampMs) {
       clearRenderedFlowLayer(flowLayer);
       return;
     }
+    if (state.scada.currentScope?.mode !== state.filters.scadaMetric) {
+      clearRenderedFlowLayer(flowLayer);
+      return;
+    }
     if (normalizeScadaMapDisplayMode(modeConfig, state.filters.scadaMapDisplayMode) !== 'flow') {
       clearRenderedFlowLayer(flowLayer);
       return;
@@ -6910,7 +6935,7 @@ function _formatHistoryAxisLabel(timestampMs) {
 
     visibleHats.forEach((row) => {
       const flow = state.scada.lineFlowByLineId.get(row.id);
-      if (!flow) return;
+      if (!flow || flow.direction === 'unknown') return;
       const flowId = String(row.id);
       const pathData = buildRenderedFlowPath(row, flow, parallelGroups);
       let node = cache.get(flowId);
@@ -6992,10 +7017,8 @@ function _formatHistoryAxisLabel(timestampMs) {
     return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
-  const HISTORICAL_SCRUB_DEBOUNCE_MS = 300;
-
   // Selected date range defines the slider travel. Missing/invalid edges fall
-  // back to a 7-day window ending now; future ends are clamped to now.
+  // back to the last 24 hours; future ends are clamped to now.
   function resolveHistoricalRangeBounds(startValue, endValue, nowMs) {
     const now = Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now();
     const parseValue = (value) => {
@@ -7005,34 +7028,19 @@ function _formatHistoryAxisLabel(timestampMs) {
     };
     const rawEnd = Number.isFinite(parseValue(endValue)) ? parseValue(endValue) : now;
     const endMs = Math.min(rawEnd, now);
-    const rawStart = Number.isFinite(parseValue(startValue)) ? parseValue(startValue) : endMs - 7 * 24 * 3600 * 1000;
+    const rawStart = Number.isFinite(parseValue(startValue)) ? parseValue(startValue) : endMs - 24 * 3600 * 1000;
     const startMs = Math.min(rawStart, endMs - 60 * 1000);
     if (startMs >= endMs) return { startMs: endMs - 24 * 3600 * 1000, endMs };
     return { startMs, endMs };
   }
 
-  // Debounced snapshot query (250-400 ms) so scrubbing never spams the API;
-  // a released scrubber (change/pointerup) or committed datetime flushes
-  // immediately. setScadaTimeMode deduplicates identical instants.
+  // Slider/date changes only update the selected instant. Historical data is
+  // fetched exclusively by the explicit "Haritada Goster" action.
   function scheduleHistoricalSnapshotQuery(atMs, options = {}) {
     const targetMs = Number(atMs);
     if (!Number.isFinite(targetMs)) return;
-    if (state.scada.timeMode !== 'historical') return;
-    if (state.scada.historicalScrubTimer != null) {
-      if (typeof clearTimeout === 'function') clearTimeout(state.scada.historicalScrubTimer);
-      state.scada.historicalScrubTimer = null;
-    }
-    const run = () => {
-      state.scada.historicalScrubTimer = null;
-      if (state.scada.timeMode !== 'historical') return;
-      setScadaTimeMode('historical', targetMs);
-    };
-    const delay = options.immediate ? 0 : HISTORICAL_SCRUB_DEBOUNCE_MS;
-    if (typeof setTimeout !== 'function' || delay <= 0) {
-      run();
-      return;
-    }
-    state.scada.historicalScrubTimer = setTimeout(run, delay);
+    state.scada.historicalSelectedAt = targetMs;
+    syncHistoricalTimeSlider();
   }
 
   function syncHistoricalTimeSlider() {
@@ -7042,11 +7050,11 @@ function _formatHistoryAxisLabel(timestampMs) {
       document.getElementById('scadaHistoryRangeStart')?.value,
       document.getElementById('scadaHistoryRangeEnd')?.value
     );
-    const atMs = Number(state.scada.historicalAt) || bounds.endMs;
+    const atMs = Number(state.scada.historicalSelectedAt || state.scada.historicalAt) || bounds.endMs;
     const clamped = Math.max(bounds.startMs, Math.min(bounds.endMs, atMs));
     slider.min = String(bounds.startMs);
     slider.max = String(bounds.endMs);
-    slider.step = '60';
+    slider.step = '300';
     slider.value = String(clamped);
     const atInput = document.getElementById('scadaHistoricalAtInput');
     const isFocused = typeof document.activeElement !== 'undefined' && document.activeElement === atInput;
@@ -7054,7 +7062,7 @@ function _formatHistoryAxisLabel(timestampMs) {
   }
 
   function syncScadaTimeControls() {
-    const historical = state.scada.timeMode === 'historical';
+    const historical = state.scada.timeMode === 'historical' || state.scada.historicalSelectionOpen;
     const modeButtons = Array.from(document.querySelectorAll('[data-scada-time]'));
     modeButtons.forEach((button) => {
       const isSelected = button.dataset.scadaTime === (historical ? 'historical' : 'live');
@@ -7109,6 +7117,7 @@ function _formatHistoryAxisLabel(timestampMs) {
   async function setScadaTimeMode(mode, atMs) {
     state.scada.historicalFetchSeq = state.scada.historicalFetchSeq || 0;
     if (mode === 'live') {
+      state.scada.historicalSelectionOpen = false;
       if (state.scada.timeMode === 'live' && !state.scada.pendingHistoricalFetch) {
         syncScadaTimeControls();
         return;
@@ -7151,6 +7160,8 @@ function _formatHistoryAxisLabel(timestampMs) {
         syncScadaTimeControls();
         return;
       }
+      state.scada.historicalSelectedAt = targetMs;
+      state.scada.historicalSelectionOpen = true;
       if (state.scada.lastLiveSnapshot == null) {
         state.scada.lastLiveSnapshot = state.scada.measurementRowsById instanceof Map
           ? new Map(state.scada.measurementRowsById)
@@ -7183,6 +7194,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         const wasHistorical = state.scada.timeMode === 'historical';
         state.scada.timeMode = 'historical';
         state.scada.historicalAt = targetMs;
+        state.scada.historicalSelectionOpen = false;
         if (!wasHistorical) stopScadaAutoScheduler();
         syncScadaTimeControls();
         applyGenericScadaSnapshot(result.rowsByMeasurementId, historyScope);
@@ -7206,6 +7218,7 @@ function _formatHistoryAxisLabel(timestampMs) {
       setScadaOperationMeta({ stage: 'error', progressPct: 100, message: failMessage });
       state.scada.timeMode = 'live';
       state.scada.historicalAt = null;
+      state.scada.historicalSelectionOpen = false;
       const lastLive = state.scada.lastLiveSnapshot;
       state.scada.lastLiveSnapshot = null;
       if (lastLive && lastLive.size) {
@@ -7238,7 +7251,10 @@ function _formatHistoryAxisLabel(timestampMs) {
             setScadaStatusMessage('Gecmis mod icin once zaman secin.', 'warn');
             return;
           }
-          setScadaTimeMode('historical', atMs);
+          state.scada.historicalSelectionOpen = true;
+          scheduleHistoricalSnapshotQuery(atMs);
+          syncScadaTimeControls();
+          setScadaStatusMessage('Gecmis zaman secildi. Sorgu icin Haritada Goster butonuna basin.', 'info');
         } else {
           setScadaTimeMode('live');
         }
@@ -7265,7 +7281,7 @@ function _formatHistoryAxisLabel(timestampMs) {
     const atInput = document.getElementById('scadaHistoricalAtInput');
     if (atInput && !atInput.dataset.boundTime) {
       atInput.dataset.boundTime = '1';
-      atInput.value = formatDateTimeLocalInput(state.scada.historicalAt || Date.now());
+      atInput.value = formatDateTimeLocalInput(state.scada.historicalSelectedAt || state.scada.historicalAt || Date.now());
       atInput.addEventListener('change', () => {
         const atMs = atInput.value ? new Date(atInput.value).getTime() : NaN;
         if (!Number.isFinite(atMs)) {
@@ -7273,13 +7289,14 @@ function _formatHistoryAxisLabel(timestampMs) {
           syncScadaTimeControls();
           return;
         }
-        setScadaTimeMode('historical', atMs);
+        scheduleHistoricalSnapshotQuery(atMs);
+        setScadaStatusMessage('Gecmis zaman secildi. Sorgu icin Haritada Goster butonuna basin.', 'info');
       });
     }
     const nowMs = Date.now();
     const rangeStartInput = document.getElementById('scadaHistoryRangeStart');
     if (rangeStartInput && !rangeStartInput.value) {
-      rangeStartInput.value = formatDateTimeLocalInput(nowMs - 7 * 24 * 3600 * 1000);
+      rangeStartInput.value = formatDateTimeLocalInput(nowMs - 24 * 3600 * 1000);
     }
     const rangeEndInput = document.getElementById('scadaHistoryRangeEnd');
     if (rangeEndInput && !rangeEndInput.value) {
@@ -7302,12 +7319,12 @@ function _formatHistoryAxisLabel(timestampMs) {
       slider.addEventListener('pointerup', () => {
         const valueMs = Number(slider.value);
         if (!Number.isFinite(valueMs)) return;
-        scheduleHistoricalSnapshotQuery(valueMs, { immediate: true });
+        scheduleHistoricalSnapshotQuery(valueMs);
       });
       slider.addEventListener('change', () => {
         const valueMs = Number(slider.value);
         if (!Number.isFinite(valueMs)) return;
-        scheduleHistoricalSnapshotQuery(valueMs, { immediate: true });
+        scheduleHistoricalSnapshotQuery(valueMs);
       });
     }
     ['scadaHistoryRangeStart', 'scadaHistoryRangeEnd'].forEach((rangeId) => {
@@ -7316,8 +7333,6 @@ function _formatHistoryAxisLabel(timestampMs) {
       rangeInput.dataset.boundTime = '1';
       rangeInput.addEventListener('change', () => {
         syncHistoricalTimeSlider();
-        const valueMs = Number(slider?.value);
-        if (slider && Number.isFinite(valueMs)) scheduleHistoricalSnapshotQuery(valueMs, { immediate: true });
       });
     });
     syncScadaTimeControls();

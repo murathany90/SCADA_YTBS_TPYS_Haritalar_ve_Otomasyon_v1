@@ -37,7 +37,7 @@ function renderFlowLayer() {
 
   visibleHats.forEach(row => {
     const flow = state.scada.lineFlowByLineId.get(row.id);
-    if (!flow) return;
+    if (!flow || flow.direction === 'unknown') return;
 
     usedColors.add(flow.color);
 
