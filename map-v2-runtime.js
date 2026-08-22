@@ -121,6 +121,7 @@
     });
 
     state.network = network;
+    if (typeof invalidateVisibleEntityCache === 'function') invalidateVisibleEntityCache();
     return network;
   }
 
@@ -129,14 +130,16 @@
   }
 
   function getVisibleTrafoEntities() {
-    const effectiveKv = getEffectiveKvFilter();
-    return state.network.trafos.filter((trafo) => {
-      const tm = trafo.tm || getEntityTm(trafo);
-      if (!tm) return false;
-      const kvBucket = getEffectiveTrafoKv(trafo);
-      if (!effectiveKv.has(kvBucket)) return false;
-      if (!matchesYtm(trafo.ytm || tm.ytm)) return false;
-      return true;
+    return getVisibleEntityList('trafos', () => {
+      const effectiveKv = getEffectiveKvFilter();
+      return state.network.trafos.filter((trafo) => {
+        const tm = trafo.tm || getEntityTm(trafo);
+        if (!tm) return false;
+        const kvBucket = getEffectiveTrafoKv(trafo);
+        if (!effectiveKv.has(kvBucket)) return false;
+        if (!matchesYtm(trafo.ytm || tm.ytm)) return false;
+        return true;
+      });
     });
   }
 
@@ -211,33 +214,39 @@
   };
 
   getVisibleBaras = function () {
-    const effectiveKv = getEffectiveKvFilter();
-    return state.network.baraNodes.filter((bara) => {
-      const tm = bara.tm || getEntityTm(bara);
-      if (!tm) return false;
-      return effectiveKv.has(String(bara.kvBucket || '')) && matchesYtm(bara.ytm || tm.ytm);
+    return getVisibleEntityList('baras', () => {
+      const effectiveKv = getEffectiveKvFilter();
+      return state.network.baraNodes.filter((bara) => {
+        const tm = bara.tm || getEntityTm(bara);
+        if (!tm) return false;
+        return effectiveKv.has(String(bara.kvBucket || '')) && matchesYtm(bara.ytm || tm.ytm);
+      });
     });
   };
 
   getVisibleTms = function () {
-    const effectiveKv = getEffectiveKvFilter();
-    const baseTms = state.network.tmPoints.filter((row) => effectiveKv.has(String(row.kvBucket || row.kv || '')) && matchesYtm(row.ytm));
-    if (state.filters.hatDisplayMode === 'sade-ayrik' || state.filters.hatDisplayMode === 'sade') {
-      const visibleNames = new Set(baseTms.map((tm) => tm.name));
-      const connectedNames = new Set();
-      getVisibleHats().forEach((hat) => {
-        if (hat.startTm) connectedNames.add(hat.startTm);
-        if (hat.endTm) connectedNames.add(hat.endTm);
-      });
-      const extras = state.network.tmPoints.filter((tm) => !visibleNames.has(tm.name) && connectedNames.has(tm.name) && effectiveKv.has(String(tm.kvBucket || tm.kv || '')));
-      return [...baseTms, ...extras];
-    }
-    return baseTms;
+    return getVisibleEntityList('tms', () => {
+      const effectiveKv = getEffectiveKvFilter();
+      const baseTms = state.network.tmPoints.filter((row) => effectiveKv.has(String(row.kvBucket || row.kv || '')) && matchesYtm(row.ytm));
+      if (state.filters.hatDisplayMode === 'sade-ayrik' || state.filters.hatDisplayMode === 'sade') {
+        const visibleNames = new Set(baseTms.map((tm) => tm.name));
+        const connectedNames = new Set();
+        getVisibleHats().forEach((hat) => {
+          if (hat.startTm) connectedNames.add(hat.startTm);
+          if (hat.endTm) connectedNames.add(hat.endTm);
+        });
+        const extras = state.network.tmPoints.filter((tm) => !visibleNames.has(tm.name) && connectedNames.has(tm.name) && effectiveKv.has(String(tm.kvBucket || tm.kv || '')));
+        return [...baseTms, ...extras];
+      }
+      return baseTms;
+    });
   };
 
   getVisibleHats = function () {
-    const effectiveKv = getEffectiveKvFilter();
-    return state.network.hatLines.filter((row) => effectiveKv.has(String(row.kvBucket || row.kv || '')) && matchesAnyYtm(row.ytmNames));
+    return getVisibleEntityList('hats', () => {
+      const effectiveKv = getEffectiveKvFilter();
+      return state.network.hatLines.filter((row) => effectiveKv.has(String(row.kvBucket || row.kv || '')) && matchesAnyYtm(row.ytmNames));
+    });
   };
 
   function collectFilterPoints(includeAll = false) {

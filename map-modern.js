@@ -451,6 +451,7 @@ function bindEvents() {
     const hatModeBtns = [el.btnHatModeDetayli, el.btnHatModeSade, el.btnHatModeSadeAyrik].filter(Boolean);
     function setHatMode(mode) {
       state.filters.hatDisplayMode = mode;
+      invalidateVisibleEntityCache();
       hatModeBtns.forEach(b => b.classList.remove('active'));
       if (mode === 'detayli') el.btnHatModeDetayli.classList.add('active');
       else if (mode === 'sade') el.btnHatModeSade.classList.add('active');
@@ -518,6 +519,7 @@ function setYtmFilterSelection(values) {
 }
 
 function handleVisibilityFiltersChanged() {
+  invalidateVisibleEntityCache();
   if (typeof refreshScadaVisibleSummary === 'function') refreshScadaVisibleSummary();
   if (typeof refreshRankingTable === 'function') refreshRankingTable();
   if (typeof updateScadaCardUI === 'function') updateScadaCardUI();
@@ -746,6 +748,26 @@ function getEffectiveYtmFilter() {
 function invalidateFilterCache() {
   state.filters.effectiveKv = null;
   state.filters.effectiveYtm = null;
+  invalidateVisibleEntityCache();
+}
+
+function invalidateVisibleEntityCache() {
+  if (!state.network) return;
+  const cache = state.network.visibleEntityCache || { revision: 0 };
+  cache.revision = Number(cache.revision || 0) + 1;
+  cache.hats = null;
+  cache.tms = null;
+  cache.baras = null;
+  cache.trafos = null;
+  state.network.visibleEntityCache = cache;
+}
+
+function getVisibleEntityList(kind, compute) {
+  const cache = state.network.visibleEntityCache || (state.network.visibleEntityCache = { revision: 0 });
+  if (Array.isArray(cache[kind])) return cache[kind];
+  const list = compute();
+  cache[kind] = list;
+  return list;
 }
 
 function clearSearchPins() {
@@ -884,7 +906,9 @@ function attachHoverTooltip(element, html, options = {}) {
     showHoverTooltip(owner, html, event, element);
   });
   element.addEventListener('mousemove', (e) => {
-    showHoverTooltip(owner, html, e, element);
+    if (state.ui.hoverTooltipOwner === owner && !el.hoverTooltip.classList.contains('hidden')) {
+      positionHoverTooltip(e);
+    }
   });
   element.addEventListener('mouseleave', () => {
     scheduleHoverTooltipHide(owner, hideDelayMs);
@@ -1210,29 +1234,35 @@ function matchesAnyYtm(values) {
 }
 
 function getVisibleBaras() {
-  const effectiveKv = getEffectiveKvFilter();
-  return state.mappingRows.filter((row) => effectiveKv.has(String(row.gerilim || '')) && matchesYtm(row.fullYtm));
+  return getVisibleEntityList('baras', () => {
+    const effectiveKv = getEffectiveKvFilter();
+    return state.mappingRows.filter((row) => effectiveKv.has(String(row.gerilim || '')) && matchesYtm(row.fullYtm));
+  });
 }
 
 function getVisibleTms() {
-  const effectiveKv = getEffectiveKvFilter();
-  const baseTms = state.network.tmPoints.filter((row) => effectiveKv.has(String(row.kv || '')) && matchesYtm(row.ytm));
-  if (state.filters.hatDisplayMode === 'sade-ayrik' || state.filters.hatDisplayMode === 'sade') {
-    const visibleNames = new Set(baseTms.map(t => t.name));
-    const connectedNames = new Set();
-    getVisibleHats().forEach(hat => {
-      if (hat.startTm) connectedNames.add(hat.startTm);
-      if (hat.endTm) connectedNames.add(hat.endTm);
-    });
-    const extras = state.network.tmPoints.filter(tm => !visibleNames.has(tm.name) && connectedNames.has(tm.name) && effectiveKv.has(String(tm.kv || '')));
-    return [...baseTms, ...extras];
-  }
-  return baseTms;
+  return getVisibleEntityList('tms', () => {
+    const effectiveKv = getEffectiveKvFilter();
+    const baseTms = state.network.tmPoints.filter((row) => effectiveKv.has(String(row.kv || '')) && matchesYtm(row.ytm));
+    if (state.filters.hatDisplayMode === 'sade-ayrik' || state.filters.hatDisplayMode === 'sade') {
+      const visibleNames = new Set(baseTms.map(t => t.name));
+      const connectedNames = new Set();
+      getVisibleHats().forEach(hat => {
+        if (hat.startTm) connectedNames.add(hat.startTm);
+        if (hat.endTm) connectedNames.add(hat.endTm);
+      });
+      const extras = state.network.tmPoints.filter(tm => !visibleNames.has(tm.name) && connectedNames.has(tm.name) && effectiveKv.has(String(tm.kv || '')));
+      return [...baseTms, ...extras];
+    }
+    return baseTms;
+  });
 }
 
 function getVisibleHats() {
-  const effectiveKv = getEffectiveKvFilter();
-  return state.network.hatLines.filter((row) => effectiveKv.has(String(row.kv || '')) && matchesAnyYtm(row.ytmNames));
+  return getVisibleEntityList('hats', () => {
+    const effectiveKv = getEffectiveKvFilter();
+    return state.network.hatLines.filter((row) => effectiveKv.has(String(row.kv || '')) && matchesAnyYtm(row.ytmNames));
+  });
 }
 
 function buildParallelGroups(hats) {
@@ -1324,6 +1354,15 @@ function buildHatHoverTooltipHtml(row) {
   return lines.join('<br>');
 }
 
+function partitionSelectedHats(hats) {
+  const normalHats = [];
+  const selectedHats = [];
+  (hats || []).forEach((row) => {
+    (isSelected('hat', row.id) ? selectedHats : normalHats).push(row);
+  });
+  return normalHats.concat(selectedHats);
+}
+
 function renderHatLayer() {
   el.hatLayer.innerHTML = '';
   if (!state.filters.showHat && !isSelectionForceVisible('hat')) return;
@@ -1334,12 +1373,7 @@ function renderHatLayer() {
     const selectedHat = state.network.hatLines.find((row) => String(row.id) === String(state.selection.id));
     if (selectedHat && !visibleHats.some((row) => String(row.id) === String(selectedHat.id))) visibleHats.push(selectedHat);
   }
-  const filteredHats = visibleHats.filter((row) => intersects(row.bbox, bounds));
-  filteredHats.sort((left, right) => {
-    const leftSelected = isSelected('hat', left.id) ? 1 : 0;
-    const rightSelected = isSelected('hat', right.id) ? 1 : 0;
-    return leftSelected - rightSelected;
-  });
+  const filteredHats = partitionSelectedHats(visibleHats.filter((row) => intersects(row.bbox, bounds)));
 
   let parallelGroups = null;
   if (state.filters.hatDisplayMode === 'sade-ayrik') {
@@ -1987,7 +2021,16 @@ function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (mat
 if (typeof globalThis !== 'undefined' && globalThis.__MAP_MODERN_TEST_HOOKS__) {
   Object.assign(globalThis.__MAP_MODERN_TEST_HOOKS__, {
     getVoltagePuColor,
-    isBlankMapClickTarget
+    isBlankMapClickTarget,
+    attachHoverTooltip,
+    getVisibleEntityList,
+    invalidateVisibleEntityCache,
+    getVisibleHats,
+    getVisibleTms,
+    getVisibleBaras,
+    partitionSelectedHats,
+    getMapState: () => state,
+    getMapElements: () => el
   });
 }
 
