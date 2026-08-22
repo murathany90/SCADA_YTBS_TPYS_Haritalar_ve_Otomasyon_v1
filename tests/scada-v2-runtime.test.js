@@ -890,11 +890,13 @@ test('SCADA dashboard snapshot serializes and restores measurement rows as maps'
   const context = loadRuntime();
   const { serializeScadaDashboardSnapshot, restoreScadaDashboardSnapshot } = context.__SCADA_V2_TEST_HOOKS__;
   const timestamp = new Date('2026-05-01T08:00:00.000Z');
+  context.getVisibleHats = () => [{ scada: { active: { ids: ['m-1'] } } }];
+  context.getScadaVisibilityFilterKey = () => 'kv:400';
 
   context.state.scada.measurementRowsById = new Map([
     ['m-1', { measurementId: 'm-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp, value: 42 }]
   ]);
-  context.state.scada.currentScope = { mode: 'hat-active', domain: 'hat', entities: [], measurementIds: ['m-1'], elementNames: ['P'], filterKey: 'kv:400' };
+  context.state.scada.currentScope = { mode: 'hat-active', domain: 'hat', entities: [], measurementIds: ['m-1'], elementNames: ['P'], filterKey: 'kv:400|mode:hat-active', primaryMetric: 'active' };
   context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
   context.state.scada.lastTransport = { authMode: 'session' };
 
@@ -1542,4 +1544,194 @@ test('CSV OLCUM ID and SCADA B1/B2/B3 use the selected candidate when measuremen
   assert.equal(downloaded.rows[0][13], '154', 'SCADA B2 secilen adayin satirindan gelir');
   assert.equal(downloaded.rows[0][14], 'TMB2', 'SCADA B3 secilen adayin satirindan gelir');
   assert.equal(downloaded.rows[0][19], '84,00', 'nihai deger normalize kayit degeridir');
+});
+
+test('scadaDoFetch discards stale rejected request before error state mutation', async () => {
+  const context = loadRuntime();
+  const { scadaDoFetch } = context.__SCADA_V2_TEST_HOOKS__;
+  const scopeAEntity = { id: 'hat-a', scada: { active: { ids: ['m-a'] } } };
+  const scopeBEntity = { id: 'hat-b', scada: { active: { ids: ['m-b'] } } };
+  context.getVisibleHats = () => [scopeAEntity];
+  context.getScadaVisibilityFilterKey = () => 'kv:400';
+  let scheduledPendingTrigger = null;
+  context.setTimeout = (callback) => {
+    scheduledPendingTrigger = callback;
+    return 1;
+  };
+
+  // Setup scope A
+  context.state.scada.currentScope = {
+    mode: 'hat-active',
+    domain: 'hat',
+    entities: [{ id: 'hat-1', scada: { active: { ids: ['m-a'] } } }],
+    measurementIds: ['m-a'],
+    elementNames: ['P'],
+    filterKey: 'kv:400|mode:hat-active',
+    primaryMetric: 'active',
+    modeLabel: 'Hat (MW)',
+    domain: 'hat'
+  };
+  context.state.filters.scadaMetric = 'hat-active';
+  context.state.filters.scadaListEntity = 'hat';
+  context.state.scada.enabled = true;
+  context.state.scada.autoRefresh = false;
+  context.state.scada.fetchInProgress = false;
+  context.state.scada.error = undefined;
+  context.state.scada.fetchMeta = { error: null };
+
+  // Mock sendMessage to return a rejected promise (simulating network error)
+  let rejectPromise = null;
+  const sendPromise = new Promise((_, reject) => {
+    rejectPromise = reject;
+  });
+  context.chrome.runtime.sendMessage = async () => sendPromise;
+
+  // Start fetch A
+  const fetchPromise = scadaDoFetch({ trigger: 'manual' });
+
+  // Immediately change scope to B (before fetch A resolves)
+  context.getVisibleHats = () => [scopeBEntity];
+  context.state.filters.scadaMetric = 'hat-active';
+  await scadaDoFetch({ trigger: 'filter-change' });
+  assert.equal(context.state.scada.pollState.pendingTrigger.triggerType, 'filter-change');
+
+  // Reject fetch A
+  rejectPromise(new Error('network failure'));
+
+  await fetchPromise.catch(() => {}); // wait for fetch A to complete
+
+  // Verify Scope B state was NOT corrupted by stale error from fetch A
+  assert.ok(!context.state.scada.error || !context.state.scada.error.includes('network failure'),
+    'Scope B error should not contain stale error from fetch A');
+
+  // Verify fetchMeta was not corrupted with fetch A's error
+  assert.notEqual(context.state.scada.fetchMeta?.error, 'network failure');
+
+  assert.equal(context.state.scada.pollState.pendingTrigger, null, 'latest pending trigger is consumed once');
+  assert.equal(typeof scheduledPendingTrigger, 'function', 'latest pending trigger is scheduled once for scope B');
+});
+
+test('dashboard snapshot restore rejects stale cached scope even when state.currentScope is old', () => {
+  const context = loadRuntime();
+  const { serializeScadaDashboardSnapshot, restoreScadaDashboardSnapshot } = context.__SCADA_V2_TEST_HOOKS__;
+  const timestamp = new Date('2026-05-01T08:00:00.000Z');
+
+  // Create snapshot with Scope A
+  context.state.scada.measurementRowsById = new Map([
+    ['m-1', { measurementId: 'm-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp, value: 42 }]
+  ]);
+  context.state.scada.currentScope = {
+    mode: 'hat-active',
+    domain: 'hat',
+    entities: [],
+    measurementIds: ['m-a'],
+    elementNames: ['P'],
+    filterKey: 'kv:400|mode:hat-active',
+    primaryMetric: 'active',
+    modeLabel: 'Hat (MW)',
+    domain: 'hat'
+  };
+  context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
+  context.state.scada.lastTransport = { authMode: 'session' };
+  context.state.scada.totalRows = 1;
+
+  const snapshot = serializeScadaDashboardSnapshot({ source: 'unit-test' });
+
+  // Cached state still says A, but the actual UI topology has moved to B.
+  context.getVisibleHats = () => [{ id: 'hat-b', scada: { active: { ids: ['m-b'] } } }];
+  context.getScadaVisibilityFilterKey = () => 'kv:400';
+  context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
+  context.state.scada.lastTransport = { authMode: 'session' };
+
+  // Clear measurement rows to simulate fresh state
+  context.state.scada.measurementRowsById = new Map();
+  context.state.scada.totalRows = 0;
+  context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
+
+  // Attempt to restore snapshot A - should be rejected due to scope mismatch
+  const restored = restoreScadaDashboardSnapshot(snapshot, { apply: false });
+
+  // Verify restore was rejected due to scope mismatch
+  assert.equal(restored.ok, false);
+  assert.equal(restored.skipped, true);
+  assert.equal(restored.reason, 'scope-mismatch');
+
+  // Verify NO state was mutated
+  assert.equal(context.state.scada.measurementRowsById.size, 0);
+  assert.equal(context.state.scada.totalRows, 0);
+  assert.deepEqual(context.state.scada.measurementRowsById, new Map());
+  assert.deepEqual(context.state.scada.fetchMeta, { status: 'success', phaseMessage: 'Tamamlandi' });
+  assert.deepEqual(context.state.scada.lastTransport, { authMode: 'session' });
+  // Mismatch does not mutate the old cached scope either.
+  assert.equal(context.state.scada.currentScope.measurementIds.length, 1);
+  assert.equal(context.state.scada.currentScope.measurementIds[0], 'm-a');
+  assert.equal(context.state.scada.currentScope.filterKey, 'kv:400|mode:hat-active');
+});
+
+test('matching snapshot restores correctly against current topology', () => {
+  const context = loadRuntime();
+  const { serializeScadaDashboardSnapshot, restoreScadaDashboardSnapshot } = context.__SCADA_V2_TEST_HOOKS__;
+  const timestamp = new Date('2026-05-01T08:00:00.000Z');
+
+  const liveEntity = { id: 'hat-live', scada: { active: { ids: ['m-1'] } } };
+  context.getVisibleHats = () => [liveEntity];
+  context.getScadaVisibilityFilterKey = () => 'kv:400';
+
+  // Create snapshot with Scope A (same as current topology)
+  context.state.scada.measurementRowsById = new Map([
+    ['m-1', { measurementId: 'm-1', tmName: 'TM-A', remoteName: 'TM-B', timestamp, value: 42 }]
+  ]);
+  context.state.scada.currentScope = {
+    mode: 'hat-active',
+    domain: 'hat',
+    entities: [],
+    measurementIds: ['m-1'],
+    elementNames: ['P'],
+    filterKey: 'kv:400|mode:hat-active',
+    primaryMetric: 'active',
+    modeLabel: 'Hat (MW)',
+    domain: 'hat'
+  };
+  context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
+  context.state.scada.lastTransport = { authMode: 'session' };
+  context.state.scada.totalRows = 1;
+
+  const snapshot = serializeScadaDashboardSnapshot({ source: 'unit-test' });
+
+  // Current topology matches snapshot (same measurementIds)
+  context.state.scada.currentScope = {
+    mode: 'hat-active',
+    domain: 'hat',
+    entities: [],
+    measurementIds: ['m-1'],
+    elementNames: ['P'],
+    filterKey: 'kv:400|mode:hat-active',
+    primaryMetric: 'active',
+    modeLabel: 'Hat (MW)',
+    domain: 'hat'
+  };
+  context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
+  context.state.scada.lastTransport = { authMode: 'session' };
+
+  // Clear measurement rows to simulate fresh state
+  context.state.scada.measurementRowsById = new Map();
+  context.state.scada.totalRows = 0;
+  context.state.scada.fetchMeta = { status: 'success', phaseMessage: 'Tamamlandi' };
+
+  // Restore snapshot - should succeed since scope matches
+  const restored = restoreScadaDashboardSnapshot(snapshot);
+
+  // Verify restore succeeded
+  assert.equal(restored.ok, true);
+  assert.equal(restored.rows, 1);
+
+  // Verify state was properly restored
+  assert.equal(context.state.scada.measurementRowsById.size, 1);
+  assert.equal(context.state.scada.measurementRowsById.get('m-1').value, 42);
+  assert.equal(context.state.scada.fetchMeta.status, 'success');
+  assert.equal(context.state.scada.fetchMeta.phaseMessage, 'SCADA verisi onbellekten yuklendi; canli yenileme deneniyor.');
+  assert.equal(context.state.scada.fetchMeta.phaseLabel, 'Onbellek');
+  assert.equal(context.state.scada.fetchMeta.startedAt, null);
+  assert.equal(context.state.scada.fetchMeta.finishedAt, null);
+  assert.equal(context.state.scada.currentScope.entities[0], liveEntity, 'restore commits the freshly validated scope');
 });

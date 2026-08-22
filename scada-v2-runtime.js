@@ -2000,12 +2000,9 @@
       return { ok: false, reason: 'invalid-snapshot' };
     }
     
-    // Use live scope with fallback: prefer currentScope (set by app) over computed scope
-    const liveScope = state.scada.currentScope || getCurrentScadaScope();
+    // Validation uses FRESH scope from getCurrentScadaScope() - NOT state.scada.currentScope
+    const liveScope = getCurrentScadaScope();
     const snapshotScope = snapshot.scope || {};
-    
-    const snapshotMeasurementIds = [...(snapshotScope.measurementIds || [])].sort().join(',');
-    const liveMeasurementIds = [...(liveScope.measurementIds || [])].sort().join(',');
     
     const scopeMatches = snapshotScope.filterKey === liveScope.filterKey &&
                          snapshotScope.mode === liveScope.mode &&
@@ -2018,7 +2015,7 @@
       return { ok: false, skipped: true, reason: 'scope-mismatch' };
     }
     
-    // Scope matches - now apply all state changes atomically
+    // Scope matches - now apply all state changes atomically using the SAME liveScope
     const rows = new Map(snapshot.measurementRows.map(([key, row]) => [
       String(key),
       {
@@ -2039,10 +2036,11 @@
       phaseLabel: 'Onbellek',
       phaseMessage: 'SCADA verisi onbellekten yuklendi; canli yenileme deneniyor.'
     };
-    state.scada.currentScope = getCurrentScadaScope();
+    // Use the SAME liveScope for currentScope and apply
+    state.scada.currentScope = liveScope;
     
-    if (options.apply !== false && rows.size && state.scada.currentScope?.entities?.length) {
-      applyGenericScadaSnapshot(rows, state.scada.currentScope);
+    if (options.apply !== false && rows.size && liveScope.entities?.length) {
+      applyGenericScadaSnapshot(rows, liveScope);
     }
     requestScadaOverlayRender();
     if (typeof refreshRankingTable === 'function') refreshRankingTable();
@@ -7286,7 +7284,8 @@ function _formatHistoryAxisLabel(timestampMs) {
       syncHistoricalTimeSlider: typeof syncHistoricalTimeSlider === 'function' ? syncHistoricalTimeSlider : undefined,
       setScadaTimeMode,
       applyScreenDeclutter: typeof applyScreenDeclutter === 'function' ? applyScreenDeclutter : undefined,
-      selectActiveVoltagePerTmLevel: typeof selectActiveVoltagePerTmLevel === 'function' ? selectActiveVoltagePerTmLevel : undefined
+      selectActiveVoltagePerTmLevel: typeof selectActiveVoltagePerTmLevel === 'function' ? selectActiveVoltagePerTmLevel : undefined,
+      scadaDoFetch
     });
   }
 })();
