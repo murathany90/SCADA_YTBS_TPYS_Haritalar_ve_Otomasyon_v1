@@ -5,8 +5,9 @@ const WebSCADAQuery = (() => {
   async function chartFirst(config, request, payload) {
     let result = await WebSCADAApi.fetchChart(config, request, 'session');
     if (result.ok || !result.shouldRetryAuth) return result;
-    // /me is advisory recovery only. It never gates a valid chart cookie/session.
-    await WebSCADAAuth.sessionValid(config); WebSCADAAuth.invalidateCsrf(config);
+    // The failed chart is the only authoritative auth signal.  Clearing CSRF and
+    // retrying the chart refreshes a stale cookie/token without an advisory /me gate.
+    WebSCADAAuth.invalidateCsrf(config);
     result = await WebSCADAApi.fetchChart(config, request, 'session-recovery');
     if (result.ok || !result.shouldRetryAuth) return result;
     status(payload, 'Superset oturumu aciliyor...'); const direct = await WebSCADAAuth.directLogin(config);
@@ -16,10 +17,10 @@ const WebSCADAQuery = (() => {
     return { ok: false, error: hidden.error || direct.error || result.error || 'Superset oturumu acilamadi.', errorType: 'AUTH_REQUIRED', authMode: 'hidden-tab', usedFallback: true };
   }
   async function fetchBatches(payload, makePayload) {
-    const config = await WebSCADAAuth.loadConfig(); const ids = uniqueIds(payload); const results = [];
-    for (const group of chunks(ids)) results.push(await chartFirst(config, makePayload(group, config), payload));
+    const startedAt = Date.now(); const config = await WebSCADAAuth.loadConfig(); const ids = uniqueIds(payload); const groups = chunks(ids); const results = [];
+    for (const group of groups) results.push(await chartFirst(config, makePayload(group, config), payload));
     const failed = results.find((r) => !r.ok); if (failed && !results.some((r) => r.ok)) return { ...failed, usedFallback: failed.authMode === 'hidden-tab' };
-    const success = results.filter((r) => r.ok); return { ok: true, data: { result: [{ data: success.flatMap(rowsFrom) }] }, authMode: success[0]?.authMode || 'session', usedFallback: results.some((r) => r.authMode === 'hidden-tab'), httpStatus: success[0]?.httpStatus || null, meta: { totalBatches: chunks(ids).length, completedBatches: success.length, failedBatches: results.length - success.length } };
+    const success = results.filter((r) => r.ok); return { ok: true, data: { result: [{ data: success.flatMap(rowsFrom) }] }, authMode: success[0]?.authMode || 'session', usedFallback: results.some((r) => r.authMode === 'hidden-tab'), httpStatus: success[0]?.httpStatus || null, meta: { totalBatches: groups.length, completedBatches: success.length, failedBatches: results.length - success.length, telemetry: { initialBatchCount: groups.length, initialBatchDurationMs: Date.now() - startedAt, missingIdCount: 0, fallbackQueryCount: 0, fallbackDurationMs: 0, recoveredRows: 0, totalFetchDurationMs: Date.now() - startedAt } } };
   }
   function executeLiveScada(payload) { const p = { ...payload, timeRange: payload?.timeRange || 'DATEADD(DATETIME("now"), -10, minute) : now', queryMode: 'raw' }; return fetchBatches(p, (ids, c) => ({ ...p, measurementIds: ids, chartPayload: WebSCADAApi.chartPayload({ ...c, ...p }, ids) })); }
   function executeHistorySeries(payload) { const p = { ...payload, queryMode: payload?.queryMode || 'timeseries' }; return fetchBatches(p, (ids, c) => ({ ...p, measurementIds: ids, chartPayload: WebSCADAApi.historyPayload(c, { ...p, measurementIds: ids }, ids) })); }

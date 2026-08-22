@@ -73,17 +73,28 @@ const WebSCADAAuth = (() => {
       c.tabs.onUpdated.addListener(onUpdated);
     });
   }
+  async function waitForPostSubmitNavigation(tabId, timeoutMs = 15000) {
+    const c = apiChrome();
+    return new Promise((resolve) => {
+      let sawLoading = false; let done = false;
+      const finish = (value) => { if (done) return; done = true; c.tabs.onUpdated.removeListener(onUpdated); clearTimeout(timer); resolve(value); };
+      const onUpdated = (id, change) => { if (id !== tabId) return; if (change.status === 'loading') sawLoading = true; if (sawLoading && change.status === 'complete') finish(true); };
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      c.tabs.onUpdated.addListener(onUpdated);
+    });
+  }
   async function hiddenTabLogin(config) {
     let tabId = null; const c = apiChrome();
     try {
       const tab = await c.tabs.create({ url: `${baseUrl(config.baseUrl)}/login/`, active: false }); tabId = tab.id; await waitForTabComplete(tabId);
+      const postSubmitNavigation = waitForPostSubmitNavigation(tabId);
       await c.scripting.executeScript({ target: { tabId }, func: (username, password) => {
         const input = (terms, type) => Array.from(document.querySelectorAll('input')).find((node) => type && node.type === type || terms.some((term) => `${node.name} ${node.id} ${node.placeholder}`.toLowerCase().includes(term))) || null;
         const user = input(['user', 'email', 'login'], 'email') || input(['user', 'email', 'login'], 'text'); const pass = input(['pass'], 'password'); const form = pass?.form || user?.form || document.querySelector('form');
         if (!user || !pass || !form) throw new Error('Login form alanlari bulunamadi.');
         [[user, username], [pass, password]].forEach(([node, value]) => { node.focus(); node.value = value; node.dispatchEvent(new Event('input', { bubbles: true })); node.dispatchEvent(new Event('change', { bubbles: true })); }); form.submit();
       }, args: [String(config.username), String(config.password)] });
-      await sleep(800);
+      await postSubmitNavigation;
       const finalTab = await c.tabs.get(tabId).catch(() => null); const origin = (() => { try { return new URL(String(finalTab?.url || '')).origin; } catch { return ''; } })();
       if (origin) {
         console.info(`[WebSCADA] Hidden-tab redirect origin: ${origin}`);

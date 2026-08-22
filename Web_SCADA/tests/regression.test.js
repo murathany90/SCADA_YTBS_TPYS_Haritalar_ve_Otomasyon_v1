@@ -68,7 +68,7 @@ test('hidden-tab chart success is accepted even when /me validation is false', a
   const answers = [authRequired(), authRequired(), authRequired(), chartSuccess('hidden-tab')]; let me = 0;
   const query = loadQuery({ sessionValid: async () => { me++; return false; }, invalidateCsrf() {}, directLogin: async () => ({ ok: true }), hiddenTabLogin: async () => ({ ok: true }) }, { fetchChart: async () => answers.shift() });
   const result = await query.chartFirst(config, {}, {});
-  assert.equal(result.ok, true); assert.equal(result.authMode, 'hidden-tab'); assert.equal(me, 1);
+  assert.equal(result.ok, true); assert.equal(result.authMode, 'hidden-tab'); assert.equal(me, 0);
 });
 
 test('all auth paths failing return an understandable AUTH_REQUIRED error', async () => {
@@ -98,6 +98,11 @@ test('session validation keeps rejecting HTML or unauthenticated /me payloads as
 test('hidden-tab redirect diagnostic records only an origin and credentials are never logged', () => {
   const authSource = source('background/superset-auth.js');
   assert.match(authSource, /Hidden-tab redirect origin/); assert.ok(!/console\.(log|warn).*username|console\.(log|warn).*password/.test(authSource)); assert.ok(!authSource.includes('<all_urls>'));
+});
+
+test('hidden-tab fallback waits for post-submit navigation instead of a fixed sleep', () => {
+  const authSource = source('background/superset-auth.js'); const querySource = source('background/query-service.js');
+  assert.match(authSource, /waitForPostSubmitNavigation/); assert.ok(!authSource.includes('sleep(800)')); assert.ok(!querySource.includes('await WebSCADAAuth.sessionValid(config)'));
 });
 
 test('SCADA log display uses Europe/Istanbul instead of raw UTC clock time', () => {
