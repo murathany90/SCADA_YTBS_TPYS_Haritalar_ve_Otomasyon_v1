@@ -542,3 +542,51 @@ test('YIBITAS-YERKOY integration: mountInteractiveHistoryChart renders 5 panes w
   });
   assert.strictEqual(badLabels, 0);
 });
+
+test('sorted timestamp matcher preserves tolerance, ordering, and deterministic ties', () => {
+  const { prepareSortedHistoryPoints, findNearestSortedPoint } = scadaHooks;
+  const points = [
+    { ts: new Date(3000), value: 'after' },
+    { ts: new Date(1000), value: 'before' },
+    { ts: new Date(2000), value: 'exact' }
+  ];
+  const sorted = prepareSortedHistoryPoints(points);
+
+  assert.equal(findNearestSortedPoint(sorted, 2000, 0).value, 'exact');
+  assert.equal(findNearestSortedPoint(sorted, 1500, 500).value, 'before', 'equal distance chooses earlier timestamp');
+  assert.equal(findNearestSortedPoint(sorted, 500, 500).value, 'before');
+  assert.equal(findNearestSortedPoint(sorted, 3500, 500).value, 'after');
+  assert.equal(findNearestSortedPoint(sorted, 5000, 500), null);
+});
+
+test('current and MVA history series retain numerical matching parity with nominal fallback', () => {
+  const chartSeries = [
+    { seriesId: 'p', measurementId: 'p', elementName: 'P', metricType: 'active', pairing: 'h:A>>B', terminalSide: 'start', terminals: ['A', '154', 'B'], points: [{ ts: new Date(1000), value: 3 }, { ts: new Date(2000), value: 5 }] },
+    { seriesId: 'q', measurementId: 'q', elementName: 'Q', metricType: 'reactive', pairing: 'h:A>>B', terminalSide: 'start', terminals: ['A', '154', 'B'], points: [{ ts: new Date(2050), value: 12 }, { ts: new Date(950), value: 4 }] }
+  ];
+  const current = scadaHooks.buildHatCurrentSeries(chartSeries, [], { kv: 154 }, { timeGrain: 'PT1M' });
+  const capacity = scadaHooks.buildHistoryCapacitySeries(chartSeries, { timeGrain: 'PT1M' }, { kv: 154 });
+
+  assert.deepEqual(Array.from(capacity[0].points.map((point) => point.value)), [5, 13]);
+  assert.ok(Math.abs(current[0].points[0].value - (5000 / (Math.sqrt(3) * 154))) < 1e-9);
+  assert.equal(current[0].points.every((point) => point._voltageSource === 'nominal'), true);
+});
+
+test('history cache prunes expired entries and evicts least-recently-used entries at its bound', () => {
+  const { getHistoryCacheEntry, setHistoryCacheEntry, pruneHistoryCache } = scadaHooks;
+  const cache = new Map();
+  const now = Date.now();
+  cache.set('expired', { fetchedAt: now - (6 * 60 * 1000) });
+  pruneHistoryCache(cache, now);
+  assert.equal(cache.has('expired'), false);
+
+  for (let index = 0; index < 41; index += 1) {
+    setHistoryCacheEntry(cache, `k-${index}`, { fetchedAt: now, value: index }, now);
+  }
+  assert.equal(cache.size, 40);
+  assert.equal(cache.has('k-0'), false);
+  assert.equal(getHistoryCacheEntry(cache, 'k-40', now).value, 40);
+  setHistoryCacheEntry(cache, 'newest', { fetchedAt: now, value: 'newest' }, now);
+  assert.equal(cache.has('k-1'), false);
+  assert.equal(cache.has('newest'), true);
+});

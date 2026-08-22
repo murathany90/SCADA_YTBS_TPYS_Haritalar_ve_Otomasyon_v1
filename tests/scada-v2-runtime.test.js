@@ -1735,3 +1735,24 @@ test('matching snapshot restores correctly against current topology', () => {
   assert.equal(context.state.scada.fetchMeta.finishedAt, null);
   assert.equal(context.state.scada.currentScope.entities[0], liveEntity, 'restore commits the freshly validated scope');
 });
+
+test('scadaDoFetch reuses the payload scope for its request context', async () => {
+  const context = loadRuntime();
+  const { scadaDoFetch } = context.__SCADA_V2_TEST_HOOKS__;
+  let visibleScopeCalls = 0;
+  context.getVisibleHats = () => {
+    visibleScopeCalls += 1;
+    return [{ id: 'hat-1', scada: { active: { ids: ['m-1'] } } }];
+  };
+  context.getScadaVisibilityFilterKey = () => 'kv:400';
+  context.state.scada.enabled = true;
+  let resolveResponse;
+  context.chrome.runtime.sendMessage = () => new Promise((resolve) => { resolveResponse = resolve; });
+
+  const fetchPromise = scadaDoFetch({ trigger: 'manual' });
+  await Promise.resolve();
+
+  assert.equal(visibleScopeCalls, 1, 'payload and request context share one scope before the async boundary');
+  resolveResponse({ ok: false, error: 'expected test error' });
+  await fetchPromise;
+});

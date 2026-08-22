@@ -29,6 +29,8 @@
   ];
   const INVALID_DISPLAY_THRESHOLD = 300;
   const HAT_VALUE_CAPACITY_MULTIPLIER = 1.5;
+  const HISTORY_CACHE_TTL_MS = 5 * 60 * 1000;
+  const HISTORY_CACHE_MAX_ENTRIES = 40;
   const HAT_UNCERTAINTY_TEXT = {
     'backup-terminal': {
       label: 'Yedek uc',
@@ -93,7 +95,12 @@
     fetchHatVoltageHistory,
       resolveTerminalSide,
       transformReactiveSeries,
-      _nearestVoltageValue
+      _nearestVoltageValue,
+      prepareSortedHistoryPoints,
+      findNearestSortedPoint,
+      pruneHistoryCache,
+      getHistoryCacheEntry,
+      setHistoryCacheEntry
     };
   }
   if (typeof window !== 'undefined') {
@@ -139,6 +146,31 @@
   state.scada.history = state.scada.history || new Map();
   state.scada.history24hCache = state.scada.history24hCache || new Map();
   state.scada.hatVoltageHistoryCache = state.scada.hatVoltageHistoryCache || new Map();
+  function pruneHistoryCache(cache, nowMs = Date.now()) {
+    if (!(cache instanceof Map)) return;
+    for (const [key, entry] of cache) {
+      if (!entry || nowMs - Number(entry.fetchedAt || 0) >= HISTORY_CACHE_TTL_MS) cache.delete(key);
+    }
+    while (cache.size > HISTORY_CACHE_MAX_ENTRIES) cache.delete(cache.keys().next().value);
+  }
+
+  function getHistoryCacheEntry(cache, key, nowMs = Date.now()) {
+    pruneHistoryCache(cache, nowMs);
+    const entry = cache.get(key);
+    if (!entry) return null;
+    // Map insertion order is our LRU order. Refresh it on every hit.
+    cache.delete(key);
+    cache.set(key, entry);
+    return entry;
+  }
+
+  function setHistoryCacheEntry(cache, key, entry, nowMs = Date.now()) {
+    if (!(cache instanceof Map)) return;
+    pruneHistoryCache(cache, nowMs);
+    cache.delete(key);
+    cache.set(key, entry);
+    pruneHistoryCache(cache, nowMs);
+  }
   state.scada.timeMode = state.scada.timeMode || 'live';
   state.scada.historicalAt = state.scada.historicalAt || null;
   state.scada.lastLiveSnapshot = state.scada.lastLiveSnapshot || null;
@@ -2501,8 +2533,8 @@
     state.scada.errorType = null;
     const requestId = `${triggerType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     
-    // Capture request context for stale response validation
-    const scopeForRequest = getCurrentScadaScope();
+    // Payload and stale-response context share one immutable scope snapshot.
+    const scopeForRequest = scope;
     const requestContext = {
       fetchSeq: state.scada.fetchSeq,
       requestId,
@@ -3660,13 +3692,13 @@ const range = resolveHistoryRange(presetKey, customStartMs, customEndMs);
 
     const cacheKey = buildHistoryCacheKey(requestedElementNames, requestedMeasurementIds, range, strategy);
     if (!state.scada.history24hCache) state.scada.history24hCache = new Map();
-    const cached = state.scada.history24hCache.get(cacheKey);
     const nowMs = Date.now();
+    const cached = getHistoryCacheEntry(state.scada.history24hCache, cacheKey, nowMs);
     const metricSummaryLabel = `${requestedMeasurementIds.length} olcum (${requestedElementNames.join(', ')})`;
 
     if (window._scadaBypassCacheFor === entityKey) {
       window._scadaBypassCacheFor = null;
-    } else if (cached && (nowMs - cached.fetchedAt < 5 * 60 * 1000)) {
+    } else if (cached) {
       setHistoryStatus(`Onbellekten gosterildi (${cached.source}).`, 'ok');
       let extraConfig = null;
       if (entityType === 'hat') {
@@ -3753,7 +3785,7 @@ const range = resolveHistoryRange(presetKey, customStartMs, customEndMs);
         ? SCADA_COMMON.formatSupersetTimeRange(range.startMs, range.endMs)
         : '';
       setHistoryStatus(`${source} cozunurluk · ${data.series.length} seri · ${data.maxPoints} nokta${rangeLabel ? ` · ${rangeLabel}` : ''}`, 'ok');
-      state.scada.history24hCache.set(cacheKey, { fetchedAt: nowMs, data, wasTruncated, source, metricList });
+      setHistoryCacheEntry(state.scada.history24hCache, cacheKey, { fetchedAt: nowMs, data, wasTruncated, source, metricList }, nowMs);
       let extraConfig = null;
       if (entityType === 'hat') {
         const voltageFetchPromise = fetchHatVoltageHistory(entity, range, strategy).catch(() => ({ series: [], nominal: true }));
@@ -4018,8 +4050,8 @@ function _formatHistoryAxisLabel(timestampMs) {
     const cacheKey = `hv|${entity.id || ''}|start:${startIds}|end:${endIds}|${range.startMs}|${range.endMs}|${strategy.queryMode}|${strategy.timeGrain}`;
     const nowMs = Date.now();
 
-    const cached = state.scada.hatVoltageHistoryCache.get(cacheKey);
-    if (cached && (nowMs - cached.fetchedAt < 5 * 60 * 1000)) {
+    const cached = getHistoryCacheEntry(state.scada.hatVoltageHistoryCache, cacheKey, nowMs);
+    if (cached) {
       return { series: cached.series, nominal: false, fromCache: true };
     }
 
@@ -4075,7 +4107,7 @@ function _formatHistoryAxisLabel(timestampMs) {
           }
         });
         if (parsed.series.length > 0) {
-           state.scada.hatVoltageHistoryCache.set(cacheKey, { fetchedAt: Date.now(), series: parsed.series });
+           setHistoryCacheEntry(state.scada.hatVoltageHistoryCache, cacheKey, { fetchedAt: Date.now(), series: parsed.series });
         }
         diag.rowsReturned = rows.length;
         diag.parsedSeries = parsed.series.length;
@@ -4095,17 +4127,43 @@ function _formatHistoryAxisLabel(timestampMs) {
     return fetchPromise;
   }
 
-  // Nearest timestamp match with tolerance (returns value or null).
-  function _nearestVoltageValue(vByTime, targetMs, maxToleranceMs) {
-    if (!vByTime || !vByTime.size) return null;
-    let bestMs = null;
-    let bestDiff = Infinity;
-    for (const [tMs] of vByTime) {
-      const diff = Math.abs(tMs - targetMs);
-      if (diff < bestDiff) { bestDiff = diff; bestMs = tMs; }
+  function prepareSortedHistoryPoints(points) {
+    const byTime = new Map();
+    (points || []).forEach((point) => {
+      const timeMs = point?.ts instanceof Date ? point.ts.getTime() : Number(point?.ts);
+      if (Number.isFinite(timeMs)) byTime.set(timeMs, point);
+    });
+    return [...byTime.entries()].map(([timeMs, point]) => ({ timeMs, point })).sort((left, right) => left.timeMs - right.timeMs);
+  }
+
+  // Binary search with a deterministic earlier-timestamp tie break.
+  function findNearestSortedPoint(sortedPoints, targetMs, maxToleranceMs) {
+    if (!Array.isArray(sortedPoints) || !sortedPoints.length) return null;
+    let low = 0;
+    let high = sortedPoints.length;
+    while (low < high) {
+      const middle = low + Math.floor((high - low) / 2);
+      if (sortedPoints[middle].timeMs < targetMs) low = middle + 1;
+      else high = middle;
     }
-    if (bestMs != null && bestDiff <= maxToleranceMs) return vByTime.get(bestMs);
-    return null;
+    const after = sortedPoints[low] || null;
+    const before = low > 0 ? sortedPoints[low - 1] : null;
+    const beforeDiff = before ? Math.abs(before.timeMs - targetMs) : Infinity;
+    const afterDiff = after ? Math.abs(after.timeMs - targetMs) : Infinity;
+    const nearest = beforeDiff <= afterDiff ? before : after;
+    return nearest && Math.min(beforeDiff, afterDiff) <= maxToleranceMs ? nearest.point : null;
+  }
+
+  // Compatibility wrapper used by existing callers and test hooks.
+  function _nearestVoltageValue(vByTime, targetMs, maxToleranceMs) {
+    if (vByTime instanceof Map) {
+      return findNearestSortedPoint(
+        [...vByTime.entries()].map(([timeMs, point]) => ({ timeMs: Number(timeMs), point })).sort((left, right) => left.timeMs - right.timeMs),
+        targetMs,
+        maxToleranceMs
+      );
+    }
+    return findNearestSortedPoint(vByTime, targetMs, maxToleranceMs);
   }
 
   // Builds current series I = 1000*S / (sqrt3*V) from P/Q pairs and voltage.
@@ -4131,6 +4189,9 @@ function _formatHistoryAxisLabel(timestampMs) {
     hatPairs.filter(isKnownPair).forEach((pair) => {
       const side = pair.active.terminalSide;
       const matchedVSeries = (voltageSeriesData || []).find((v) => v._voltageSide === side);
+      const reactivePoints = prepareSortedHistoryPoints(pair.reactive.points);
+      const voltagePoints = matchedVSeries ? prepareSortedHistoryPoints(matchedVSeries.points) : null;
+      const toleranceMs = _getToleranceMs(strategy);
 
       const points = [];
       let usedNominal = false;
@@ -4139,7 +4200,7 @@ function _formatHistoryAxisLabel(timestampMs) {
 
       pair.active.points.forEach((actPt) => {
         const tMs = actPt.ts.getTime();
-        const reactPt = _nearestVoltageValue(new Map(pair.reactive.points.map((p) => [p.ts.getTime(), p])), tMs, _getToleranceMs(strategy));
+        const reactPt = findNearestSortedPoint(reactivePoints, tMs, toleranceMs);
         if (!reactPt) return;
 
         const pMw = actPt.value;
@@ -4149,7 +4210,7 @@ function _formatHistoryAxisLabel(timestampMs) {
         let vKv = 0;
         let bQuality = matchedVSeries?._voltageQuality || 'Nominal fallback';
         if (matchedVSeries) {
-          const vPt = _nearestVoltageValue(new Map(matchedVSeries.points.map((p) => [p.ts.getTime(), p])), tMs, _getToleranceMs(strategy));
+          const vPt = findNearestSortedPoint(voltagePoints, tMs, toleranceMs);
           if (vPt) vKv = vPt.value;
         }
 
@@ -4259,12 +4320,12 @@ function _formatHistoryAxisLabel(timestampMs) {
       if (strategy?.timeGrain === 'PT1M') tolerance = 60000;
       else if (strategy?.timeGrain === 'PT5M') tolerance = 300000;
       
-      const reactiveByTime = new Map(pair.reactive.points.map((point) => [point.ts.getTime(), point.value]));
+      const reactivePoints = prepareSortedHistoryPoints(pair.reactive.points);
       const points = [];
       
       pair.active.points.forEach((actPt) => {
          const tMs = actPt.ts.getTime();
-         const reactVal = _nearestVoltageValue(new Map(pair.reactive.points.map(p => [p.ts.getTime(), p])), tMs, tolerance);
+          const reactVal = findNearestSortedPoint(reactivePoints, tMs, tolerance);
          if (reactVal) {
              points.push({ ts: new Date(tMs), value: Math.hypot(actPt.value, reactVal.value) });
          }
@@ -7262,6 +7323,12 @@ function _formatHistoryAxisLabel(timestampMs) {
       buildHistoryCacheKey,
       historyPlotValue,
       buildHistoryCapacitySeries,
+      prepareSortedHistoryPoints,
+      findNearestSortedPoint,
+      _nearestVoltageValue,
+      pruneHistoryCache,
+      getHistoryCacheEntry,
+      setHistoryCacheEntry,
       buildVoltageReferenceLines,
       buildPositiveAxisScale,
       getStaleState,
