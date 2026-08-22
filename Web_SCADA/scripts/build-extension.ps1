@@ -9,7 +9,7 @@ if ([string]::IsNullOrWhiteSpace([string]$auth.baseUrl) -or [string]::IsNullOrWh
 $dist = Join-Path $rootPath 'dist'; $unpacked = Join-Path $dist 'chrome-extension'
 if (Test-Path -LiteralPath $unpacked) { Remove-Item -LiteralPath $unpacked -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $unpacked | Out-Null
-$files = @('manifest.json','app.html','app.css')
+$files = @('manifest.json','app.html','app.css','app.js')
 foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $rootPath $file) -Destination (Join-Path $unpacked $file) }
 foreach ($dir in @('background','core','icons','lib','map')) { Copy-Item -LiteralPath (Join-Path $rootPath $dir) -Destination (Join-Path $unpacked $dir) -Recurse }
 New-Item -ItemType Directory -Force -Path (Join-Path $unpacked 'data') | Out-Null
@@ -22,7 +22,7 @@ try {
   $entryNames = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
   $forbidden = @($entryNames | Where-Object { $_ -match '(^|/)(tests|docs|scripts|dist|node_modules)/|(^|/)mock_scada\.json$' })
   if ($entryNames -contains 'data/scada_auth.example.json' -or $forbidden.Count) { throw 'Paket sadece runtime dosyalarini icermeli; gelistirme dosyasi bulundu.' }
-  foreach ($required in @('manifest.json','app.html','data/kml_layers_v2.json','data/mapping.json','data/scada_auth.json')) { if ($entryNames -notcontains $required) { throw "Paket eksik runtime dosyasi: $required" } }
+  foreach ($required in @('manifest.json','app.html','app.js','data/kml_layers_v2.json','data/mapping.json','data/scada_auth.json')) { if ($entryNames -notcontains $required) { throw "Paket eksik runtime dosyasi: $required" } }
 } finally { $archive.Dispose() }
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
 Write-Output "ZIP=$zip"; Write-Output "SHA256=$hash"

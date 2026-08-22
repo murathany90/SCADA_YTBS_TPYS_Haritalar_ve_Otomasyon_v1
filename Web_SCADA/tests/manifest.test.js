@@ -2,3 +2,4 @@ const test = require('node:test'); const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..'); const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json')));
 test('MV3 manifest is WebSCADA and limits permissions', () => { assert.equal(manifest.manifest_version, 3); assert.equal(manifest.name, 'WebSCADA'); assert.equal(manifest.version, '0.1.0'); assert.ok(!JSON.stringify(manifest).includes('<all_urls>')); assert.deepEqual(manifest.permissions, ['storage', 'tabs']); });
 test('manifest assets are local and present', () => { [manifest.background.service_worker, ...Object.values(manifest.icons)].forEach((asset) => assert.ok(fs.existsSync(path.join(root, asset)), asset)); });
+test('application shell includes its local controller', () => { const html = fs.readFileSync(path.join(root, 'app.html'), 'utf8'); assert.match(html, /src="app\.js"/); assert.ok(fs.existsSync(path.join(root, 'app.js'))); });
